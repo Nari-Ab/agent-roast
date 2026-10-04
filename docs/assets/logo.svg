@@ -1,0 +1,33 @@
+<svg width="480" height="120" viewBox="0 0 480 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="480" height="120" rx="16" fill="#F6F8FA" />
+  <rect x="1" y="1" width="478" height="118" rx="15" stroke="#D0D7DE" stroke-width="1.5" />
+  
+  <!-- Terminal Glow Icon -->
+  <g transform="translate(24, 24)">
+    <rect width="72" height="72" rx="14" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.5" />
+    <circle cx="16" cy="16" r="3.5" fill="#FF5F56" />
+    <circle cx="26" cy="16" r="3.5" fill="#FFBD2E" />
+    <circle cx="36" cy="16" r="3.5" fill="#27C93F" />
+    
+    <!-- Flame / Roast Icon -->
+    <path d="M36 28C36 28 44 36 44 45C44 50 40.5 54 36 54C31.5 54 28 50 28 45C28 41 31 38 31 38C31 38 27 41 27 47C27 53.5 31.5 58 37 58C42.5 58 47 53.5 47 47C47 38 36 28 36 28Z" fill="url(#flame_grad_light)" />
+    <path d="M36 44C36 44 39 48 39 50C39 52 37.5 53.5 36 53.5C34.5 53.5 33 52 33 50C33 48 36 44 36 44Z" fill="#FFA657" />
+  </g>
+
+  <!-- Typography -->
+  <text x="116" y="58" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.03em" fill="#1F2328">
+    agent<tspan fill="#CF222E">-roast</tspan>
+  </text>
+  
+  <text x="117" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="600" letter-spacing="0.04em" fill="#656D76">
+    ZERO-TELEMETRY AI AGENT GIT AUDITOR
+  </text>
+
+  <defs>
+    <linearGradient id="flame_grad_light" x1="27" y1="28" x2="47" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CF222E" />
+      <stop offset="0.6" stop-color="#D95700" />
+      <stop offset="1" stop-color="#BC4C00" />
+    </linearGradient>
+  </defs>
+</svg>

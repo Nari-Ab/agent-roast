@@ -1,82 +1,148 @@
-# agent-roast 🤖🔥
+<div align="center">
 
-> **Zero-telemetry CLI scorecard auditing your git history for AI coding agent infractions, shortcuts, and panic loops.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+  <img src="docs/assets/logo.svg" alt="agent-roast" width="460">
+</picture>
 
-[![npm version](https://img.shields.io/npm/v/agent-roast?color=cb3837&label=npm)](https://www.npmjs.com/package/agent-roast)
-[![telemetry: zero](https://img.shields.io/badge/telemetry-zero%20(offline)-1f9d55)](#privacy--security)
+### Audit your git history for AI coding agent shortcuts, infractions, and panic loops
+
+[![npm version](https://img.shields.io/npm/v/agent-roast?logo=npm&logoColor=white&color=cb3837&label=npm)](https://www.npmjs.com/package/agent-roast)
+[![telemetry: zero (offline)](https://img.shields.io/badge/telemetry-zero%20(offline)-1f9d55)](#privacy--zero-telemetry)
+[![speed: <200ms](https://img.shields.io/badge/speed-%3C200ms-blue)](#performance)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Did your AI coding agent (Cursor, Claude Code, Aider) write clean software, or did it silently delete tests and slap `as any` everywhere to pretend everything compiles?
-
-Run in any git repository (100% local, zero tokens, zero telemetry):
+<br/>
 
 ```bash
 npx agent-roast
 ```
 
----
-
-### What it looks like:
-
-```text
-╔══════════════════════════════════════════════════════════╗
-║                 🤖 AGENT ROAST DOSSIER                    ║
-╚══════════════════════════════════════════════════════════╝
-
-  Repository:  my-app
-  Commits:     18 AI-attributed / 42 total
-  Code Added:  4,210 lines (AI) / 12,480 lines (total)
-
-  AGENT ARCHETYPE:  The Any Architect
-  Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling.
-
-  DISCIPLINE SCORE: 68 / 100
-  (100 = spotless discipline, 0 = complete shortcut addiction)
-
-  📊 INFRACTIONS BREAKDOWN:
-  ───────────────────────────────────────────────────────
-  ✖  Skipped tests:       4 (it.skip, describe.skip, xit)
-  ▲  Type escapes:        16 (as any, @ts-ignore, eslint-disable)
-  ✖  Swallowed errors:    3 (empty catch {}, except: pass)
-  ↻  Panic fix loops:     2 (quick fixes < 15m apart)
-
-  ───────────────────────────────────────────────────────
-  📢 Share your score on X: https://twitter.com/intent/tweet?text=...
-  Tip: Run with --verbose to see exact commit SHAs and lines
-```
+</div>
 
 ---
 
-### What it detects (only added lines, zero false alarms from file renames):
+Did your AI coding assistant write clean, maintainable software — or did it quietly delete failing tests, slap `as any` everywhere, and spam 6 panic commits in 8 minutes?
 
-1. **Skipped Tests:** `it.skip`, `describe.skip`, `xit`, `test.todo` added when tests fail.
-2. **Type Escapes:** `as any`, `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore`, `eslint-disable`.
-3. **Swallowed Errors:** Empty `catch {}` or `except: pass` blocks hiding production bugs.
-4. **Panic Loops:** Consecutive quickfix/revert commits within 15 minutes by the agent.
+**`agent-roast`** is an offline, zero-telemetry CLI scorecard that parses git diffs to detect AI shortcuts and calculate an objective **Discipline Score (0–100)** with a personality archetype.
+
+<div align="center">
+  <img src="docs/assets/demo.svg" alt="agent-roast terminal audit demo" width="100%">
+</div>
 
 ---
 
-### Options
+## ⚡️ Quickstart
+
+Run directly in any repository (no install required):
 
 ```bash
-npx agent-roast            # Audit AI-attributed commits (Co-Authored-By: Claude, Cursor, Aider, etc.)
-npx agent-roast --all      # Audit ALL commits across the repository
-npx agent-roast --verbose  # Print exact commit SHAs and code lines as proof
-npx agent-roast --since 30d # Audit last 30 days of git history
-npx agent-roast --json     # Output raw JSON metrics for CI pipelines
+# Audit AI-attributed commits (Claude Code, Cursor, Aider, Devin, etc.)
+npx agent-roast
+
+# Audit ALL commits across repo history (including unverified human commits)
+npx agent-roast --all
+
+# Print exact commit SHAs and line snippets for all infractions
+npx agent-roast --verbose
+
+# Audit a specific time window (default: last 90 days)
+npx agent-roast --since "30 days ago"
+
+# Output structured JSON for CI/CD pipelines
+npx agent-roast --json
 ```
 
 ---
 
-### Privacy & Security
+## 🔍 What It Detects
 
-`agent-roast` is strictly **local and deterministic**:
-- Runs streaming `git log` on your machine in milliseconds.
-- **Zero network calls**, zero LLM APIs, zero tracking or analytics.
-- Your source code never leaves your terminal.
+`agent-roast` analyzes **only added lines** (`+`) in source code files, eliminating false alarms from refactoring or file renames:
+
+| Infraction | Patterns Detected | Penalty Weight | Why It Matters |
+| :--- | :--- | :---: | :--- |
+| **Skipped Tests** | `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` | **15 pts** | Disabling failing tests instead of fixing the root bug. |
+| **Swallowed Errors** | Empty `catch {}`, `except: pass` | **10 pts** | Silencing exceptions and sweeping runtime failures under the rug. |
+| **Panic Fix Loops** | Consecutive quickfix commits within 15m by same author | **8 pts** | Frantic thrashing without reading stack traces or logs. |
+| **Type Escapes** | `as any`, `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore` | **3 pts** | Bypassing compiler guarantees to pretend code type-checks. |
+
+> [!NOTE]
+> String literals and regex patterns are automatically sanitized before analysis. Test fixtures containing pattern names as string data will never trigger false positives.
 
 ---
 
-### License
+## 🎭 Agent Archetypes
+
+Depending on the dominant infraction patterns, `agent-roast` assigns your agent an archetype:
+
+| Archetype | Icon | Trigger Condition | Personality Dossier |
+| :--- | :---: | :--- | :--- |
+| **The Clean Coder** | 🧼 | Score $\ge 90$, 0 infractions | Spotless discipline. No skipped tests, zero panic loops, clean type safety. |
+| **The Pragmatic Builder** | 🛠️ | Score $\ge 90$, minor compromises | Overwhelmingly disciplined. Only rare, isolated shortcuts across thousands of lines. |
+| **The Panic Looper** | ↻ | Dominant panic loops ($\ge 2$) | Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs. |
+| **The Silent Vandal** | ✖ | Dominant skipped tests ($\ge 3$) | When test suites push back, tends to disable or skip tests to keep pipelines green. |
+| **The Any Architect** | ▲ | Dominant type escapes ($\ge 5$) | Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling. |
+| **The Secret Keeper** | 🤐 | Dominant empty catches ($\ge 2$) | Tends to silence errors with empty catch blocks, obscuring runtime failures. |
+| **The Chaos Gremlin** | 🔥 | Score $< 50$, mixed infractions | Mixes multiple shortcuts: skipped tests, type bypasses, and quick patches under pressure. |
+
+---
+
+## 📐 How Scoring Works
+
+1. **Volume Dampening:** To prevent large repos from automatically scoring 99/100, penalties scale sub-linearly using a logarithmic volume curve:
+   $$\text{Volume Factor} = 1 + 1.2 \cdot \ln\left(\max\left(1, \frac{\text{LOC Added}}{1000}\right)\right)$$
+2. **Commit Caps:** Maximum 10 infractions counted per commit to prevent a single refactoring commit from dominating the entire audit.
+3. **Small Sample Protection:** Repositories with fewer than 200 lines of added code display `INSUFFICIENT DATA` instead of a premature score.
+
+---
+
+## 🤖 AI Attribution
+
+`agent-roast` recognizes commits authored or co-authored by AI tools through:
+- Git trailers (`Co-Authored-By: Claude <noreply@anthropic.com>`, Cursor, Aider, etc.)
+- Commit messages (`generated by aider`, `authored by cursor`)
+- Author emails and usernames containing recognized bot signatures
+
+To audit all commits regardless of attribution, pass the `--all` flag.
+
+---
+
+## 🔒 Privacy & Zero Telemetry
+
+- **100% Local Execution:** Runs streaming `git log` directly on your machine in under 200ms.
+- **Zero Network Calls:** No external API requests, no telemetry, no analytics.
+- **Hermetic:** Source code never leaves your computer.
+
+---
+
+## 🚦 GitHub Actions CI Integration
+
+Fail a PR if an agent's discipline score drops below 60:
+
+```yaml
+name: Agent Audit
+on: [pull_request]
+
+jobs:
+  roast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run agent-roast
+        run: |
+          npx agent-roast --since "7 days ago" --json > roast.json
+          SCORE=$(jq '.score' roast.json)
+          echo "Discipline Score: $SCORE / 100"
+          if [ "$SCORE" -lt 60 ]; then
+            echo "❌ Agent discipline score below 60!"
+            exit 1
+          fi
+```
+
+---
+
+## 📄 License
 
 [MIT](LICENSE)

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="740" viewBox="0 0 880 740" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="13">
+  <title>agent-roast terminal audit demo</title>
+  <rect x="0" y="0" width="880" height="740" rx="12" fill="#0D1117" />
+  
+  <!-- Window Header -->
+  <rect x="0" y="0" width="880" height="42" rx="12" fill="#161B22" />
+  <rect x="0" y="32" width="880" height="10" fill="#161B22" />
+  <rect x="0.5" y="0.5" width="879" height="739" rx="12" fill="none" stroke="#30363D" />
+  
+  <!-- Traffic Light Window Buttons -->
+  <circle cx="24" cy="21" r="6" fill="#FF5F56" />
+  <circle cx="44" cy="21" r="6" fill="#FFBD2E" />
+  <circle cx="64" cy="21" r="6" fill="#27C93F" />
+  <text x="440" y="26" fill="#8B949E" text-anchor="middle" font-size="12" font-weight="500">terminal — npx agent-roast</text>
+  
+  <!-- Content Lines -->
+  <g>
+    <!-- Command Prompt -->
+    <text x="32" y="76" fill="#7EE787" font-weight="600">$</text>
+    <text x="48" y="76" fill="#FFFFFF" font-weight="600">npx agent-roast --verbose</text>
+
+    <!-- Box Header -->
+    <text x="32" y="112" fill="#58A6FF" font-weight="700">╔══════════════════════════════════════════════════════════╗</text>
+    <text x="32" y="132" fill="#58A6FF" font-weight="700">║</text>
+    <text x="175" y="132" fill="#FFFFFF" font-weight="800">🤖 AGENT ROAST DOSSIER</text>
+    <text x="488" y="132" fill="#58A6FF" font-weight="700">║</text>
+    <text x="32" y="152" fill="#58A6FF" font-weight="700">╚══════════════════════════════════════════════════════════╝</text>
+
+    <!-- Meta Details -->
+    <text x="48" y="186" fill="#8B949E">Repository:</text>
+    <text x="160" y="186" fill="#FFFFFF" font-weight="700">Soup</text>
+
+    <text x="48" y="208" fill="#8B949E">Commits:</text>
+    <text x="160" y="208" fill="#D29922" font-weight="600">304</text>
+    <text x="190" y="208" fill="#C9D1D9">AI-attributed / 1,153 total</text>
+
+    <text x="48" y="230" fill="#8B949E">Code Added:</text>
+    <text x="160" y="230" fill="#7EE787" font-weight="600">87,165</text>
+    <text x="215" y="230" fill="#C9D1D9">lines (AI) / 479,097 lines (total)</text>
+
+    <!-- Archetype -->
+    <text x="48" y="270" fill="#FFFFFF" font-weight="700">AGENT ARCHETYPE:</text>
+    <text x="200" y="270" fill="#D2A8FF" font-weight="800">The Panic Looper</text>
+    <text x="48" y="292" fill="#8B949E" font-style="italic">Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs.</text>
+
+    <!-- Score -->
+    <text x="48" y="332" fill="#FFFFFF" font-weight="700">DISCIPLINE SCORE:</text>
+    <text x="200" y="332" fill="#FFA657" font-weight="800" font-size="15">55 / 100</text>
+    <text x="48" y="352" fill="#8B949E" font-size="12">(100 = spotless discipline, 0 = complete shortcut addiction)</text>
+
+    <!-- Infractions Breakdown -->
+    <text x="48" y="392" fill="#FFFFFF" font-weight="700">📊 INFRACTIONS BREAKDOWN:</text>
+    <line x1="48" y1="404" x2="520" y2="404" stroke="#30363D" stroke-width="1" />
+
+    <text x="48" y="428" fill="#FF7B72" font-weight="700">✖</text>
+    <text x="72" y="428" fill="#FFFFFF" font-weight="600">Skipped tests:</text>
+    <text x="240" y="428" fill="#FF7B72" font-weight="700">6</text>
+    <text x="260" y="428" fill="#8B949E">(it.skip, describe.skip, xit)</text>
+
+    <text x="48" y="452" fill="#D29922" font-weight="700">▲</text>
+    <text x="72" y="452" fill="#FFFFFF" font-weight="600">Type escapes:</text>
+    <text x="240" y="452" fill="#D29922" font-weight="700">19</text>
+    <text x="260" y="452" fill="#8B949E">(as any, @ts-ignore, eslint-disable)</text>
+
+    <text x="48" y="476" fill="#FF7B72" font-weight="700">✖</text>
+    <text x="72" y="476" fill="#FFFFFF" font-weight="600">Swallowed errors:</text>
+    <text x="240" y="476" fill="#FF7B72" font-weight="700">2</text>
+    <text x="260" y="476" fill="#8B949E">(empty catch {}, except: pass)</text>
+
+    <text x="48" y="500" fill="#D2A8FF" font-weight="700">↻</text>
+    <text x="72" y="500" fill="#FFFFFF" font-weight="600">Panic fix loops:</text>
+    <text x="240" y="500" fill="#D2A8FF" font-weight="700">15</text>
+    <text x="260" y="500" fill="#8B949E">(quick fixes &lt; 15m apart)</text>
+
+    <!-- Verbose Proofs -->
+    <text x="48" y="540" fill="#FFFFFF" font-weight="700">🔍 VERBOSE PROOFS:</text>
+    <line x1="48" y1="552" x2="520" y2="552" stroke="#30363D" stroke-width="1" />
+
+    <text x="48" y="574" fill="#79C0FF">• 5c335b9</text>
+    <text x="130" y="574" fill="#FF7B72">[test-skip]</text>
+    <text x="215" y="574" fill="#8B949E">tests/test_outbound_endpoint.py</text>
+    <text x="64" y="594" fill="#8B949E">└─ pytest.skip("httpx refuses spelling outright, cannot dial")</text>
+
+    <text x="48" y="622" fill="#79C0FF">• a910f21</text>
+    <text x="130" y="622" fill="#D2A8FF">[panic-loop]</text>
+    <text x="230" y="622" fill="#8B949E">AI panic loop: consecutive fix within 3m (3df29a1 -&gt; a910f21)</text>
+
+    <text x="48" y="650" fill="#79C0FF">• f82bb04</text>
+    <text x="130" y="650" fill="#D29922">[type-escape]</text>
+    <text x="230" y="650" fill="#8B949E">src/client.ts</text>
+    <text x="64" y="670" fill="#8B949E">└─ const payload = response.body as any;</text>
+
+    <!-- Social Share Line -->
+    <line x1="48" y1="700" x2="520" y2="700" stroke="#30363D" stroke-width="1" />
+    <text x="48" y="720" fill="#58A6FF">📢 Share your score on X: https://twitter.com/intent/tweet?text=...</text>
+  </g>
+</svg>
