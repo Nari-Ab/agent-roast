@@ -3,7 +3,7 @@ import { formatTerminalCard, generateShareUrl } from "../src/renderer.js";
 import { MetricSummary } from "../src/types.js";
 
 describe("Card Renderer", () => {
-  it("formats terminal card with archetype and score", () => {
+  it("formats terminal report with archetype and score", () => {
     const summary: MetricSummary = {
       totalLinesAdded: 1500,
       aiLinesAdded: 800,
@@ -30,10 +30,10 @@ describe("Card Renderer", () => {
     };
 
     const card = formatTerminalCard(summary, { repoName: "test-repo", verbose: false });
-    expect(card).toContain("AGENT ROAST");
+    expect(card).toContain("agent-roast");
     expect(card).toContain("The Silent Vandal");
     expect(card).toContain("81 / 100");
-    expect(card).toContain("Skipped tests");
+    expect(card).toContain("test-skip");
   });
 
   it("generates valid Twitter share URL with pre-filled text", () => {
@@ -77,6 +77,6 @@ describe("Card Renderer", () => {
     };
 
     const card = formatTerminalCard(summary, { repoName: "tiny-repo", verbose: false });
-    expect(card).toContain("INSUFFICIENT DATA");
+    expect(card).toContain("insufficient data");
   });
 });

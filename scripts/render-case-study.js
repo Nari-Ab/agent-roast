@@ -4,7 +4,7 @@ import gifenc from "gifenc";
 const { GIFEncoder, quantize, applyPalette } = gifenc;
 
 const width = 880;
-const height = 540;
+const height = 480;
 const canvas = createCanvas(width, height);
 const ctx = canvas.getContext("2d");
 
@@ -21,17 +21,13 @@ const C_ORANGE = "#ffa657";
 const C_RED = "#ff7b72";
 const C_MAGENTA = "#bc8cff";
 
-// Helper to draw the window chrome
 function drawWindow() {
-  // Clear background
   ctx.fillStyle = "#05060a";
   ctx.fillRect(0, 0, width, height);
 
-  // Terminal box with rounded corners
-  const rad = 12;
   ctx.save();
   ctx.beginPath();
-  ctx.roundRect(16, 12, width - 32, height - 24, rad);
+  ctx.roundRect(16, 12, width - 32, height - 24, 10);
   ctx.fillStyle = C_BG;
   ctx.fill();
   ctx.lineWidth = 1.5;
@@ -41,73 +37,65 @@ function drawWindow() {
 
   // Title bar
   ctx.fillStyle = C_TITLEBAR;
-  ctx.fillRect(16, 12, width - 32, 38);
+  ctx.fillRect(16, 12, width - 32, 36);
   ctx.beginPath();
-  ctx.moveTo(16, 50);
-  ctx.lineTo(width - 16, 50);
+  ctx.moveTo(16, 48);
+  ctx.lineTo(width - 16, 48);
   ctx.strokeStyle = C_BORDER;
   ctx.stroke();
 
-  // Traffic light dots
+  // Traffic lights
   ctx.fillStyle = "#ff5f56";
   ctx.beginPath();
-  ctx.arc(38, 31, 6, 0, Math.PI * 2);
+  ctx.arc(38, 30, 6, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = "#ffbd2e";
   ctx.beginPath();
-  ctx.arc(58, 31, 6, 0, Math.PI * 2);
+  ctx.arc(58, 30, 6, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = "#27c93f";
   ctx.beginPath();
-  ctx.arc(78, 31, 6, 0, Math.PI * 2);
+  ctx.arc(78, 30, 6, 0, Math.PI * 2);
   ctx.fill();
 
   // Title text
   ctx.fillStyle = C_MUTED;
   ctx.font = "500 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("terminal — npx agent-roast --verbose", width / 2, 35);
+  ctx.fillText("terminal — npx agent-roast", width / 2, 34);
   ctx.restore();
 }
 
-// Storyboard sequence
-const command = "npx agent-roast --verbose";
+const command = "npx agent-roast";
 const lines = [
-  { t: "╔══════════════════════════════════════════════════════════╗", color: C_CYAN, bold: true },
-  { t: "║                 🤖 AGENT ROAST DOSSIER                    ║", color: "#ffffff", bold: true, subCyan: true },
-  { t: "╚══════════════════════════════════════════════════════════╝", color: C_CYAN, bold: true },
+  { t: "agent-roast — git discipline audit (304 AI commits in Soup)", bold: true, color: "#ffffff" },
+  { t: "  commits: 304 AI / 1,153 total    lines added: 87,165 AI / 479,097 total", color: C_MUTED },
   { t: "" },
-  { t: "  Repository:  Soup", color: C_TEXT, boldKey: "Repository:" },
-  { t: "  Commits:     304 AI-attributed / 1,153 total", color: C_TEXT, valColor: C_YELLOW },
-  { t: "  Code Added:  87,165 lines (AI) / 479,097 lines (total)", color: C_TEXT, valColor: C_GREEN },
+  { t: "  SCORE: 55 / 100  ·  The Panic Looper", bold: true, color: C_ORANGE },
+  { t: "  Prone to rapid-fire fix and revert thrashing cycles when wrestling bugs.", italic: true, color: C_MUTED },
   { t: "" },
-  { t: "  AGENT ARCHETYPE:  The Panic Looper", color: C_MAGENTA, bold: true, leadWhite: "  AGENT ARCHETYPE:  " },
-  { t: "  Prone to rapid-fire fix and revert thrashing cycles when wrestling bugs.", color: C_MUTED, italic: true },
-  { t: "" },
-  { t: "  DISCIPLINE SCORE: 55 / 100", color: C_ORANGE, bold: true, leadWhite: "  DISCIPLINE SCORE: " },
-  { t: "  (100 = spotless discipline, 0 = complete shortcut addiction)", color: C_MUTED },
-  { t: "" },
-  { t: "  📊 INFRACTIONS BREAKDOWN:", color: "#ffffff", bold: true },
-  { t: "  ✖  Skipped tests:       6 (it.skip, describe.skip, xit)", color: C_RED, bold: true },
-  { t: "  ▲  Type escapes:        19 (as any, @ts-ignore, eslint-disable)", color: C_YELLOW },
-  { t: "  ✖  Swallowed errors:    2 (empty catch {}, except: pass)", color: C_RED },
-  { t: "  ↻  Panic fix loops:     15 (quick fixes < 15m apart)", color: C_MAGENTA },
-  { t: "" },
-  { t: "  🔍 VERBOSE PROOFS (First items):", color: "#ffffff", bold: true },
-  { t: "  • 5c335b9 [test-skip] tests/test_outbound.py └─ pytest.skip(\"refused\")", color: C_MUTED },
-  { t: "  • a910f21 [panic-loop] AI panic loop: fix within 3m (3df29a1 -> a910f21)", color: C_MUTED },
+  { t: "  INFRACTIONS (42)", bold: true, color: "#ffffff" },
+  { t: "  ──────────────────────────────────────────────────────────", color: C_BORDER },
+  { t: "  ● panic-loop (15)  consecutive quick fixes < 15m apart", color: C_MAGENTA },
+  { t: "      AI panic loop: consecutive quick fix within 2m (4890709 -> 5bce6f0)", color: C_MUTED },
+  { t: "  ● type-escape (19)  compiler bypasses (as any, @ts-ignore)", color: C_YELLOW },
+  { t: "      src/soup_cli/utils/safe_regex.py: import sre_constants as _c  # type: ignore", color: C_MUTED },
+  { t: "  ● test-skip (6)  skipped or disabled tests", color: C_RED },
+  { t: "      tests/test_outbound.py: pytest.skip(\"httpx refuses spelling outright\")", color: C_MUTED },
+  { t: "  ● swallowed-error (2)  empty catch blocks or except: pass", color: C_RED },
+  { t: "      src/soup_cli/ui/static/app.js: try { sessionStorage.setItem(...) } catch (e) {}", color: C_MUTED },
 ];
 
 const gif = GIFEncoder();
 const frames = [];
 
-// Phase 1: Typing command (12 frames)
-for (let i = 0; i <= command.length; i += 2) {
+// Phase 1: Typing command (8 frames)
+for (let i = 0; i <= command.length; i += 3) {
   drawWindow();
   ctx.textAlign = "left";
-  ctx.font = "600 13px Menlo, Monaco, 'Courier New', monospace";
+  ctx.font = "600 13px Menlo, Monaco, Consolas, monospace";
   ctx.fillStyle = C_GREEN;
   ctx.fillText("$ ", 36, 75);
 
@@ -119,72 +107,52 @@ for (let i = 0; i <= command.length; i += 2) {
   ctx.fillStyle = C_MUTED;
   ctx.fillRect(52 + tw, 62, 8, 15);
 
-  frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 90 });
+  frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 100 });
 }
 
-// Phase 2: Enter pressed, spinner (3 frames)
-const spinners = ["⠋ Scanning git history (1,153 commits)...", "⠙ Analyzing diff chunks and AI signatures...", "✔ Audit complete (210ms)"];
-for (const s of spinners) {
-  drawWindow();
-  ctx.textAlign = "left";
-  ctx.font = "600 13px Menlo, Monaco, 'Courier New', monospace";
-  ctx.fillStyle = C_GREEN;
-  ctx.fillText("$ ", 36, 75);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(command, 50, 75);
+// Phase 2: Progress (2 frames)
+drawWindow();
+ctx.textAlign = "left";
+ctx.font = "600 13px Menlo, Monaco, Consolas, monospace";
+ctx.fillStyle = C_GREEN;
+ctx.fillText("$ ", 36, 75);
+ctx.fillStyle = "#ffffff";
+ctx.fillText(command, 50, 75);
+ctx.fillStyle = C_CYAN;
+ctx.fillText("⠋ Scanning git history (1,153 commits)...", 36, 98);
+frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 180 });
 
-  ctx.fillStyle = C_CYAN;
-  ctx.fillText(s, 36, 100);
-
-  frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 180 });
-}
-
-// Phase 3: Printing the card line by line
+// Phase 3: Reveal clean report
 for (let lineCount = 1; lineCount <= lines.length; lineCount += 2) {
   drawWindow();
   ctx.textAlign = "left";
-  ctx.font = "600 13px Menlo, Monaco, 'Courier New', monospace";
+  ctx.font = "600 13px Menlo, Monaco, Consolas, monospace";
   ctx.fillStyle = C_GREEN;
   ctx.fillText("$ ", 36, 75);
   ctx.fillStyle = "#ffffff";
   ctx.fillText(command, 50, 75);
 
-  let startY = 105;
+  let startY = 100;
   for (let l = 0; l < lineCount; l++) {
     const item = lines[l];
-    const y = startY + l * 18;
+    const y = startY + l * 20;
 
     if (!item.t) continue;
 
     ctx.font = item.bold
-      ? "700 13px Menlo, Monaco, 'Courier New', monospace"
+      ? "700 13px Menlo, Monaco, Consolas, monospace"
       : item.italic
-      ? "italic 12px Menlo, Monaco, 'Courier New', monospace"
-      : "400 13px Menlo, Monaco, 'Courier New', monospace";
+      ? "italic 12px Menlo, Monaco, Consolas, monospace"
+      : "400 13px Menlo, Monaco, Consolas, monospace";
 
-    if (item.subCyan) {
-      ctx.fillStyle = C_CYAN;
-      ctx.fillText("║", 36, y);
-      ctx.fillStyle = item.color;
-      ctx.fillText("                 🤖 AGENT ROAST DOSSIER                    ", 36, y);
-      ctx.fillStyle = C_CYAN;
-      ctx.fillText("                                                          ║", 36, y);
-    } else if (item.leadWhite) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(item.leadWhite, 36, y);
-      const wLead = ctx.measureText(item.leadWhite).width;
-      ctx.fillStyle = item.color;
-      ctx.fillText(item.t.replace(item.leadWhite, ""), 36 + wLead, y);
-    } else {
-      ctx.fillStyle = item.color;
-      ctx.fillText(item.t, 36, y);
-    }
+    ctx.fillStyle = item.color;
+    ctx.fillText(item.t, 36, y);
   }
 
-  frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 100 });
+  frames.push({ data: ctx.getImageData(0, 0, width, height).data, delay: 120 });
 }
 
-// Final hold frame (pause for 4 seconds so viewer can read)
+// Final hold frame (4 seconds)
 frames[frames.length - 1].delay = 4000;
 
 console.log(`Encoding ${frames.length} frames to GIF...`);
@@ -197,4 +165,4 @@ for (let i = 0; i < frames.length; i++) {
 
 gif.finish();
 fs.writeFileSync("docs/assets/case-study.gif", gif.bytes());
-console.log("docs/assets/case-study.gif created successfully!");
+console.log("docs/assets/case-study.gif updated cleanly!");
