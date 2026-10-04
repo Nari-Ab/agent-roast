@@ -43,7 +43,9 @@ INFRACTIONS DETECTED (42)
   ● swallowed-error (2) — empty catch blocks or except: pass
 ```
 
-<img src="docs/assets/case-study.gif" alt="agent-roast git audit session" width="100%">
+<img src="docs/assets/case-study.gif" alt="Case study: an AI agent disables failing auth tests with it.skip, slaps as any, and agent-roast catches the shortcuts" width="820">
+
+<img src="docs/assets/demo.gif" alt="agent-roast running in terminal: streaming git diff, calculating discipline score and line proofs" width="820">
 
 ---
 
