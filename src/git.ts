@@ -134,11 +134,28 @@ export function streamGitLog(
     ":(exclude).drift_venv",
   ];
 
+  const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
   const child = spawn("git", gitArgs, {
     cwd,
-    env: { ...process.env, GIT_PAGER: "cat" },
+    env: {
+      ...process.env,
+      GIT_PAGER: "cat",
+      GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL || nullDevice,
+      GIT_CONFIG_SYSTEM: process.env.GIT_CONFIG_SYSTEM || nullDevice,
+    },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+  });
+
+  child.stderr.on("data", (chunk) => {
+    const errText = chunk.toString();
+    if (errText.includes("fatal:") || errText.includes("error:")) {
+      child.stdout.emit("error", new Error(errText.trim()));
+    }
+  });
+
+  child.on("error", (err) => {
+    child.stdout.emit("error", err);
   });
 
   return child.stdout;

@@ -4,7 +4,8 @@ import { Infraction, MetricSummary } from "./types.js";
 const TEST_SKIP_PATTERNS = [
   { regex: /(?:it|test|describe)\.skip\b/, name: "skipped test (it.skip / describe.skip)" },
   { regex: /\b(?:xit|xtest)\(/, name: "disabled test (xit / xtest)" },
-  { regex: /@pytest\.mark\.skip/, name: "skipped pytest" },
+  { regex: /@pytest\.mark\.skip\b/, name: "skipped pytest (@pytest.mark.skip)" },
+  { regex: /\bpytest\.skip\(/, name: "imperative pytest skip (pytest.skip)" },
   { regex: /\btest\.todo\(/, name: "todo placeholder test" },
 ];
 
