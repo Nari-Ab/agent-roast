@@ -1,0 +1,55 @@
+{
+  "name": "agent-roast",
+  "version": "0.1.0",
+  "description": "Zero-telemetry CLI scorecard analyzing git history for AI coding agent infractions and panic loops",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "agent-roast": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "cursor",
+    "claude-code",
+    "roast",
+    "git",
+    "code-quality",
+    "cli"
+  ],
+  "author": "Nari-Ab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nari-Ab/agent-roast.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Nari-Ab/agent-roast/issues"
+  },
+  "homepage": "https://github.com/Nari-Ab/agent-roast#readme",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
