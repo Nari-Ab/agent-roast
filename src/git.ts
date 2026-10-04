@@ -138,6 +138,7 @@ export function streamGitLog(
     cwd,
     env: { ...process.env, GIT_PAGER: "cat" },
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
   return child.stdout;

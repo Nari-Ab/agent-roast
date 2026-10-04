@@ -74,15 +74,20 @@ export class MetricsCollector {
       if (
         this.lastFixCommit &&
         !isNaN(commitDateMs) &&
-        !isNaN(this.lastFixCommit.date)
+        !isNaN(this.lastFixCommit.date) &&
+        this.lastFixCommit.author.toLowerCase() === commit.authorEmail.toLowerCase()
       ) {
         const diffMinutes = Math.abs(commitDateMs - this.lastFixCommit.date) / (1000 * 60);
-        if (diffMinutes <= 15) {
+        // Exclude diffMinutes === 0 to prevent false positives from rebase/squash scripts batching timestamps
+        if (diffMinutes > 0 && diffMinutes <= 15) {
+          const attributionTag = commit.isAiAttributed
+            ? "AI panic loop"
+            : "Panic loop (unverified / --all mode)";
           this.panicLoops.push({
             type: "panic-loop",
             commitHash: commit.hash,
             commitDate: commit.date,
-            reason: `Panic loop: consecutive quick fix within ${Math.round(diffMinutes)}m (${this.lastFixCommit.hash.slice(0, 7)} -> ${commit.hash.slice(0, 7)})`,
+            reason: `${attributionTag}: consecutive quick fix within ${Math.max(1, Math.round(diffMinutes))}m (${this.lastFixCommit.hash.slice(0, 7)} -> ${commit.hash.slice(0, 7)})`,
           });
         }
       }

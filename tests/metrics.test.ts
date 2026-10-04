@@ -126,7 +126,62 @@ describe("Metrics Engine", () => {
 
     const summary = collector.getSummary();
     expect(summary.panicLoops).toHaveLength(1);
-    expect(summary.panicLoops[0].reason).toContain("Panic loop");
+    expect(summary.panicLoops[0].reason).toContain("panic loop");
+  });
+
+  it("does not count panic loops across different authors or zero-diff rebase timestamps", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    // Different authors
+    collector.processCommit({
+      hash: "d1",
+      date: "2026-10-04T14:00:00Z",
+      authorName: "Alice",
+      authorEmail: "alice@test.com",
+      message: "fix: bug A",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 150,
+      files: [],
+    });
+    collector.processCommit({
+      hash: "d2",
+      date: "2026-10-04T14:02:00Z",
+      authorName: "Bob",
+      authorEmail: "bob@test.com",
+      message: "fix: bug B",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 150,
+      files: [],
+    });
+
+    // Zero-diff timestamp (rebase script)
+    collector.processCommit({
+      hash: "d3",
+      date: "2026-10-04T15:00:00Z",
+      authorName: "Bob",
+      authorEmail: "bob@test.com",
+      message: "fix: step 1",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 150,
+      files: [],
+    });
+    collector.processCommit({
+      hash: "d4",
+      date: "2026-10-04T15:00:00Z",
+      authorName: "Bob",
+      authorEmail: "bob@test.com",
+      message: "fix: step 2",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 150,
+      files: [],
+    });
+
+    const summary = collector.getSummary();
+    expect(summary.panicLoops).toHaveLength(0);
   });
 
   it("marks isSufficientData=false when total lines added < 200", () => {
