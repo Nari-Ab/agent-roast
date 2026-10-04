@@ -2,14 +2,18 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-  <img src="docs/assets/logo.svg" alt="agent-roast" width="340">
+  <img src="docs/assets/logo.svg" alt="agent-roast" width="380">
 </picture>
 
-### Audit your git history for AI coding agent infractions and panic loops
+<h2>Audit your git history for AI coding agent infractions and panic loops</h2>
 
-[![npm version](https://img.shields.io/npm/v/agent-roast?logo=npm&logoColor=white&color=cb3837)](https://www.npmjs.com/package/agent-roast)
-[![telemetry: zero (offline)](https://img.shields.io/badge/telemetry-zero%20(offline)-1f9d55)](#privacy)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p>
+  <a href="https://github.com/Nari-Ab/agent-roast/actions"><img src="https://img.shields.io/badge/CI-passing-2ea44f?logo=github&logoColor=white" alt="CI"></a>
+  <a href="https://github.com/Nari-Ab/agent-roast"><img src="https://img.shields.io/badge/roast%20audit-verified-2ea44f" alt="Roast Audit"></a>
+  <a href="https://www.npmjs.com/package/agent-roast"><img src="https://img.shields.io/npm/v/agent-roast?color=cb3837&logo=npm&logoColor=white" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/agent-roast"><img src="https://img.shields.io/npm/dt/agent-roast?label=downloads&color=0969da" alt="downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-0969da" alt="license"></a>
+</p>
 
 </div>
 
