@@ -9,12 +9,15 @@ const TEST_SKIP_PATTERNS = [
   { regex: /\btest\.todo\(/, name: "todo placeholder test" },
 ];
 
-const TYPE_ESCAPE_PATTERNS = [
-  { regex: /\bas\s+any\b/, name: "type bypass (as any)" },
+const COMMENT_DIRECTIVE_PATTERNS = [
   { regex: /\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
   { regex: /\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
   { regex: /#\s*type:\s*ignore\b/, name: "python type ignore" },
   { regex: /\/\/\s*eslint-disable(?:-next-line)?\b/, name: "linter suppression (eslint-disable)" },
+];
+
+const CODE_TYPE_ESCAPE_PATTERNS = [
+  { regex: /\bas\s+any\b/, name: "type bypass (as any)" },
 ];
 
 const SWALLOWED_ERROR_PATTERNS = [
@@ -27,9 +30,33 @@ const CODE_EXTENSIONS = new Set([
   ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c"
 ]);
 
+const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
+
 function isCodeFile(filePath: string): boolean {
+  if (IGNORED_PATH_REGEX.test(filePath)) {
+    return false;
+  }
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
   return CODE_EXTENSIONS.has(ext);
+}
+
+/**
+ * Strips quoted string literals and regex literals from a line so that
+ * test fixtures and string constants (e.g. { line: "it.skip" }) are not flagged.
+ */
+export function stripStringAndRegexLiterals(line: string): string {
+  return line
+    .replace(/(["'`])(?:\\.|(?!\1)[^\\\r\n])*\1/g, '""')
+    .replace(/\/(?=[^\/\s])(?:\\\/|[^\/\r\n])+\/[gimsuy]*/g, '""');
+}
+
+function isCommentOnlyLine(trimmedLine: string): boolean {
+  return (
+    trimmedLine.startsWith("//") ||
+    trimmedLine.startsWith("/*") ||
+    trimmedLine.startsWith("*") ||
+    trimmedLine.startsWith("#")
+  );
 }
 
 const PANIC_COMMIT_REGEX = /\b(?:fix|quickfix|revert|hotfix|retry|patch|undo|workaround)\b/i;
@@ -69,7 +96,7 @@ export class MetricsCollector {
       return;
     }
 
-    // 1. Check Panic Loops (consecutive fix/revert commits within 15 minutes)
+    // 1. Check Panic Loops (consecutive fix/revert commits within 15 minutes by same author)
     const commitDateMs = Date.parse(commit.date);
     if (PANIC_COMMIT_REGEX.test(commit.message)) {
       if (
@@ -113,16 +140,19 @@ export class MetricsCollector {
       }
 
       for (const added of file.addedLines) {
-        const line = added.line;
+        const rawLine = added.line;
+        const cleanedLine = stripStringAndRegexLiterals(rawLine);
+        const trimmedCleaned = cleanedLine.trim();
+        const isComment = isCommentOnlyLine(trimmedCleaned);
 
-        // A. Test Skips
-        if (commitSkips < MAX_INFRACTIONS_PER_COMMIT) {
+        // A. Test Skips (only on non-comment executable code)
+        if (!isComment && commitSkips < MAX_INFRACTIONS_PER_COMMIT) {
           for (const rule of TEST_SKIP_PATTERNS) {
-            if (rule.regex.test(line)) {
+            if (rule.regex.test(cleanedLine)) {
               this.testSkips.push({
                 type: "test-skip",
                 file: file.path,
-                lineSnippet: line.trim(),
+                lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
                 reason: rule.name,
@@ -135,12 +165,13 @@ export class MetricsCollector {
 
         // B. Type Escapes
         if (commitEscapes < MAX_INFRACTIONS_PER_COMMIT) {
-          for (const rule of TYPE_ESCAPE_PATTERNS) {
-            if (rule.regex.test(line)) {
+          // B1: Comment directives (e.g. // @ts-ignore, // eslint-disable, # type: ignore)
+          for (const rule of COMMENT_DIRECTIVE_PATTERNS) {
+            if (rule.regex.test(cleanedLine)) {
               this.typeEscapes.push({
                 type: "type-escape",
                 file: file.path,
-                lineSnippet: line.trim(),
+                lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
                 reason: rule.name,
@@ -149,16 +180,34 @@ export class MetricsCollector {
               break;
             }
           }
+
+          // B2: Code type bypasses (e.g. as any) — ONLY when not inside a comment
+          if (!isComment && commitEscapes < MAX_INFRACTIONS_PER_COMMIT) {
+            for (const rule of CODE_TYPE_ESCAPE_PATTERNS) {
+              if (rule.regex.test(cleanedLine)) {
+                this.typeEscapes.push({
+                  type: "type-escape",
+                  file: file.path,
+                  lineSnippet: rawLine.trim(),
+                  commitHash: commit.hash,
+                  commitDate: commit.date,
+                  reason: rule.name,
+                });
+                commitEscapes++;
+                break;
+              }
+            }
+          }
         }
 
-        // C. Swallowed Errors
-        if (commitSwallowed < MAX_INFRACTIONS_PER_COMMIT) {
+        // C. Swallowed Errors (only in executable code, not comments)
+        if (!isComment && commitSwallowed < MAX_INFRACTIONS_PER_COMMIT) {
           for (const rule of SWALLOWED_ERROR_PATTERNS) {
-            if (rule.regex.test(line)) {
+            if (rule.regex.test(cleanedLine)) {
               this.swallowedErrors.push({
                 type: "swallowed-error",
                 file: file.path,
-                lineSnippet: line.trim(),
+                lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
                 reason: rule.name,
@@ -176,43 +225,69 @@ export class MetricsCollector {
     const linesSample = this.includeAll ? this.totalLinesAdded : this.aiLinesAdded;
     const isSufficientData = linesSample >= MIN_SAMPLE_LOC;
 
-    // Penalty calculations normalized per 1,000 LOC
-    // Base score = 100
-    // Test skip penalty: 15 pts per instance
-    // Swallowed error penalty: 10 pts per instance
-    // Panic loop penalty: 8 pts per instance
-    // Type escape penalty: 3 pts per instance
+    // Penalty calculations:
+    // Test skip penalty: 15 pts
+    // Swallowed error penalty: 10 pts
+    // Panic loop penalty: 8 pts
+    // Type escape penalty: 3 pts
     const totalInfractionPoints =
       this.testSkips.length * 15 +
       this.swallowedErrors.length * 10 +
       this.panicLoops.length * 8 +
       this.typeEscapes.length * 3;
 
-    // Normalization factor (relative to 1000 LOC, minimum factor 0.5)
-    const factor = Math.max(0.5, linesSample / 1000);
+    // Sub-linear volume factor: prevents infinite dilution on large repos
+    // For repos < 1k LOC: scales smoothly from 0.7 to 1.0
+    // For repos >= 1k LOC: logarithmic dampening: 1 + 1.2 * ln(kLoc)
+    const normalizedKLoc = linesSample / 1000;
+    const factor = normalizedKLoc < 1
+      ? Math.max(0.5, 0.7 + 0.3 * normalizedKLoc)
+      : 1 + 1.2 * Math.log(normalizedKLoc);
+
     const normalizedPenalty = Math.round(totalInfractionPoints / factor);
     const score = isSufficientData ? Math.max(0, Math.min(100, 100 - normalizedPenalty)) : 100;
 
     // Determine Archetype
     let archetype = "The Clean Coder";
-    let archetypeDescription = "Disciplined and structured. Rarely cheats with skips or type escapes.";
+    let archetypeDescription = "Spotless discipline. No skipped tests, zero panic loops, and clean type safety.";
 
     if (isSufficientData) {
-      if (this.testSkips.length >= 3) {
-        archetype = "The Silent Vandal";
-        archetypeDescription = "When tests break, this agent doesn't fix the bug — it just deletes or skips the test.";
-      } else if (this.panicLoops.length >= 2) {
-        archetype = "The Panic Looper";
-        archetypeDescription = "Spams rapid 'fix', 'try again', and revert commits like a developer on their 5th espresso.";
-      } else if (this.typeEscapes.length >= 6) {
-        archetype = "The Any Architect";
-        archetypeDescription = "TypeScript compiler yelling? Slap 'as any' and '@ts-ignore' everywhere until it shuts up.";
-      } else if (this.swallowedErrors.length >= 3) {
-        archetype = "The Secret Keeper";
-        archetypeDescription = "Swallows exceptions into empty catch blocks. If no error is logged, did the bug really happen?";
-      } else if (score < 60) {
-        archetype = "The Chaos Gremlin";
-        archetypeDescription = "A jack-of-all-shortcuts: skips tests, casts to any, and prays it runs in production.";
+      if (score >= 90) {
+        if (totalInfractionPoints === 0) {
+          archetype = "The Clean Coder";
+          archetypeDescription = "Spotless discipline. No skipped tests, zero panic loops, and clean type safety.";
+        } else {
+          archetype = "The Pragmatic Builder";
+          archetypeDescription = "Overwhelmingly disciplined. Only rare, isolated shortcuts across thousands of lines.";
+        }
+      } else {
+        // Score is < 90: infractions are statistically notable and warrant a roast
+        const testSkipPoints = this.testSkips.length * 15;
+        const panicPoints = this.panicLoops.length * 8;
+        const escapePoints = this.typeEscapes.length * 3;
+        const swallowPoints = this.swallowedErrors.length * 10;
+
+        const maxPoints = Math.max(testSkipPoints, panicPoints, escapePoints, swallowPoints);
+
+        if (maxPoints === panicPoints && this.panicLoops.length >= 2) {
+          archetype = "The Panic Looper";
+          archetypeDescription = "Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs.";
+        } else if (maxPoints === testSkipPoints && this.testSkips.length >= 3) {
+          archetype = "The Silent Vandal";
+          archetypeDescription = "When test suites push back, tends to disable or skip tests to keep pipelines green.";
+        } else if (maxPoints === escapePoints && this.typeEscapes.length >= 5) {
+          archetype = "The Any Architect";
+          archetypeDescription = "Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling.";
+        } else if (maxPoints === swallowPoints && this.swallowedErrors.length >= 2) {
+          archetype = "The Secret Keeper";
+          archetypeDescription = "Tends to silence errors with empty catch blocks, obscuring runtime failures.";
+        } else if (score < 50) {
+          archetype = "The Chaos Gremlin";
+          archetypeDescription = "Mixes multiple shortcuts: skipped tests, type bypasses, and quick patches under pressure.";
+        } else {
+          archetype = "The Shortcut Specialist";
+          archetypeDescription = "Frequently cuts corners on edge cases, prioritizing delivery speed over rigour.";
+        }
       }
     }
 

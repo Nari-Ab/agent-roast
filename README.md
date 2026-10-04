@@ -28,7 +28,7 @@ npx agent-roast
   Code Added:  4,210 lines (AI) / 12,480 lines (total)
 
   AGENT ARCHETYPE:  The Any Architect
-  TypeScript compiler yelling? Slap 'as any' and '@ts-ignore' everywhere until it shuts up.
+  Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling.
 
   DISCIPLINE SCORE: 68 / 100
   (100 = spotless discipline, 0 = complete shortcut addiction)

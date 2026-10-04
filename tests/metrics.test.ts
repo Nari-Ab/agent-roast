@@ -204,4 +204,97 @@ describe("Metrics Engine", () => {
 
     expect(summary.isSufficientData).toBe(false);
   });
+
+  it("ignores patterns inside string literals and regex definitions (prevents self-flagging)", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "self-test",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Dev",
+      authorEmail: "dev@test.com",
+      message: "test: add assertions",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 500,
+      files: [
+        {
+          path: "tests/fixtures_detector.test.ts",
+          addedLines: [
+            { line: 'const mock = "{ line: \\"it.skip(\\\'foo\\\')\\" }";', lineNumber: 10 },
+            { line: 'expect(output).toBe("as any");', lineNumber: 11 },
+            { line: 'const regex = /(?:it|test|describe)\\.skip\\b/;', lineNumber: 12 },
+            { line: '// Real comment explaining why as any is bad', lineNumber: 13 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.testSkips).toHaveLength(0);
+    expect(summary.typeEscapes).toHaveLength(0);
+    expect(summary.swallowedErrors).toHaveLength(0);
+  });
+
+  it("ignores files in fixture and mock directories", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "fixture-commit",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Dev",
+      authorEmail: "dev@test.com",
+      message: "test: add fixture data",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 400,
+      files: [
+        {
+          path: "tests/fixtures/broken_sample.ts",
+          addedLines: [
+            { line: "it.skip('fixture test', () => {});", lineNumber: 1 },
+            { line: "const x = 1 as any;", lineNumber: 2 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.testSkips).toHaveLength(0);
+    expect(summary.typeEscapes).toHaveLength(0);
+  });
+
+  it("assigns Pragmatic Builder or Clean Coder when score >= 90 instead of harsh roast", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "clean-commit",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Dev",
+      authorEmail: "dev@test.com",
+      message: "feat: big clean feature",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 50000,
+      files: [
+        {
+          path: "src/service.ts",
+          addedLines: [
+            { line: "const payload = raw as any;", lineNumber: 100 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.score).toBeGreaterThanOrEqual(90);
+    expect(summary.archetype).toBe("The Pragmatic Builder");
+    expect(summary.archetype).not.toBe("The Silent Vandal");
+  });
 });
