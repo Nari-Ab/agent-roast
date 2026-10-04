@@ -1,12 +1,16 @@
 import { Command } from "commander";
+import { createRequire } from "module";
 import { roastRepository } from "./index.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json");
 
 const program = new Command();
 
 program
   .name("agent-roast")
   .description("Audit your git history for AI coding agent infractions and panic loops")
-  .version("0.1.0")
+  .version(pkg.version || "0.1.2")
   .argument("[path]", "Path to git repository (default: current directory)", ".")
   .option("-a, --all", "Audit ALL commits regardless of AI attribution tags", false)
   .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
