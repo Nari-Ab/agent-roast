@@ -52,4 +52,105 @@ describe("Streaming Git Log Parser", () => {
     expect(c2.isAiAttributed).toBe(false);
     expect(c2.files[0].path).toBe("README.md");
   });
+
+  it("correctly parses paths containing 'b/' such as lib/ or web/", async () => {
+    const raw =
+      "\x1e" +
+      "c2001\x1f" +
+      "2026-10-04T12:00:00Z\x1f" +
+      "Dev\x1f" +
+      "dev@example.com\x1f" +
+      "fix: update lib auth\x1f" +
+      "diff --git a/lib/auth.ts b/lib/auth.ts\n" +
+      "--- a/lib/auth.ts\n" +
+      "+++ b/lib/auth.ts\n" +
+      "@@ -5,1 +5,2 @@\n" +
+      " const old = 1;\n" +
+      "+const added = 2;\n";
+
+    const parsedCommits: any[] = [];
+    await parseGitLogStream(Readable.from([raw]), (c) => parsedCommits.push(c));
+
+    expect(parsedCommits).toHaveLength(1);
+    expect(parsedCommits[0].files[0].path).toBe("lib/auth.ts");
+    expect(parsedCommits[0].files[0].addedLines).toEqual([
+      { line: "const added = 2;", lineNumber: 6 },
+    ]);
+  });
+
+  it("handles '\\ No newline at end of file' without shifting subsequent line numbers", async () => {
+    const raw =
+      "\x1e" +
+      "c2002\x1f" +
+      "2026-10-04T12:00:00Z\x1f" +
+      "Dev\x1f" +
+      "dev@example.com\x1f" +
+      "fix: trailing newline\x1f" +
+      "diff --git a/src/index.ts b/src/index.ts\n" +
+      "--- a/src/index.ts\n" +
+      "+++ b/src/index.ts\n" +
+      "@@ -10,1 +10,2 @@\n" +
+      "-const a = 1;\n" +
+      "\\ No newline at end of file\n" +
+      "+const a = 1;\n" +
+      "+const b = 2;\n";
+
+    const parsedCommits: any[] = [];
+    await parseGitLogStream(Readable.from([raw]), (c) => parsedCommits.push(c));
+
+    expect(parsedCommits).toHaveLength(1);
+    expect(parsedCommits[0].files[0].addedLines).toEqual([
+      { line: "const a = 1;", lineNumber: 10 },
+      { line: "const b = 2;", lineNumber: 11 },
+    ]);
+  });
+
+  it("handles added lines starting with '++' such as '++i;' without confusing with +++ header", async () => {
+    const raw =
+      "\x1e" +
+      "c2003\x1f" +
+      "2026-10-04T12:00:00Z\x1f" +
+      "Dev\x1f" +
+      "dev@example.com\x1f" +
+      "feat: counter increment\x1f" +
+      "diff --git a/src/counter.ts b/src/counter.ts\n" +
+      "--- a/src/counter.ts\n" +
+      "+++ b/src/counter.ts\n" +
+      "@@ -20,1 +20,2 @@\n" +
+      " count = 0;\n" +
+      "+++count;\n"; // added line is '++count;'
+
+    const parsedCommits: any[] = [];
+    await parseGitLogStream(Readable.from([raw]), (c) => parsedCommits.push(c));
+
+    expect(parsedCommits).toHaveLength(1);
+    expect(parsedCommits[0].files[0].path).toBe("src/counter.ts");
+    expect(parsedCommits[0].files[0].addedLines).toEqual([
+      { line: "++count;", lineNumber: 21 },
+    ]);
+  });
+
+  it("handles deleted files pointing to /dev/null", async () => {
+    const raw =
+      "\x1e" +
+      "c2004\x1f" +
+      "2026-10-04T12:00:00Z\x1f" +
+      "Dev\x1f" +
+      "dev@example.com\x1f" +
+      "chore: remove legacy script\x1f" +
+      "diff --git a/scripts/old.sh b/scripts/old.sh\n" +
+      "deleted file mode 100644\n" +
+      "--- a/scripts/old.sh\n" +
+      "+++ /dev/null\n" +
+      "@@ -1,2 +0,0 @@\n" +
+      "-#!/bin/bash\n" +
+      "-echo old\n";
+
+    const parsedCommits: any[] = [];
+    await parseGitLogStream(Readable.from([raw]), (c) => parsedCommits.push(c));
+
+    expect(parsedCommits).toHaveLength(1);
+    expect(parsedCommits[0].files[0].path).toBe("dev/null");
+    expect(parsedCommits[0].files[0].addedLines).toHaveLength(0);
+  });
 });

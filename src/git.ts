@@ -40,36 +40,85 @@ export async function parseGitLogStream(
 
     const attribution = detectAiAttribution(authorName, authorEmail, message);
 
+    const HUNK_REGEX = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
     const files: ParsedFileDiff[] = [];
     let currentFile: ParsedFileDiff | null = null;
-    let currentLineNum = 0;
+    let lineNo = 0;
+    let oldLeft = 0;
+    let newLeft = 0;
     let totalAdded = 0;
 
+    const parsePath = (line: string): string => {
+      // +++ b/path/to/file or +++ /dev/null
+      const trimmed = line.trimEnd();
+      if (trimmed.startsWith("+++ /dev/null")) return "dev/null";
+      const stripped = trimmed.slice(4).trim(); // remove '+++ '
+      if (stripped.startsWith("b/")) {
+        return stripped.slice(2);
+      }
+      return stripped;
+    };
+
     const diffLines = rawDiff.split("\n");
-    for (const dLine of diffLines) {
-      if (dLine.startsWith("diff --git")) {
-        // e.g. diff --git a/src/index.ts b/src/index.ts
-        const match = dLine.match(/b\/(.+)$/);
-        const filePath = match ? match[1] : "unknown";
+    for (const rawLine of diffLines) {
+      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+
+      // When inside a hunk
+      if (oldLeft > 0 || newLeft > 0) {
+        if (line.startsWith("\\")) {
+          // "\ No newline at end of file" — ignore completely, do not increment line counter
+          continue;
+        }
+
+        const char = line[0];
+        if (char === "+") {
+          if (currentFile && currentFile.path !== "dev/null") {
+            currentFile.addedLines.push({
+              line: line.slice(1),
+              lineNumber: lineNo,
+            });
+            totalAdded++;
+          }
+          lineNo++;
+          newLeft--;
+        } else if (char === "-") {
+          oldLeft--;
+        } else {
+          // Context line or empty line
+          oldLeft--;
+          newLeft--;
+          lineNo++;
+        }
+        continue;
+      }
+
+      // Outside hunk: check for new hunk or file header
+      const hunkMatch = HUNK_REGEX.exec(line);
+      if (hunkMatch) {
+        oldLeft = hunkMatch[1] === undefined ? 1 : parseInt(hunkMatch[1], 10);
+        lineNo = parseInt(hunkMatch[2], 10);
+        newLeft = hunkMatch[3] === undefined ? 1 : parseInt(hunkMatch[3], 10);
+        continue;
+      }
+
+      if (line.startsWith("diff --git ")) {
+        // e.g. diff --git a/lib/x.ts b/lib/x.ts
+        const diffMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+        const filePath = diffMatch ? diffMatch[2] : "unknown";
         currentFile = { path: filePath, addedLines: [] };
         files.push(currentFile);
-      } else if (dLine.startsWith("@@")) {
-        // e.g. @@ -10,0 +15,2 @@ or @@ -1 +1 @@
-        const match = dLine.match(/\+(\d+)/);
-        if (match) {
-          currentLineNum = parseInt(match[1], 10);
-        }
-      } else if (dLine.startsWith("+") && !dLine.startsWith("+++")) {
+        continue;
+      }
+
+      if (line.startsWith("+++ ")) {
+        const filePath = parsePath(line);
         if (currentFile) {
-          currentFile.addedLines.push({
-            line: dLine.slice(1),
-            lineNumber: currentLineNum,
-          });
-          totalAdded++;
+          currentFile.path = filePath;
+        } else {
+          currentFile = { path: filePath, addedLines: [] };
+          files.push(currentFile);
         }
-        currentLineNum++;
-      } else if (!dLine.startsWith("-")) {
-        currentLineNum++;
+        continue;
       }
     }
 
@@ -117,31 +166,38 @@ export function streamGitLog(
 ): Readable {
   // Format: \x1e %H \x1f %aI \x1f %an \x1f %ae \x1f %B \x1f
   const gitArgs = [
+    "-c", "core.quotepath=false",
     "--no-pager",
     "log",
     "-p",
     "-U0",
     "--no-color",
+    "--no-merges",
+    "--no-show-signature",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--encoding=UTF-8",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
     `--since=${since}`,
     "--format=%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%B%x1f",
     "--",
     ".",
-    ":(exclude)*.lock",
-    ":(exclude)*-lock.json",
-    ":(exclude)*.lockb",
-    ":(exclude)dist",
-    ":(exclude)node_modules",
-    ":(exclude).drift_venv",
+    ":(exclude,glob)**/*.lock",
+    ":(exclude,glob)**/*-lock.json",
+    ":(exclude,glob)**/*.lockb",
+    ":(exclude,glob)**/dist/**",
+    ":(exclude,glob)**/build/**",
+    ":(exclude,glob)**/node_modules/**",
+    ":(exclude,glob)**/*.min.js",
+    ":(exclude,glob)**/*.map",
   ];
 
-  const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
   const child = spawn("git", gitArgs, {
     cwd,
     env: {
       ...process.env,
       GIT_PAGER: "cat",
-      GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL || nullDevice,
-      GIT_CONFIG_SYSTEM: process.env.GIT_CONFIG_SYSTEM || nullDevice,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
