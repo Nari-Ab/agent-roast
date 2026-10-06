@@ -739,6 +739,59 @@ code {
   font-size: 15px;
 }
 
+.feedback-box {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.feedback-lead {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin-bottom: 12px;
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.email-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  text-decoration: none;
+  background: rgba(242, 241, 236, 0.05);
+  border: 1px solid var(--line);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.email-link:hover {
+  background: rgba(242, 241, 236, 0.12);
+  border-color: var(--line-strong);
+}
+
+.feedback-sep {
+  color: var(--ink-muted);
+}
+
+.issue-link {
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.issue-link:hover {
+  color: var(--ink);
+}
+
 /* 8. Footer ------------------------------------------------------------- */
 .site-foot {
   border-top: 1px solid var(--line);
