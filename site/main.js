@@ -1,319 +1,207 @@
 /**
- * agent-roast Landing Page Interactive Engine
+ * agent-roast — Interactive Workbench
+ * Clean, sober developer tooling logic without emojis or marketing fluff.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-  initClipboardHandlers();
-  initScenarioTabs();
-  initScoreSimulator();
+  initCopyButtons();
+  initScenarioSwitcher();
 });
 
-/* --------------------------------------------------------------------------
-   1. Clipboard Command Helpers
-   -------------------------------------------------------------------------- */
-function initClipboardHandlers() {
-  const pills = [
-    document.getElementById("nav-copy-pill"),
-    document.getElementById("hero-copy-pill"),
-    document.getElementById("bottom-copy-pill")
-  ];
-
-  pills.forEach((pill) => {
-    if (!pill) return;
-    pill.addEventListener("click", () => {
-      const cmd = pill.getAttribute("data-cmd") || "npx agent-roast";
-      navigator.clipboard.writeText(cmd).then(() => {
-        pill.classList.add("copied");
+function initCopyButtons() {
+  const buttons = document.querySelectorAll(".copy-btn");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const text = btn.getAttribute("data-copy") || "npx agent-roast";
+      navigator.clipboard.writeText(text).then(() => {
+        const label = btn.querySelector(".copy-label");
+        const originalText = label ? label.textContent : "Copy";
+        btn.classList.add("is-copied");
+        if (label) label.textContent = "Copied";
         setTimeout(() => {
-          pill.classList.remove("copied");
-        }, 2000);
+          btn.classList.remove("is-copied");
+          if (label) label.textContent = originalText;
+        }, 1800);
       });
     });
   });
 }
 
-/* --------------------------------------------------------------------------
-   2. Interactive Scenario Workbench
-   -------------------------------------------------------------------------- */
 const SCENARIOS = {
   "panic-loop": {
-    filename: "src/auth/jwt.ts (commit a910f21 by Cursor)",
-    diffLines: [
-      { type: "context", ln: "41", text: " export async function verifySession(token: string) {" },
+    file: "src/client.ts",
+    verdict: "roast: The Panic Looper (55/100)",
+    lines: [
+      { type: "ctx", ln: "41", text: "export async function verifyToken(token: string) {" },
       { type: "del", ln: "42", text: "-  const session = await db.sessions.findUnique({ where: { token } });" },
       { type: "del", ln: "43", text: "-  if (!session || session.expiredAt < new Date()) throw new AuthError();" },
-      { type: "add", ln: "42", text: "+  // fix: force pass auth check in CI" },
-      { type: "add", ln: "43", text: "+  const payload = jwt.decode(token) as any; // FIXME" },
-      { type: "hit", ln: "44", text: "+  return { userId: payload?.sub ?? 'root', roles: ['admin'] as any };" },
-      { type: "context", ln: "45", text: " }" },
-      { type: "context", ln: "46", text: " " },
-      { type: "context", ln: "47", text: " // git history in last 5 minutes:" },
-      { type: "del", ln: "", text: "-  commit 3df29a1 'fix auth crash'" },
-      { type: "del", ln: "", text: "-  commit e8421c9 'quickfix again'" },
-      { type: "del", ln: "", text: "-  commit a910f21 'fix type bypass for ci'" },
+      { type: "hit", ln: "42", text: "+  // bypass typecheck for CI" },
+      { type: "hit", ln: "43", text: "+  const payload = jwt.decode(token) as any;" },
+      { type: "hit", ln: "44", text: "+  return { userId: payload?.sub ?? 'admin', roles: ['root'] as any };" },
+      { type: "ctx", ln: "45", text: "}" },
+      { type: "ctx", ln: "46", text: "" },
+      { type: "ctx", ln: "47", text: "// git log velocity: 3 commits in 4 minutes" },
+      { type: "del", ln: "", text: "-  3df29a1 fix auth crash" },
+      { type: "del", ln: "", text: "-  e8421c9 quickfix again" },
+      { type: "del", ln: "", text: "-  a910f21 fix type bypass for ci" },
     ],
-    terminalOutput: [
-      { text: "agent-roast — git discipline audit (304 AI commits in repo)", cls: "term-dim" },
+    terminal: [
+      { text: "agent-roast — git discipline audit (304 AI commits)", cls: "t-dim" },
       { text: "" },
-      { text: "SCORE: 55 / 100 · The Panic Looper", cls: "term-warning" },
-      { text: "  Prone to rapid-fire fix thrashing cycles when wrestling stubborn bugs.", cls: "term-dim" },
+      { text: "SCORE: 55 / 100 · The Panic Looper", cls: "t-ask" },
+      { text: "  Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs.", cls: "t-dim" },
       { text: "" },
-      { text: "INFRACTIONS DETECTED (42):", cls: "term-danger" },
-      { text: "  ● panic-loop (15)  consecutive quick fixes < 15m apart touching same files", cls: "term-danger" },
-      { text: "      latest: 3df29a1 -> a910f21 (2m apart) in src/auth/jwt.ts", cls: "term-dim" },
-      { text: "  ● type-escape (19)  compiler type bypasses in added lines", cls: "term-warning" },
-      { text: "      e.g. src/auth/jwt.ts:43 — token as any", cls: "term-dim" },
-      { text: "  ● test-skip (8)     disabled test suites", cls: "term-danger" },
+      { text: "INFRACTIONS DETECTED (42):", cls: "t-deny" },
+      { text: "  ● panic-loop (15) — consecutive quick fixes < 15m apart touching same files", cls: "t-deny" },
+      { text: "      latest: 3df29a1 -> a910f21 (2m apart) in src/client.ts", cls: "t-dim" },
+      { text: "  ● type-escape (19) — compiler type bypasses in added lines", cls: "t-ask" },
+      { text: "      src/client.ts:43 — token as any", cls: "t-dim" },
+      { text: "  ● test-skip (8) — disabled test suites", cls: "t-deny" },
       { text: "" },
-      { text: "SUMMARY: 100% Local · 182ms · 0 Telemetry", cls: "term-cyan" }
+      { text: "Audit complete in 182ms. Zero telemetry.", cls: "t-dim" }
     ]
   },
   "test-skip": {
-    filename: "tests/auth/expiry.test.ts (commit c4b2210)",
-    diffLines: [
-      { type: "context", ln: "12", text: " describe('JWT Expiry Validation', () => {" },
+    file: "tests/client.test.ts",
+    verdict: "roast: The Silent Vandal (48/100)",
+    lines: [
+      { type: "ctx", ln: "12", text: "describe('Session Expiry Validation', () => {" },
       { type: "del", ln: "13", text: "-  it('rejects expired tokens after 15m idle time', async () => {" },
       { type: "hit", ln: "13", text: "+  it.skip('rejects expired tokens after 15m idle time', async () => {" },
-      { type: "context", ln: "14", text: "     const expired = createMockToken({ expired: true });" },
-      { type: "context", ln: "15", text: "     await expect(validate(expired)).rejects.toThrow();" },
-      { type: "context", ln: "16", text: "   });" },
-      { type: "context", ln: "17", text: " " },
+      { type: "ctx", ln: "14", text: "    const expired = createMockToken({ expired: true });" },
+      { type: "ctx", ln: "15", text: "    await expect(validate(expired)).rejects.toThrow();" },
+      { type: "ctx", ln: "16", text: "  });" },
+      { type: "ctx", ln: "17", text: "" },
       { type: "del", ln: "18", text: "-  it('rotates refresh token securely', async () => {" },
       { type: "hit", ln: "18", text: "+  it.skip('rotates refresh token securely', async () => {" },
-      { type: "context", ln: "19", text: "     // test body..." },
-      { type: "context", ln: "20", text: "   });" },
+      { type: "ctx", ln: "19", text: "    // test implementation" },
+      { type: "ctx", ln: "20", text: "  });" }
     ],
-    terminalOutput: [
-      { text: "agent-roast — git discipline audit (98 AI commits)", cls: "term-dim" },
+    terminal: [
+      { text: "agent-roast — git discipline audit (98 AI commits)", cls: "t-dim" },
       { text: "" },
-      { text: "SCORE: 48 / 100 · The Silent Vandal", cls: "term-danger" },
-      { text: "  When test suites push back, tends to disable or skip tests to keep pipelines green.", cls: "term-dim" },
+      { text: "SCORE: 48 / 100 · The Silent Vandal", cls: "t-deny" },
+      { text: "  When test suites push back, tends to disable or skip tests to keep pipelines green.", cls: "t-dim" },
       { text: "" },
-      { text: "CRITICAL INFRACTIONS:", cls: "term-danger" },
-      { text: "  ● test-skip (6)  disabled or skipped test suites in added lines", cls: "term-danger" },
-      { text: "      tests/auth/expiry.test.ts:13 — it.skip('rejects expired tokens')", cls: "term-dim" },
-      { text: "      tests/auth/expiry.test.ts:18 — it.skip('rotates refresh token')", cls: "term-dim" },
+      { text: "CRITICAL INFRACTIONS:", cls: "t-deny" },
+      { text: "  ● test-skip (6) — disabled or skipped test suites in added lines", cls: "t-deny" },
+      { text: "      tests/client.test.ts:13 — it.skip('rejects expired tokens')", cls: "t-dim" },
+      { text: "      tests/client.test.ts:18 — it.skip('rotates refresh token')", cls: "t-dim" },
       { text: "" },
-      { text: "VERDICT: Pipeline turned green by disabling assertions.", cls: "term-warning" }
+      { text: "VERDICT: Pipeline turned green by disabling test assertions.", cls: "t-ask" }
     ]
   },
   "type-escape": {
-    filename: "src/api/handler.ts (commit e7194f2)",
-    diffLines: [
-      { type: "context", ln: "88", text: " async function handleWebhook(req: Request) {" },
-      { type: "del", ln: "89", text: "-  const payload: StripeEvent = await req.json();" },
-      { type: "del", ln: "90", text: "-  if (!isStripeEvent(payload)) return invalidPayload();" },
-      { type: "add", ln: "89", text: "+  // @ts-ignore" },
+    file: "src/client.ts",
+    verdict: "roast: The Any Architect (68/100)",
+    lines: [
+      { type: "ctx", ln: "88", text: "async function handleResponse(req: Request) {" },
+      { type: "del", ln: "89", text: "-  const payload: UserPayload = await req.json();" },
+      { type: "del", ln: "90", text: "-  if (!isUserPayload(payload)) return invalidPayload();" },
+      { type: "hit", ln: "89", text: "+  // @ts-ignore" },
       { type: "hit", ln: "90", text: "+  const payload = (await req.json()) as any;" },
-      { type: "add", ln: "91", text: "+  const customer = payload.data.object.customer as any;" },
-      { type: "context", ln: "92", text: "   return fulfill(customer);" },
-      { type: "context", ln: "93", text: " }" }
+      { type: "hit", ln: "91", text: "+  const user = payload.data.user as any;" },
+      { type: "ctx", ln: "92", text: "   return authorize(user);" },
+      { type: "ctx", ln: "93", text: "}" }
     ],
-    terminalOutput: [
-      { text: "agent-roast — git discipline audit (154 AI commits)", cls: "term-dim" },
+    terminal: [
+      { text: "agent-roast — git discipline audit (154 AI commits)", cls: "t-dim" },
       { text: "" },
-      { text: "SCORE: 68 / 100 · The Any Architect", cls: "term-warning" },
-      { text: "  Leans on compiler bypasses (as any, @ts-ignore) rather than strict type modeling.", cls: "term-dim" },
+      { text: "SCORE: 68 / 100 · The Any Architect", cls: "t-ask" },
+      { text: "  Leans on compiler bypasses (as any, @ts-ignore) rather than strict type modeling.", cls: "t-dim" },
       { text: "" },
-      { text: "INFRACTIONS DETECTED:", cls: "term-warning" },
-      { text: "  ● type-escape (14)  compiler type bypasses in added lines", cls: "term-warning" },
-      { text: "      src/api/handler.ts:89 — // @ts-ignore", cls: "term-dim" },
-      { text: "      src/api/handler.ts:90 — (await req.json()) as any", cls: "term-dim" },
-      { text: "      src/api/handler.ts:91 — object.customer as any", cls: "term-dim" },
+      { text: "INFRACTIONS DETECTED:", cls: "t-ask" },
+      { text: "  ● type-escape (14) — compiler type bypasses in added lines", cls: "t-ask" },
+      { text: "      src/client.ts:89 — // @ts-ignore", cls: "t-dim" },
+      { text: "      src/client.ts:90 — (await req.json()) as any", cls: "t-dim" },
+      { text: "      src/client.ts:91 — payload.data.user as any", cls: "t-dim" },
       { text: "" },
-      { text: "RECOMMENDATION: Remove 14 `as any` casts to restore strict null checks.", cls: "term-cyan" }
+      { text: "RECOMMENDATION: Remove 14 `as any` casts to restore strict null checks.", cls: "t-dim" }
     ]
   },
   "clean": {
-    filename: "src/billing/service.ts (commit f41a980)",
-    diffLines: [
-      { type: "context", ln: "14", text: " export async function processBilling(id: string): Promise<Invoice> {" },
-      { type: "add", ln: "15", text: "+  const account = await db.accounts.findUniqueOrThrow({ where: { id } });" },
-      { type: "add", ln: "16", text: "+  const invoice = await paymentGateway.createInvoice(account);" },
-      { type: "add", ln: "17", text: "+  await auditLog.record({ action: 'invoice.created', target: id });" },
-      { type: "add", ln: "18", text: "+  return invoice;" },
-      { type: "context", ln: "19", text: " }" }
+    file: "src/client.ts",
+    verdict: "roast: The Pragmatic Builder (96/100)",
+    lines: [
+      { type: "ctx", ln: "14", text: "export async function processSession(id: string): Promise<Session> {" },
+      { type: "add", ln: "15", text: "+  const session = await db.sessions.findUniqueOrThrow({ where: { id } });" },
+      { type: "add", ln: "16", text: "+  const validated = validateTokenIntegrity(session.token);" },
+      { type: "add", ln: "17", text: "+  await auditLog.record({ action: 'session.verified', id });" },
+      { type: "add", ln: "18", text: "+  return validated;" },
+      { type: "ctx", ln: "19", text: "}" }
     ],
-    terminalOutput: [
-      { text: "agent-roast — git discipline audit (86 AI commits)", cls: "term-dim" },
+    terminal: [
+      { text: "agent-roast — git discipline audit (86 AI commits)", cls: "t-dim" },
       { text: "" },
-      { text: "SCORE: 96 / 100 · The Pragmatic Builder", cls: "term-success" },
-      { text: "  Spotless discipline. No skipped tests, zero panic loops, and clean type safety.", cls: "term-dim" },
+      { text: "SCORE: 96 / 100 · The Pragmatic Builder", cls: "t-allow" },
+      { text: "  Spotless discipline. No skipped tests, zero panic loops, and clean type safety.", cls: "t-dim" },
       { text: "" },
-      { text: "INFRACTIONS DETECTED (0):", cls: "term-success" },
-      { text: "  ✓ Zero skipped tests detected", cls: "term-success" },
-      { text: "  ✓ Zero compiler type escapes", cls: "term-success" },
-      { text: "  ✓ Spotless commit cadence (>1h intentional iterations)", cls: "term-success" },
+      { text: "INFRACTIONS DETECTED (0):", cls: "t-allow" },
+      { text: "  ✓ Zero skipped tests detected", cls: "t-allow" },
+      { text: "  ✓ Zero compiler type escapes", cls: "t-allow" },
+      { text: "  ✓ Spotless commit cadence (>1h intentional iterations)", cls: "t-allow" },
       { text: "" },
-      { text: "VERDICT: Clean engineering. Ready to merge with confidence.", cls: "term-cyan" }
+      { text: "VERDICT: Clean engineering. Ready to merge with confidence.", cls: "t-dim" }
     ]
   }
 };
 
-function initScenarioTabs() {
-  const tabs = document.querySelectorAll(".tab-btn");
-  const fileNameEl = document.getElementById("diff-file-name");
-  const diffEl = document.getElementById("diff-content");
-  const termEl = document.getElementById("term-content");
+function initScenarioSwitcher() {
+  const buttons = document.querySelectorAll(".sc-btn");
+  const tabTitle = document.getElementById("active-tab-title");
+  const codeLines = document.getElementById("diff-code-lines");
+  const termView = document.getElementById("term-view");
+  const statusVerdict = document.getElementById("st-verdict");
 
-  if (!diffEl || !termEl) return;
+  if (!codeLines || !termView) return;
 
-  function renderScenario(key) {
+  function loadScenario(key) {
     const data = SCENARIOS[key];
     if (!data) return;
 
-    if (fileNameEl) fileNameEl.textContent = data.filename;
+    if (tabTitle) tabTitle.textContent = data.file;
+    if (statusVerdict) statusVerdict.textContent = data.verdict;
 
-    // Render Diff Lines
-    diffEl.innerHTML = "";
-    data.diffLines.forEach((l) => {
-      const lineDiv = document.createElement("div");
-      lineDiv.className = "diff-line";
+    // Render Diff
+    codeLines.innerHTML = "";
+    data.lines.forEach((l) => {
+      const li = document.createElement("li");
 
       const lnSpan = document.createElement("span");
-      lnSpan.className = "diff-ln";
+      lnSpan.className = "ed-ln";
       lnSpan.textContent = l.ln;
 
       const codeSpan = document.createElement("span");
-      if (l.type === "add") codeSpan.className = "diff-add";
-      else if (l.type === "del") codeSpan.className = "diff-del";
-      else if (l.type === "hit") codeSpan.className = "diff-hit";
+      if (l.type === "add") codeSpan.className = "line-add";
+      else if (l.type === "del") codeSpan.className = "line-del";
+      else if (l.type === "hit") codeSpan.className = "line-hit";
+      else codeSpan.className = "line-ctx";
       codeSpan.textContent = l.text;
 
-      lineDiv.appendChild(lnSpan);
-      lineDiv.appendChild(codeSpan);
-      diffEl.appendChild(lineDiv);
+      li.appendChild(lnSpan);
+      li.appendChild(codeSpan);
+      codeLines.appendChild(li);
     });
 
-    // Render Terminal Lines
-    termEl.innerHTML = "";
-    data.terminalOutput.forEach((item) => {
-      const p = document.createElement("div");
-      p.className = `term-line ${item.cls || ""}`;
-      p.textContent = item.text || " ";
-      termEl.appendChild(p);
+    // Render Terminal
+    termView.innerHTML = "";
+    data.terminal.forEach((item) => {
+      const div = document.createElement("div");
+      div.className = `t-line ${item.cls || ""}`;
+      div.textContent = item.text || " ";
+      termView.appendChild(div);
     });
   }
 
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      tab.classList.add("active");
-      const scenarioKey = tab.getAttribute("data-scenario");
-      renderScenario(scenarioKey);
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      const key = btn.getAttribute("data-scenario");
+      loadScenario(key);
     });
   });
 
   // Default scenario
-  renderScenario("panic-loop");
-}
-
-/* --------------------------------------------------------------------------
-   3. Interactive Score Simulator
-   -------------------------------------------------------------------------- */
-function initScoreSimulator() {
-  const slSkips = document.getElementById("sl-skips");
-  const slEscapes = document.getElementById("sl-escapes");
-  const slPanics = document.getElementById("sl-panics");
-  const slSwallow = document.getElementById("sl-swallow");
-
-  const valSkips = document.getElementById("val-skips");
-  const valEscapes = document.getElementById("val-escapes");
-  const valPanics = document.getElementById("val-panics");
-  const valSwallow = document.getElementById("val-swallow");
-
-  const scoreNum = document.getElementById("sim-score-num");
-  const ringFill = document.getElementById("sim-ring-fill");
-  const titleEl = document.getElementById("sim-archetype-title");
-  const descEl = document.getElementById("sim-archetype-desc");
-  const penaltyEl = document.getElementById("sim-total-penalty");
-
-  if (!slSkips || !scoreNum) return;
-
-  function update() {
-    const nSkips = parseInt(slSkips.value, 10);
-    const nEscapes = parseInt(slEscapes.value, 10);
-    const nPanics = parseInt(slPanics.value, 10);
-    const nSwallow = parseInt(slSwallow.value, 10);
-
-    valSkips.textContent = nSkips;
-    valEscapes.textContent = nEscapes;
-    valPanics.textContent = nPanics;
-    valSwallow.textContent = nSwallow;
-
-    // Weight points calibrated:
-    const skipPts = nSkips * 15;
-    const swallowPts = nSwallow * 10;
-    const panicPts = nPanics * 8;
-    const escapePts = nEscapes * 3;
-
-    const totalInfractionPoints = skipPts + swallowPts + panicPts + escapePts;
-
-    // Sub-linear volume normalization for ~3k LOC
-    const kLocFactor = 1 + 1.2 * Math.log(3); // ~2.31
-    const penalty = Math.round(totalInfractionPoints / kLocFactor);
-    const score = Math.max(0, Math.min(100, 100 - penalty));
-
-    scoreNum.textContent = score;
-    penaltyEl.textContent = `-${penalty} pts`;
-
-    // SVG Ring fill: circumference 2 * PI * 52 = 326.7
-    const circumference = 326.7;
-    const offset = circumference - (score / 100) * circumference;
-    ringFill.style.strokeDashoffset = offset;
-
-    // Ring Color
-    if (score >= 85) {
-      ringFill.style.stroke = "#10b981"; // green
-    } else if (score >= 65) {
-      ringFill.style.stroke = "#f59e0b"; // amber
-    } else {
-      ringFill.style.stroke = "#ef4444"; // red
-    }
-
-    // Determine Archetype
-    let arch = "The Pragmatic Builder";
-    let desc = "Disciplined engineering with clean commits and minimal shortcuts.";
-
-    if (score >= 90) {
-      if (totalInfractionPoints === 0) {
-        arch = "The Clean Coder";
-        desc = "Spotless discipline. No skipped tests, zero panic loops, and clean type safety.";
-      } else {
-        arch = "The Pragmatic Builder";
-        desc = "Overwhelmingly disciplined. Only rare, isolated shortcuts across thousands of lines.";
-      }
-    } else {
-      const maxPts = Math.max(skipPts, panicPts, escapePts, swallowPts);
-
-      if (maxPts === panicPts && nPanics >= 2) {
-        arch = "The Panic Looper";
-        desc = "Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs.";
-      } else if (maxPts === skipPts && nSkips >= 2) {
-        arch = "The Silent Vandal";
-        desc = "When test suites push back, tends to disable or skip tests to keep pipelines green.";
-      } else if (maxPts === escapePts && nEscapes >= 4) {
-        arch = "The Any Architect";
-        desc = "Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling.";
-      } else if (maxPts === swallowPts && nSwallow >= 1) {
-        arch = "The Secret Keeper";
-        desc = "Tends to silence errors with empty catch blocks, obscuring runtime failures.";
-      } else if (score < 50) {
-        arch = "The Chaos Gremlin";
-        desc = "Mixes multiple shortcuts: skipped tests, type bypasses, and quick patches under pressure.";
-      } else {
-        arch = "The Shortcut Specialist";
-        desc = "Frequently cuts corners on edge cases, prioritizing delivery speed over rigour.";
-      }
-    }
-
-    titleEl.textContent = arch;
-    descEl.textContent = desc;
-  }
-
-  [slSkips, slEscapes, slPanics, slSwallow].forEach((sl) => {
-    sl.addEventListener("input", update);
-  });
-
-  update();
+  loadScenario("panic-loop");
 }

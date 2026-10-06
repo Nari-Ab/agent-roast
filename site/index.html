@@ -3,434 +3,274 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>agent-roast — Audit git history for AI coding infractions</title>
-  <meta name="description" content="Catch sneaky AI shortcuts in recorded git commits: skipped tests, as any type escapes, swallowed errors, and panic loops. 100% offline, zero telemetry.">
-  <link rel="icon" type="image/svg+xml" href="../docs/assets/logo-dark.svg">
-  
-  <!-- Modern Typography -->
+  <title>agent-roast — audit git history for AI coding agent infractions</title>
+  <meta name="description" content="Audit recorded git commits for AI shortcuts: skipped tests, type escapes, swallowed errors, and panic loops. Local, zero telemetry, open source.">
+  <link rel="canonical" href="https://github.com/Nari-Ab/agent-roast">
+  <link rel="icon" type="image/svg+xml" href="assets/logo-dark.svg">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap">
   <link rel="stylesheet" href="styles.css">
+  <script src="main.js" defer></script>
 </head>
 <body>
 
-  <!-- Background Ambient Glow -->
-  <div class="ambient-glow" aria-hidden="true">
-    <div class="glow-orb glow-top"></div>
-    <div class="glow-orb glow-bottom"></div>
-  </div>
-
-  <!-- Header / Navigation -->
-  <header class="site-header">
-    <div class="header-inner container">
-      <a href="#" class="brand-link">
-        <span class="brand-flame">🔥</span>
-        <span class="brand-name">agent<span class="text-accent">-roast</span></span>
-      </a>
-
-      <nav class="main-nav">
-        <a href="#demo" class="nav-item">Interactive Demo</a>
-        <a href="#how-it-works" class="nav-item">How it works</a>
-        <a href="#simulator" class="nav-item">Score Simulator</a>
-        <a href="#privacy" class="nav-item">Privacy</a>
-        <a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener" class="nav-item nav-ext">
-          GitHub
-          <svg class="ext-icon" width="12" height="12" viewBox="0 0 12 12"><path d="M3 1h8v8M11 1L1 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </a>
-      </nav>
-
-      <div class="nav-cta">
-        <div class="cmd-pill" id="nav-copy-pill" data-cmd="npx agent-roast">
-          <span class="cmd-dollar">$</span>
-          <span class="cmd-text">npx agent-roast</span>
-          <button class="cmd-copy-btn" title="Copy command">
-            <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span class="copy-feedback">Copied!</span>
-          </button>
-        </div>
+<header class="site-head" id="top">
+  <nav class="nav container" aria-label="Main navigation">
+    <a class="brand" href="#top" aria-label="agent-roast — back to top">
+      <span class="brand-text">agent-roast</span>
+    </a>
+    <div class="nav-menu">
+      <ul class="nav-links">
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#demo">Diff audit</a></li>
+        <li><a href="#fork">The fork</a></li>
+        <li><a href="#privacy">Privacy</a></li>
+        <li><a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener">GitHub <svg class="ic ic-ext" width="12" height="12" viewBox="0 0 12 12"><path d="M3 1h8v8M11 1L1 11" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></a></li>
+        <li><a href="https://www.npmjs.com/package/agent-roast" target="_blank" rel="noopener">npm <svg class="ic ic-ext" width="12" height="12" viewBox="0 0 12 12"><path d="M3 1h8v8M11 1L1 11" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></a></li>
+      </ul>
+      <div class="install-pill install-pill-nav" data-nav-install>
+        <code class="install-cmd" id="nav-install-cmd"><span class="prompt-mark">$ </span>npx agent-roast</code>
+        <button class="copy-btn copy-btn-sm" type="button" data-copy="npx agent-roast" data-select="nav-install-cmd" aria-label="Copy command">
+          <svg class="ic" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+          <span class="copy-label">Copy</span>
+        </button>
       </div>
     </div>
-  </header>
+  </nav>
+</header>
 
-  <main id="main">
-    <!-- Hero Section -->
-    <section class="hero-section">
-      <div class="container hero-container">
-        <div class="hero-badge">
-          <span class="badge-dot"></span>
-          <span>Zero-Telemetry Git Discipline Auditor · v0.1.4</span>
+<main id="main">
+
+  <!-- Hero Section -->
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="container">
+      <div class="hero-top">
+        <div class="hero-head">
+          <h1 id="hero-title">Audit git history for AI coding agent infractions.</h1>
+          <div class="hero-row">
+            <p class="lead">AI coding agents make pipelines green by skipping failing tests, erasing types with <code>as any</code>, and spinning rapid-fire commit loops. <code>agent-roast</code> streams recorded git diffs and scores discipline from 0 to 100 with line proofs.</p>
+            <div class="hero-cta">
+              <div class="hero-actions">
+                <div class="install-pill">
+                  <code class="install-cmd" id="install-cmd"><span class="prompt-mark">$ </span>npx agent-roast</code>
+                  <button class="copy-btn" type="button" data-copy="npx agent-roast" data-select="install-cmd">
+                    <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+                    <span class="copy-label">Copy</span>
+                  </button>
+                </div>
+                <a class="btn btn-primary btn-gh" href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener">
+                  <svg class="ic ic-gh" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+                  View on GitHub
+                </a>
+              </div>
+              <p class="hero-meta">
+                <span class="meta-tag">MIT</span>
+                <span class="meta-dot">·</span>
+                <span>runs locally in &lt;200ms</span>
+                <span class="meta-dot">·</span>
+                <span>zero telemetry</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IDE & Terminal Stage -->
+      <figure class="scene" id="demo" aria-labelledby="scene-cap">
+        <div class="stage">
+          <div class="ed">
+            <div class="ed-bar">
+              <span class="tt-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+              <span class="ed-title">auth-service — git diff HEAD~1</span>
+            </div>
+            <div class="ed-body">
+              <nav class="ed-side" aria-label="Explorer">
+                <p class="ed-side-h">Explorer</p>
+                <ul class="ed-tree">
+                  <li class="ed-dir">auth-service</li>
+                  <li class="ed-dir">src</li>
+                  <li class="ed-f ed-on" id="file-tree-auth">client.ts</li>
+                  <li class="ed-f" id="file-tree-test">client.test.ts</li>
+                  <li class="ed-f">package.json</li>
+                </ul>
+                <div class="ed-scenarios">
+                  <p class="ed-side-h">Audit Scenarios</p>
+                  <button class="sc-btn is-active" data-scenario="panic-loop">01. Panic loop</button>
+                  <button class="sc-btn" data-scenario="test-skip">02. Test skip</button>
+                  <button class="sc-btn" data-scenario="type-escape">03. Type bypass</button>
+                  <button class="sc-btn" data-scenario="clean">04. Clean repo</button>
+                </div>
+              </nav>
+
+              <div class="ed-main">
+                <div class="ed-tabs">
+                  <span class="ed-tab ed-tab-on" id="active-tab-title">src/client.ts</span>
+                </div>
+                <div class="ed-code">
+                  <ol class="ed-lines" id="diff-code-lines">
+                    <!-- Populated by JS -->
+                  </ol>
+                </div>
+                <div class="ed-panel">
+                  <div class="ed-ptabs">
+                    <span>Problems (0)</span>
+                    <span>Output</span>
+                    <span class="ed-pt-on">Terminal</span>
+                  </div>
+                  <div class="ed-term" id="term-view">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="ed-status">
+              <span class="ed-st-l">main</span>
+              <span id="st-verdict">roast: The Panic Looper (55/100)</span>
+              <span class="ed-st-r">zero telemetry · 182ms</span>
+            </div>
+          </div>
+        </div>
+        <figcaption id="scene-cap">
+          An AI assistant wrestled auth tests in client.ts. It took shortcuts to get CI green. agent-roast streams the added lines in git log, isolates the evasions, and provides exact line proofs.
+        </figcaption>
+      </figure>
+
+      <!-- The Fork: One AI Prompt, Two Realities -->
+      <div class="fork" id="fork">
+        <div class="fork-head">
+          <h2>The AI coding paradox</h2>
+          <p>When tests fail, an AI agent optimizes for the path of least resistance to make the build pass.</p>
+        </div>
+        <div class="fork-panes">
+          <article class="pane pane-off">
+            <span class="pane-pill pill-off">Without agent-roast</span>
+            <h3>The Silent Regression</h3>
+            <p class="pane-summary">A developer asks Cursor or Claude Code to fix an auth bug. The build passes. The PR is approved.</p>
+            <ul class="pane-points">
+              <li><strong>Skipped suites:</strong> <code>it.skip()</code> added to 3 test files. Critical edge cases never run.</li>
+              <li><strong>Type evasion:</strong> Strict types suppressed with <code>as any</code> and <code>// @ts-ignore</code>.</li>
+              <li><strong>Thrashing loops:</strong> 8 commits in 3 minutes with vague messages ("fix", "try again", "wip").</li>
+              <li><strong>Outcome:</strong> Silent regressions hit production despite 100% green CI.</li>
+            </ul>
+          </article>
+
+          <article class="pane pane-on">
+            <span class="pane-pill pill-on">With agent-roast</span>
+            <h3>Discipline Audited in 180ms</h3>
+            <p class="pane-summary">A single command audits the recent git log. Proof is printed before changes are merged.</p>
+            <ul class="pane-points">
+              <li><strong>Exact citations:</strong> Flags file, line number, commit SHA, and author for every skipped test.</li>
+              <li><strong>Clean type hygiene:</strong> Catches compiler bypasses added in new lines.</li>
+              <li><strong>Loop detection:</strong> Calculates velocity thrashing and flags consecutive panic fixes &lt;15m apart.</li>
+              <li><strong>Outcome:</strong> Transparent discipline scores (0–100) and actionable PR quality gates.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <!-- How It Works Section -->
+      <section class="how" id="how">
+        <div class="section-head">
+          <h2>How it works</h2>
+          <p>Deterministic static analysis on streaming git diffs. No cloud, no external LLM calls.</p>
         </div>
 
-        <h1 class="hero-title">
-          Audit your git history for <span class="gradient-text">AI coding infractions</span>.
-        </h1>
+        <div class="bento-grid">
+          <div class="tile">
+            <h3>1. Streaming Git Pipeline</h3>
+            <p>Spawns <code>git log -p -U0</code> with ASCII control records (<code>\x1e</code> / <code>\x1f</code>). Parses hunks line-by-line without loading large repositories into memory.</p>
+          </div>
 
-        <p class="hero-lead">
-          AI agents are masters at making CI green — by quietly slapping <code>it.skip</code>, bypassing types with <code>as any</code>, and panic-looping 10 commits in 2 minutes. <strong>agent-roast</strong> scans your repo offline in 180ms and exposes what really happened.
-        </p>
+          <div class="tile">
+            <h3>2. Added-Lines Scrutiny</h3>
+            <p>Scans only added lines (<code>+</code>). Refactorings, file moves, and deleted code never trigger false alarms.</p>
+          </div>
 
-        <div class="hero-actions">
-          <div class="main-cmd-box" id="hero-copy-pill" data-cmd="npx agent-roast">
-            <span class="term-prompt">$</span>
-            <span class="term-command">npx agent-roast</span>
-            <button class="copy-action-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-              <span>Copy</span>
+          <div class="tile">
+            <h3>3. Literal Sanitization</h3>
+            <p>Strips string constants and test fixtures prior to evaluation. String values containing words like <code>"it.skip"</code> are never misclassified.</p>
+          </div>
+
+          <div class="tile">
+            <h3>4. AI Provenance Fingerprints</h3>
+            <p>Inspects commit trailers (<code>Co-Authored-By: Claude</code>), author identities, and tool-generated message signatures.</p>
+          </div>
+
+          <div class="tile">
+            <h3>5. Panic Loop Velocity</h3>
+            <p>Identifies author thrashing: rapid consecutive bugfix commits touching the same files within a 15-minute window.</p>
+          </div>
+
+          <div class="tile">
+            <h3>6. CI/CD Integration Ready</h3>
+            <p>Outputs clean text or <code>--json</code>. Can be integrated into pre-commit hooks and GitHub Actions workflows.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Privacy & Hermetic Guarantee -->
+      <section class="privacy" id="privacy">
+        <div class="privacy-card">
+          <div class="privacy-head">
+            <h2>Local & Hermetic</h2>
+            <p>Your source code never leaves your computer. No API keys, no network access, no telemetry.</p>
+          </div>
+          <div class="privacy-specs">
+            <div class="spec-row">
+              <span class="spec-k">Network egress</span>
+              <span class="spec-v">0 bytes</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-k">External dependencies</span>
+              <span class="spec-v">Zero (2 CLI packages)</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-k">API keys</span>
+              <span class="spec-v">None</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-k">Audit speed</span>
+              <span class="spec-v">&lt;200ms on 300 commits</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Install / Run Callout -->
+      <section class="install-block">
+        <div class="install-box">
+          <h2>Audit your repository now</h2>
+          <p>No global install required. Run directly in any git project with npx.</p>
+          <div class="install-pill install-pill-lg">
+            <code class="install-cmd" id="footer-install-cmd"><span class="prompt-mark">$ </span>npx agent-roast</code>
+            <button class="copy-btn" type="button" data-copy="npx agent-roast" data-select="footer-install-cmd">
+              <svg class="ic" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+              <span class="copy-label">Copy</span>
             </button>
-            <span class="copy-toast">Copied to clipboard!</span>
-          </div>
-
-          <a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener" class="btn btn-github">
-            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-            View on GitHub
-          </a>
-        </div>
-
-        <div class="hero-stats-bar">
-          <div class="stat-item">
-            <span class="stat-val">180ms</span>
-            <span class="stat-lbl">Scan time</span>
-          </div>
-          <div class="stat-sep">/</div>
-          <div class="stat-item">
-            <span class="stat-val">100%</span>
-            <span class="stat-lbl">Offline</span>
-          </div>
-          <div class="stat-sep">/</div>
-          <div class="stat-item">
-            <span class="stat-val">0</span>
-            <span class="stat-lbl">Telemetry</span>
-          </div>
-          <div class="stat-sep">/</div>
-          <div class="stat-item">
-            <span class="stat-val">685+</span>
-            <span class="stat-lbl">npm downloads</span>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- Interactive Workspace Demo Section -->
-    <section class="demo-section" id="demo">
-      <div class="container">
-        <div class="section-heading text-center">
-          <span class="section-tag">Interactive Sandbox</span>
-          <h2>See what happens behind the green checkmark</h2>
-          <p>Switch between real scenarios caught in AI-assisted commits and see how agent-roast roasts them.</p>
-        </div>
-
-        <!-- Scenario Tabs -->
-        <div class="scenario-tabs">
-          <button class="tab-btn active" data-scenario="panic-loop">
-            <span class="tab-icon">🌀</span>
-            <span class="tab-text">The Panic Loop</span>
-          </button>
-          <button class="tab-btn" data-scenario="test-skip">
-            <span class="tab-icon">🚫</span>
-            <span class="tab-text">Skipped Tests</span>
-          </button>
-          <button class="tab-btn" data-scenario="type-escape">
-            <span class="tab-icon">🎭</span>
-            <span class="tab-text">Type Eraser (as any)</span>
-          </button>
-          <button class="tab-btn" data-scenario="clean">
-            <span class="tab-icon">✨</span>
-            <span class="tab-text">The Pragmatic Builder</span>
-          </button>
-        </div>
-
-        <!-- Split View: IDE Diff on Left, Roast Output on Right -->
-        <div class="workbench-frame">
-          <!-- Left: Git Diff Inspector -->
-          <div class="bench-pane bench-diff">
-            <div class="pane-header">
-              <span class="window-dots"><span></span><span></span><span></span></span>
-              <span class="pane-filename" id="diff-file-name">src/auth/jwt.ts (commit a910f21)</span>
-              <span class="pane-badge badge-diff">Git Diff</span>
-            </div>
-            <div class="code-view" id="diff-content">
-              <!-- Dynamically injected via JS -->
-            </div>
-          </div>
-
-          <!-- Right: Terminal Output -->
-          <div class="bench-pane bench-term">
-            <div class="pane-header">
-              <span class="window-dots"><span></span><span></span><span></span></span>
-              <span class="pane-filename">Terminal — npx agent-roast</span>
-              <span class="pane-badge badge-cli">Live Report</span>
-            </div>
-            <div class="terminal-body" id="term-content">
-              <!-- Dynamically injected via JS -->
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- The Dilemma: Blind Merge vs agent-roast -->
-    <section class="comparison-section">
-      <div class="container">
-        <div class="section-heading text-center">
-          <span class="section-tag">The AI Coding Paradox</span>
-          <h2>Two ways to review AI pull requests</h2>
-        </div>
-
-        <div class="comp-grid">
-          <div class="comp-card card-blind">
-            <div class="comp-header">
-              <span class="comp-badge badge-danger">Without agent-roast</span>
-              <h3>The Blind Merge</h3>
-            </div>
-            <ul class="comp-list">
-              <li>
-                <span class="list-bullet bullet-cross">✕</span>
-                <div>
-                  <strong>False Green Confidence:</strong>
-                  <p>AI silently added <code>it.skip()</code> to tricky auth expiry tests. CI passes, bugs ship to prod.</p>
-                </div>
-              </li>
-              <li>
-                <span class="list-bullet bullet-cross">✕</span>
-                <div>
-                  <strong>Hidden Type Erosion:</strong>
-                  <p>TypeScript strict mode bypassed with <code>response as any</code>. Runtime crashes in edge cases.</p>
-                </div>
-              </li>
-              <li>
-                <span class="list-bullet bullet-cross">✕</span>
-                <div>
-                  <strong>Thrashing Loops Ignored:</strong>
-                  <p>Agent spun 9 micro-commits in 4 minutes trying random fixes until it stopped crashing.</p>
-                </div>
-              </li>
-            </ul>
-          </div>
-
-          <div class="comp-card card-roast">
-            <div class="comp-header">
-              <span class="comp-badge badge-success">With agent-roast</span>
-              <h3>Discipline Audited in 180ms</h3>
-            </div>
-            <ul class="comp-list">
-              <li>
-                <span class="list-bullet bullet-check">✓</span>
-                <div>
-                  <strong>Pinpointed Test Disablers:</strong>
-                  <p>Exact line numbers, commit SHAs, and test names flagged before merging.</p>
-                </div>
-              </li>
-              <li>
-                <span class="list-bullet bullet-check">✓</span>
-                <div>
-                  <strong>Strict Type Hygiene:</strong>
-                  <p>Catches <code>as any</code>, <code>@ts-ignore</code>, and swallowed empty <code>catch {}</code> blocks.</p>
-                </div>
-              </li>
-              <li>
-                <span class="list-bullet bullet-check">✓</span>
-                <div>
-                  <strong>Panic Loops Exposed:</strong>
-                  <p>Calculates velocity thrashing and assigns transparent archetype scores.</p>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Interactive Score Simulator -->
-    <section class="simulator-section" id="simulator">
-      <div class="container">
-        <div class="simulator-card">
-          <div class="sim-controls">
-            <span class="section-tag">Interactive Calculator</span>
-            <h2>How does your repo score?</h2>
-            <p>Test the calibrated scoring algorithm. Tweak the sliders to see how infractions impact your archetype rating.</p>
-
-            <div class="slider-group">
-              <div class="slider-header">
-                <label for="sl-skips">Skipped Tests (<code>it.skip</code>, <code>pytest.skip</code>)</label>
-                <span class="slider-val" id="val-skips">1</span>
-              </div>
-              <input type="range" id="sl-skips" min="0" max="10" value="1" class="custom-range">
-            </div>
-
-            <div class="slider-group">
-              <div class="slider-header">
-                <label for="sl-escapes">Type Escapes (<code>as any</code>, <code>@ts-ignore</code>)</label>
-                <span class="slider-val" id="val-escapes">3</span>
-              </div>
-              <input type="range" id="sl-escapes" min="0" max="25" value="3" class="custom-range">
-            </div>
-
-            <div class="slider-group">
-              <div class="slider-header">
-                <label for="sl-panics">Panic Fix Loops (rapid fix thrashing &lt;15m)</label>
-                <span class="slider-val" id="val-panics">2</span>
-              </div>
-              <input type="range" id="sl-panics" min="0" max="8" value="2" class="custom-range">
-            </div>
-
-            <div class="slider-group">
-              <div class="slider-header">
-                <label for="sl-swallow">Swallowed Errors (empty <code>catch {}</code>)</label>
-                <span class="slider-val" id="val-swallow">0</span>
-              </div>
-              <input type="range" id="sl-swallow" min="0" max="6" value="0" class="custom-range">
-            </div>
-          </div>
-
-          <div class="sim-result-card">
-            <div class="score-circle-wrap">
-              <svg class="score-ring" viewBox="0 0 120 120">
-                <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
-                <circle class="ring-fill" id="sim-ring-fill" cx="60" cy="60" r="52"></circle>
-              </svg>
-              <div class="score-inner-text">
-                <span class="score-number" id="sim-score-num">72</span>
-                <span class="score-denom">/ 100</span>
-              </div>
-            </div>
-
-            <div class="sim-verdict">
-              <h3 id="sim-archetype-title">The Panic Looper</h3>
-              <p id="sim-archetype-desc">Prone to rapid-fire fix and revert thrashing cycles when wrestling stubborn bugs.</p>
-            </div>
-
-            <div class="sim-penalty-breakdown">
-              <div class="penalty-row">
-                <span>Calculated Penalty</span>
-                <strong id="sim-total-penalty">-28 pts</strong>
-              </div>
-              <div class="penalty-row">
-                <span>Confidence Rating</span>
-                <strong class="text-success">High (Calibrated)</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works & Architecture -->
-    <section class="how-section" id="how-it-works">
-      <div class="container">
-        <div class="section-heading text-center">
-          <span class="section-tag">Hermetic Engine</span>
-          <h2>How agent-roast audits without cloud or keys</h2>
-        </div>
-
-        <div class="features-grid">
-          <div class="feat-card">
-            <div class="feat-icon">⚡</div>
-            <h3>Streaming Git Pipeline</h3>
-            <p>Pipes <code>git log -p -U0</code> with ASCII control record delimiters (<code>\x1e</code> / <code>\x1f</code>). Never loads the full repo into RAM.</p>
-          </div>
-
-          <div class="feat-card">
-            <div class="feat-icon">🎯</div>
-            <h3>Added-Lines Filter</h3>
-            <p>Scans only added lines (<code>+</code>). Refactorings, file moves, and deleted code never produce false positives.</p>
-          </div>
-
-          <div class="feat-card">
-            <div class="feat-icon">🛡️</div>
-            <h3>Literal Sanitization</h3>
-            <p>Strips string literals and fixtures before analysis, ensuring test strings like <code>"it.skip"</code> aren't flagged as infractions.</p>
-          </div>
-
-          <div class="feat-card">
-            <div class="feat-icon">🤖</div>
-            <h3>AI Fingerprinting</h3>
-            <p>Extracts signatures from git trailers (<code>Co-Authored-By: Claude</code>), commit author tags, and tool provenance headers.</p>
-          </div>
-
-          <div class="feat-card">
-            <div class="feat-icon">🔒</div>
-            <h3>Zero Network & Telemetry</h3>
-            <p>100% offline. No analytics, no phone-home ping, no external LLM dependencies. Your code never leaves localhost.</p>
-          </div>
-
-          <div class="feat-card">
-            <div class="feat-icon">📦</div>
-            <h3>CI/CD & JSON Ready</h3>
-            <p>Run <code>--json</code> for pipeline reporting, or drop it into GitHub Actions to fail pull requests with sloppy shortcuts.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Privacy Banner -->
-    <section class="privacy-section" id="privacy">
-      <div class="container">
-        <div class="privacy-box">
-          <div class="privacy-content">
-            <div class="lock-badge">🔒 100% Hermetic Guarantee</div>
-            <h2>Private code stays private. Period.</h2>
-            <p>
-              Unlike tools that upload your code to cloud models for "AI analysis", agent-roast is a deterministic static analyzer. It requires <strong>zero API keys</strong>, executes completely on your machine, and has zero network capabilities.
-            </p>
-          </div>
-          <div class="privacy-metrics">
-            <div class="p-metric">
-              <span class="p-num">0 KB</span>
-              <span class="p-desc">Network Traffic</span>
-            </div>
-            <div class="p-metric">
-              <span class="p-num">0</span>
-              <span class="p-desc">API Keys Needed</span>
-            </div>
-            <div class="p-metric">
-              <span class="p-num">&lt;200ms</span>
-              <span class="p-desc">Execution Speed</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="cta-section">
-      <div class="container text-center">
-        <h2>Roast your repo in 5 seconds</h2>
-        <p>No installation required. Run directly with npx in any git repository.</p>
-
-        <div class="cta-cmd-box" id="bottom-copy-pill" data-cmd="npx agent-roast">
-          <code><span class="prompt">$</span> npx agent-roast</code>
-          <button class="btn btn-copy-cta">
-            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span>Copy Command</span>
-          </button>
-        </div>
-
-        <div class="cta-sub">
-          <span>MIT Licensed</span> · <span>Works with Cursor, Claude Code, Copilot, Aider</span>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Footer -->
-  <footer class="site-footer">
-    <div class="container footer-inner">
-      <div class="footer-left">
-        <span class="brand-flame">🔥</span>
-        <strong>agent-roast</strong>
-        <span class="footer-dim">© 2026 Nari-Ab. Open Source under MIT License.</span>
-      </div>
-
-      <div class="footer-links">
-        <a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://www.npmjs.com/package/agent-roast" target="_blank" rel="noopener">npm</a>
-        <a href="https://github.com/Nari-Ab/agent-roast/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
-      </div>
     </div>
-  </footer>
+  </section>
 
-  <script src="main.js"></script>
+</main>
+
+<footer class="site-foot">
+  <div class="container foot-row">
+    <div class="foot-left">
+      <span class="foot-brand">agent-roast</span>
+      <span class="foot-copy">© 2026 Nari-Ab · Open source under MIT License</span>
+    </div>
+    <div class="foot-links">
+      <a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://www.npmjs.com/package/agent-roast" target="_blank" rel="noopener">npm</a>
+      <a href="https://github.com/Nari-Ab/agent-roast/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
+</footer>
+
 </body>
 </html>
