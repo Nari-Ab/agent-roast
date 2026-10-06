@@ -65,7 +65,7 @@ export async function auditPullRequest(
 ): Promise<PrAuditResult> {
   const cwd = path.resolve(options.cwd || process.cwd());
   const format = options.format || "terminal";
-  const failOn = (options.failOn || ["test-skip", "swallowed-error"]).map((s) => s.trim()).filter(Boolean);
+  const failOn = (options.failOn || ["test-skip"]).map((s) => s.trim()).filter(Boolean);
 
   // Validate detector names in failOn
   for (const det of failOn) {
@@ -101,6 +101,10 @@ export async function auditPullRequest(
   const audit = auditFileDiffs(files, headSha);
   const infractions = audit.infractions;
 
+  const defectDensityPer100Lines = audit.linesAdded > 0
+    ? Math.round((infractions.length / audit.linesAdded) * 100 * 100) / 100
+    : 0;
+
   const failedRules = [...new Set(
     infractions
       .filter((inf) => failOn.includes(inf.type))
@@ -118,6 +122,7 @@ export async function auditPullRequest(
     hasSupportedChanges: audit.hasSupportedChanges,
     filesInspected: audit.filesInspected,
     linesAdded: audit.linesAdded,
+    defectDensityPer100Lines,
     infractions,
     failedRules,
     passed,

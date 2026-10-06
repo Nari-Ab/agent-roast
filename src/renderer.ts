@@ -2,7 +2,8 @@ import pc from "picocolors";
 import { MetricSummary } from "./types.js";
 
 export function generateShareUrl(summary: MetricSummary): string {
-  const text = `My AI coding agent scored ${summary.score}/100 on agent-roast.\n\nArchetype: ${summary.archetype}\nInfractions:\n• ${summary.testSkips.length} skipped tests\n• ${summary.typeEscapes.length} type escapes\n• ${summary.panicLoops.length} panic revert loops\n\nAudit your repo: npx agent-roast`;
+  const scoreDisplay = summary.score !== null ? `${summary.score}/100` : "N/A";
+  const text = `My AI coding agent scored ${scoreDisplay} on agent-roast.\n\nArchetype: ${summary.archetype}\nInfractions:\n• ${summary.testSkips.length} skipped tests\n• ${summary.typeEscapes.length} type escapes\n• ${summary.panicLoops.length} panic revert loops\n\nAudit your repo: npx agent-roast`;
   return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
 }
 
@@ -22,7 +23,7 @@ export function formatTerminalCard(
   );
   lines.push("");
 
-  if (!summary.isSufficientData) {
+  if (!summary.isSufficientData || summary.score === null) {
     lines.push(pc.yellow(`  insufficient data (< 200 lines added by AI)`));
     lines.push(pc.dim("  commit more code and run `npx agent-roast` again."));
     lines.push("");

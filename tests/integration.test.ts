@@ -177,5 +177,39 @@ describe("Real Git Integration with Hostile Environment", () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("terminates with exit code 2 promptly when git exits with code 128", () => {
+    const emptyDir = path.join(process.cwd(), ".tmp-integration-empty");
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+    fs.mkdirSync(emptyDir, { recursive: true });
+
+    try {
+      const start = Date.now();
+      let exitCode = 0;
+      let output = "";
+      try {
+        output = execSync(`node ./dist/cli.js "${emptyDir}"`, {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            GIT_CEILING_DIRECTORIES: process.cwd(),
+          },
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 5000,
+        });
+      } catch (err: any) {
+        exitCode = err.status;
+        output = (err.stderr || "") + (err.stdout || "");
+      }
+
+      const elapsed = Date.now() - start;
+      expect(exitCode).toBe(2);
+      expect(elapsed).toBeLessThan(4000);
+      expect(output).toMatch(/git exited with code 128/i);
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
 });
 

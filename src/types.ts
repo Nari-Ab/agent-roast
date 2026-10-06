@@ -38,7 +38,7 @@ export interface MetricSummary {
   swallowedErrors: Infraction[];
   panicLoops: Infraction[];
   rawScore: number;
-  score: number; // 0 - 100
+  score: number | null; // 0 - 100 or null if insufficient data
   isSufficientData: boolean;
   archetype: string;
   archetypeDescription: string;
@@ -52,6 +52,7 @@ export interface RoastOptions {
   all?: boolean;
   verbose?: boolean;
   json?: boolean;
+  authors?: boolean;
 }
 
 export interface PrAuditOptions {
@@ -61,6 +62,7 @@ export interface PrAuditOptions {
   failOn?: string[];
   format?: "terminal" | "json" | "github";
   verbose?: boolean;
+  authors?: boolean;
 }
 
 export interface PrAuditResult {
@@ -71,6 +73,7 @@ export interface PrAuditResult {
   hasSupportedChanges: boolean;
   filesInspected: number;
   linesAdded: number;
+  defectDensityPer100Lines: number;
   infractions: Infraction[];
   failedRules: string[];
   passed: boolean;
@@ -79,4 +82,5 @@ export interface PrAuditResult {
   output: string;
   exitCode: number;
 }
+
 

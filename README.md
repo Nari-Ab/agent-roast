@@ -69,6 +69,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -78,13 +81,13 @@ jobs:
           fetch-depth: 0 # Required for complete merge-base history
 
       - name: Run agent-roast audit
-        uses: Nari-Ab/agent-roast@v0.2.0
+        uses: Nari-Ab/agent-roast@v1
         with:
-          base: ${{ github.base_ref }}
-          head: ${{ github.event.pull_request.head.sha }}
-          fail-on: test-skip,swallowed-error
+          fail-on: test-skip
           format: github
 ```
+
+> **Security Note:** `agent-roast` runs in an isolated runner directory (`$RUNNER_TEMP`) with `--ignore-scripts` to neutralize malicious `.npmrc` files in untrusted pull requests. `pull_request_target` is not supported.
 
 ---
 
@@ -92,10 +95,19 @@ jobs:
 
 Only **added lines** (`+`) in source code files are scanned — deleted lines, file moves, and comments never trigger false alarms.
 
-- **Skipped tests:** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests.
-- **Type escapes:** `as any`, `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore`, `eslint-disable`.
-- **Swallowed errors:** Empty `catch {}` or `except: pass` blocks hiding runtime failures.
-- **Panic fix loops:** Chains of rapid-fire fix/revert commits by the same author within 15 minutes touching overlapping files.
+- **Skipped tests (`test-skip`):** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests. (Default blocking gate).
+- **Type escapes (`type-escape`):** `as any`, `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore`, `eslint-disable`.
+- **Swallowed errors (`swallowed-error`):** Empty `catch {}` or `except: pass` blocks hiding runtime failures.
+- **Panic fix loops (`panic-loop`):** Heuristic chain analysis of rapid-fire fix/revert commits by the same author within 15 minutes touching overlapping files. *(Observational metric for repository audits; not a PR blocker)*.
+
+---
+
+### Scoring Methodology
+
+- **Repository Audit Score:** Uses size-invariant defect density:
+  $$\text{Score} = 100 \cdot \exp\left(-\left(\frac{\text{codeDensity}}{R_0} + \frac{\text{panicDensity}}{R_1}\right)\right)$$
+  where defect points are normalized by effective sample volume ($k\text{Loc} + 0.5$). Repositories with fewer than 200 lines added return `null` (insufficient data) rather than an arbitrary 100.
+- **Pull Request Mode:** Avoids unstable micro-sample scores. Reports verified infractions, pass/fail status, and reference defect density per 100 LOC. Author identities are hidden by default to prevent team blame games.
 
 ---
 

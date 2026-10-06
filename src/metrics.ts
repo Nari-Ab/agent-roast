@@ -406,33 +406,43 @@ export class MetricsCollector {
     const linesSample = this.includeAll ? this.totalLinesAdded : this.aiLinesAdded;
     const isSufficientData = linesSample >= MIN_SAMPLE_LOC;
 
-    // Penalty calculations:
-    // Test skip penalty: 15 pts
-    // Swallowed error penalty: 10 pts
-    // Panic loop penalty: 8 pts
-    // Type escape penalty: 3 pts
-    const totalInfractionPoints =
+    // Code infractions penalty
+    const codeInfractionPoints =
       this.testSkips.length * 15 +
       this.swallowedErrors.length * 10 +
-      this.panicLoops.length * 8 +
       this.typeEscapes.length * 3;
 
-    // Sub-linear volume factor: prevents infinite dilution on large repos
-    // For repos < 1k LOC: scales smoothly from 0.7 to 1.0
-    // For repos >= 1k LOC: logarithmic dampening: 1 + 1.2 * ln(kLoc)
-    const normalizedKLoc = linesSample / 1000;
-    const factor = normalizedKLoc < 1
-      ? Math.max(0.5, 0.7 + 0.3 * normalizedKLoc)
-      : 1 + 1.2 * Math.log(normalizedKLoc);
+    // Panic loops penalty: logarithmic weighting by chain length
+    let panicInfractionPoints = 0;
+    for (const loop of this.panicLoops) {
+      const countMatch = loop.reason.match(/chain of (\d+) quick fixes/);
+      const chainLen = countMatch ? parseInt(countMatch[1], 10) : 2;
+      panicInfractionPoints += Math.round(8 * (1 + Math.log(chainLen)));
+    }
+    panicInfractionPoints = Math.min(panicInfractionPoints, 40);
 
-    const normalizedPenalty = Math.round(totalInfractionPoints / factor);
-    const score = isSufficientData ? Math.max(0, Math.min(100, 100 - normalizedPenalty)) : 100;
+    const totalInfractionPoints = codeInfractionPoints + panicInfractionPoints;
+
+    // Size-invariant exponential defect density formula:
+    // Density = points / (kLoc + L0), where L0 = 0.5 (500 LOC smoothing floor)
+    const kLoc = linesSample / 1000;
+    const effectiveKLoc = kLoc + 0.5;
+
+    const codeDensity = codeInfractionPoints / effectiveKLoc;
+    const panicDensity = panicInfractionPoints / effectiveKLoc;
+
+    const R0 = 15.0;
+    const R1 = 10.0;
+
+    const score = isSufficientData
+      ? Math.max(0, Math.min(100, Math.round(100 * Math.exp(-(codeDensity / R0 + panicDensity / R1)))))
+      : null;
 
     // Determine Archetype
     let archetype = "The Clean Coder";
     let archetypeDescription = "Spotless discipline. No skipped tests, zero panic loops, and clean type safety.";
 
-    if (isSufficientData) {
+    if (score !== null) {
       if (score >= 90) {
         if (totalInfractionPoints === 0) {
           archetype = "The Clean Coder";

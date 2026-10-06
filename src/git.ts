@@ -30,12 +30,29 @@ export interface ParseDiffResult {
 export const RECORD_SEPARATOR = "\x1e__ROAST_REC__\x1e";
 export const FIELD_SEPARATOR = "\x1f__ROAST_FIELD__\x1f";
 
+export class GitError extends Error {
+  constructor(public stderr: string, public code: number | null) {
+    super(`git exited with code ${code}: ${stderr.trim() || "unknown error"}`);
+    this.name = "GitError";
+  }
+}
+
 export const HERMETIC_GIT_FLAGS = [
   "-c", "core.quotepath=false",
   "-c", "diff.noprefix=false",
   "-c", "diff.mnemonicPrefix=false",
   "--no-pager",
 ] as const;
+
+export function getHermeticGitEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...extraEnv,
+    GIT_PAGER: "cat",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: extraEnv?.GIT_CONFIG_GLOBAL || process.env.GIT_CONFIG_GLOBAL || "/dev/null",
+  };
+}
 
 const MAX_RECORD_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB protection against OOM
 
@@ -87,6 +104,20 @@ export async function parseGitLogStream(
   };
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const safeResolve = (val: { totalSkippedLongLines: number; totalSkippedUnknownFiles: number }) => {
+      if (!settled) {
+        settled = true;
+        resolve(val);
+      }
+    };
+    const safeReject = (err: any) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+
     const decoder = new StringDecoder("utf8");
 
     stream.on("data", (chunk: Buffer | string) => {
@@ -94,8 +125,9 @@ export async function parseGitLogStream(
       buffer += chunkStr;
 
       if (buffer.length > MAX_RECORD_BUFFER_SIZE) {
-        stream.destroy();
-        reject(new Error(`Git log record exceeded maximum buffer limit (${MAX_RECORD_BUFFER_SIZE} bytes).`));
+        const oomErr = new Error(`Git log record exceeded maximum buffer limit (${MAX_RECORD_BUFFER_SIZE} bytes).`);
+        stream.destroy(oomErr);
+        safeReject(oomErr);
         return;
       }
 
@@ -130,8 +162,9 @@ export async function parseGitLogStream(
         try {
           processBlock(completeBlock);
         } catch (err) {
-          stream.destroy();
-          reject(err);
+          const errObj = err instanceof Error ? err : new Error(String(err));
+          stream.destroy(errObj);
+          safeReject(errObj);
           return;
         }
       }
@@ -144,14 +177,20 @@ export async function parseGitLogStream(
         try {
           processBlock(buffer);
         } catch (err) {
-          reject(err);
+          safeReject(err);
           return;
         }
       }
-      resolve({ totalSkippedLongLines, totalSkippedUnknownFiles });
+      safeResolve({ totalSkippedLongLines, totalSkippedUnknownFiles });
     });
 
-    stream.on("error", reject);
+    stream.on("error", safeReject);
+
+    stream.on("close", () => {
+      if (!settled) {
+        safeReject(new Error("Git log stream was closed prematurely before completion."));
+      }
+    });
   });
 }
 
@@ -381,10 +420,7 @@ export function streamGitLog(
 
   const child = spawn("git", gitArgs, {
     cwd,
-    env: {
-      ...process.env,
-      GIT_PAGER: "cat",
-    },
+    env: getHermeticGitEnv(),
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -400,9 +436,7 @@ export function streamGitLog(
 
   child.on("close", (code) => {
     if (code !== 0) {
-      output.destroy(
-        new Error(`git log exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
-      );
+      output.destroy(new GitError(stderrBuffer, code));
     } else {
       output.end();
     }
@@ -439,10 +473,7 @@ export function streamGitDiff(
 
   const child = spawn("git", gitArgs, {
     cwd,
-    env: {
-      ...process.env,
-      GIT_PAGER: "cat",
-    },
+    env: getHermeticGitEnv(),
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -458,9 +489,7 @@ export function streamGitDiff(
 
   child.on("close", (code) => {
     if (code !== 0) {
-      output.destroy(
-        new Error(`git diff exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
-      );
+      output.destroy(new GitError(stderrBuffer, code));
     } else {
       output.end();
     }
@@ -483,6 +512,7 @@ export function resolveCommitSha(cwd: string, ref: string, roleName: string = "r
     [...HERMETIC_GIT_FLAGS, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`],
     {
       cwd,
+      env: getHermeticGitEnv(),
       encoding: "utf8",
       windowsHide: true,
     }
@@ -514,6 +544,7 @@ export function findMergeBase(cwd: string, baseSha: string, headSha: string): st
     [...HERMETIC_GIT_FLAGS, "merge-base", "--end-of-options", baseSha, headSha],
     {
       cwd,
+      env: getHermeticGitEnv(),
       encoding: "utf8",
       windowsHide: true,
     }
@@ -540,6 +571,7 @@ function checkIfShallow(cwd: string): boolean {
   try {
     const res = spawnSync("git", [...HERMETIC_GIT_FLAGS, "rev-parse", "--is-shallow-repository"], {
       cwd,
+      env: getHermeticGitEnv(),
       encoding: "utf8",
       windowsHide: true,
     });
