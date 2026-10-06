@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>agent-roast terminal demo</title>
+<style>
+  :root {
+    --bg-page: #05060a;
+    --bg: #0d1117;
+    --chrome: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --cyan: #58a6ff;
+    --red: #ff7b72;
+    --yellow: #d29922;
+    --orange: #ffa657;
+    --green: #3fb950;
+    --magenta: #bc8cff;
+    --dot-red: #ff5f56;
+    --dot-yellow: #ffbd2e;
+    --dot-green: #27c93f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 960px; height: 600px;
+    background: radial-gradient(120% 140% at 50% 0%, #10131a 0%, var(--bg-page) 60%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .window {
+    width: 920px; height: 560px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .chrome {
+    flex: 0 0 38px;
+    background: var(--chrome);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px; position: relative;
+  }
+  .dots { display: flex; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.red { background: var(--dot-red); }
+  .dot.yellow { background: var(--dot-yellow); }
+  .dot.green { background: var(--dot-green); }
+  .title {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    color: var(--dim); font-size: 12px;
+  }
+  .content {
+    flex: 1; padding: 20px 24px; font-size: 13px; line-height: 20px;
+    color: var(--text); white-space: pre; overflow: hidden;
+  }
+  .prompt { color: var(--green); font-weight: 600; }
+  .cyan { color: var(--cyan); font-weight: bold; }
+  .white { color: #fff; font-weight: bold; }
+  .magenta { color: var(--magenta); font-weight: bold; }
+  .orange { color: var(--orange); font-weight: bold; }
+  .yellow { color: var(--yellow); }
+  .red { color: var(--red); }
+  .dim { color: var(--dim); }
+</style>
+</head>
+<body>
+  <div class="window">
+    <div class="chrome">
+      <div class="dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></div>
+      <div class="title">terminal — npx agent-roast --verbose</div>
+    </div>
+    <div class="content"><span class="prompt">$ </span>npx agent-roast --verbose
+
+<span class="cyan">╔══════════════════════════════════════════════════════════╗</span>
+<span class="cyan">║</span>                 <span class="white">🤖 AGENT ROAST DOSSIER</span>                    <span class="cyan">║</span>
+<span class="cyan">╚══════════════════════════════════════════════════════════╝</span>
+
+  <span class="dim">Repository:</span>  <span class="white">Soup</span>
+  <span class="dim">Commits:</span>     <span class="yellow">304</span> AI-attributed / 1,153 total
+  <span class="dim">Code Added:</span>  <span class="prompt">87,165</span> lines (AI) / 479,097 lines (total)
+
+  <span class="white">AGENT ARCHETYPE:</span>  <span class="magenta">The Panic Looper</span>
+  <span class="dim">Prone to rapid-fire fix and revert thrashing cycles when wrestling bugs.</span>
+
+  <span class="white">DISCIPLINE SCORE:</span> <span class="orange">55 / 100</span>
+  <span class="dim">(100 = spotless discipline, 0 = complete shortcut addiction)</span>
+
+  <span class="white">📊 INFRACTIONS BREAKDOWN:</span>
+  <span class="red">✖  Skipped tests:       6</span> <span class="dim">(it.skip, describe.skip, xit)</span>
+  <span class="yellow">▲  Type escapes:        19</span> <span class="dim">(as any, @ts-ignore, eslint-disable)</span>
+  <span class="red">✖  Swallowed errors:    2</span> <span class="dim">(empty catch {}, except: pass)</span>
+  <span class="magenta">↻  Panic fix loops:     15</span> <span class="dim">(quick fixes &lt; 15m apart)</span>
+
+  <span class="white">🔍 VERBOSE PROOFS:</span>
+  <span class="dim">• 5c335b9 [test-skip] tests/test_outbound.py └─ pytest.skip("refused")</span>
+  <span class="dim">• a910f21 [panic-loop] AI panic loop: fix within 3m (3df29a1 -&gt; a910f21)</span></div>
+  </div>
+</body>
+</html>
