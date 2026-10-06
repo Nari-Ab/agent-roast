@@ -1,0 +1,37 @@
+name: "agent-roast"
+description: "Zero-telemetry audit for AI coding agent shortcuts, skipped tests, and panic loops."
+author: "Nariman Abdukarimov"
+branding:
+  icon: "shield"
+  color: "black"
+
+inputs:
+  base:
+    description: "Base branch or commit SHA for diff analysis"
+    required: false
+    default: "${{ github.base_ref || github.event.repository.default_branch }}"
+  head:
+    description: "Head commit SHA for pull request analysis"
+    required: false
+    default: "${{ github.event.pull_request.head.sha || github.sha }}"
+  fail-on:
+    description: "Comma-separated detectors that trigger pipeline failure (test-skip, type-escape, swallowed-error, panic-loop)"
+    required: false
+    default: "test-skip,swallowed-error"
+  format:
+    description: "Output format: github, terminal, json"
+    required: false
+    default: "github"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run agent-roast
+      shell: bash
+      env:
+        ROAST_BASE: ${{ inputs.base }}
+        ROAST_HEAD: ${{ inputs.head }}
+        ROAST_FAIL_ON: ${{ inputs.fail-on }}
+        ROAST_FORMAT: ${{ inputs.format }}
+      run: |
+        npx --yes agent-roast@latest --base "$ROAST_BASE" --head "$ROAST_HEAD" --fail-on "$ROAST_FAIL_ON" --format "$ROAST_FORMAT"

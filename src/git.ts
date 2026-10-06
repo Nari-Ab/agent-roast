@@ -1,4 +1,4 @@
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { Readable } from "stream";
 import { StringDecoder } from "string_decoder";
 import { CommitInfo } from "./types.js";
@@ -12,6 +12,7 @@ export interface ParsedDiffLine {
 export interface ParsedFileDiff {
   path: string;
   addedLines: ParsedDiffLine[];
+  deleted?: boolean;
 }
 
 export interface ParsedCommit extends CommitInfo {
@@ -19,11 +20,22 @@ export interface ParsedCommit extends CommitInfo {
   totalAddedCount: number;
 }
 
+export interface ParseDiffResult {
+  files: ParsedFileDiff[];
+  totalAdded: number;
+  skippedLongLines: number;
+  skippedUnknownFiles: number;
+}
+
+const MAX_RECORD_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB protection against OOM
+
 export async function parseGitLogStream(
   stream: Readable,
-  onCommit: (commit: ParsedCommit) => void
-): Promise<void> {
+  onCommit: (commit: ParsedCommit, stats: { skippedLongLines: number; skippedUnknownFiles: number }) => void
+): Promise<{ totalSkippedLongLines: number; totalSkippedUnknownFiles: number }> {
   let buffer = "";
+  let totalSkippedLongLines = 0;
+  let totalSkippedUnknownFiles = 0;
 
   const processBlock = (block: string) => {
     if (!block.trim()) return;
@@ -41,26 +53,39 @@ export async function parseGitLogStream(
 
     const attribution = detectAiAttribution(authorName, authorEmail, message);
 
-    const { files, totalAdded } = parseDiff(rawDiff);
+    const { files, totalAdded, skippedLongLines, skippedUnknownFiles } = parseDiff(rawDiff);
+    totalSkippedLongLines += skippedLongLines;
+    totalSkippedUnknownFiles += skippedUnknownFiles;
 
-    onCommit({
-      hash,
-      date,
-      authorName,
-      authorEmail,
-      message,
-      isAiAttributed: attribution.isAiAttributed,
-      aiSignatures: attribution.signatures,
-      files,
-      totalAddedCount: totalAdded,
-    });
+    onCommit(
+      {
+        hash,
+        date,
+        authorName,
+        authorEmail,
+        message,
+        isAiAttributed: attribution.isAiAttributed,
+        aiSignatures: attribution.signatures,
+        files,
+        totalAddedCount: totalAdded,
+      },
+      { skippedLongLines, skippedUnknownFiles }
+    );
   };
 
   return new Promise((resolve, reject) => {
     const decoder = new StringDecoder("utf8");
 
     stream.on("data", (chunk: Buffer | string) => {
-      buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
+      const chunkStr = typeof chunk === "string" ? chunk : decoder.write(chunk);
+      buffer += chunkStr;
+
+      if (buffer.length > MAX_RECORD_BUFFER_SIZE) {
+        stream.destroy();
+        reject(new Error(`Git log record exceeded maximum buffer limit (${MAX_RECORD_BUFFER_SIZE} bytes).`));
+        return;
+      }
+
       const records = buffer.split("\x1e");
       // All items except the last one are complete commits
       while (records.length > 1) {
@@ -77,7 +102,7 @@ export async function parseGitLogStream(
       if (buffer.trim()) {
         processBlock(buffer);
       }
-      resolve();
+      resolve({ totalSkippedLongLines, totalSkippedUnknownFiles });
     });
 
     stream.on("error", reject);
@@ -88,26 +113,76 @@ const HUNK_REGEX = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const MAX_LINE_LENGTH = 4096;
 
 /**
+ * Unquotes git C-style escaped path (e.g. "b/foo\"bar.ts" or "b/\321\202\320\265\321\201\321\202.ts")
+ * decoding octal escape sequences into UTF-8.
+ */
+export function unquoteGitPath(pathStr: string): string {
+  let s = pathStr.trim();
+  if (s.startsWith('"') && s.endsWith('"')) {
+    s = s.slice(1, -1);
+    const bytes: number[] = [];
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "\\" && i + 1 < s.length) {
+        const next = s[i + 1];
+        if (next >= "0" && next <= "7") {
+          let octal = next;
+          let j = i + 2;
+          while (j < s.length && j < i + 4 && s[j] >= "0" && s[j] <= "7") {
+            octal += s[j];
+            j++;
+          }
+          bytes.push(parseInt(octal, 8));
+          i = j - 1;
+        } else if (next === "n") {
+          bytes.push(0x0a);
+          i++;
+        } else if (next === "t") {
+          bytes.push(0x09);
+          i++;
+        } else if (next === "r") {
+          bytes.push(0x0d);
+          i++;
+        } else if (next === "\\") {
+          bytes.push(0x5c);
+          i++;
+        } else if (next === '"') {
+          bytes.push(0x22);
+          i++;
+        } else {
+          bytes.push(s.charCodeAt(i + 1));
+          i++;
+        }
+      } else {
+        const code = s.charCodeAt(i);
+        if (code < 128) {
+          bytes.push(code);
+        } else {
+          const buf = Buffer.from(s[i], "utf8");
+          for (const b of buf) bytes.push(b);
+        }
+      }
+    }
+    s = Buffer.from(bytes).toString("utf8");
+  }
+
+  if (s.startsWith("b/")) return s.slice(2);
+  if (s.startsWith("a/")) return s.slice(2);
+  return s;
+}
+
+/**
  * Parses raw git diff text into structured files and added lines.
  * Deterministic, robust against desynchronization and minified files.
  */
-export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdded: number } {
+export function parseDiff(rawDiff: string): ParseDiffResult {
   const files: ParsedFileDiff[] = [];
   let currentFile: ParsedFileDiff | null = null;
   let lineNo = 0;
   let oldLeft = 0;
   let newLeft = 0;
   let totalAdded = 0;
-
-  const parsePath = (line: string): string => {
-    const trimmed = line.trimEnd();
-    if (trimmed.startsWith("+++ /dev/null")) return "dev/null";
-    let stripped = trimmed.slice(4).trim(); // remove '+++ '
-    if (stripped.startsWith('"') && stripped.endsWith('"')) {
-      stripped = stripped.slice(1, -1);
-    }
-    return stripped.startsWith("b/") ? stripped.slice(2) : stripped;
-  };
+  let skippedLongLines = 0;
+  let skippedUnknownFiles = 0;
 
   const diffLines = rawDiff.split("\n");
   for (const rawLine of diffLines) {
@@ -121,7 +196,7 @@ export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdde
         continue;
       }
       if (char === "+") {
-        if (currentFile && currentFile.path !== "dev/null") {
+        if (currentFile && !currentFile.deleted && currentFile.path !== "unknown") {
           const content = line.slice(1);
           if (content.length <= MAX_LINE_LENGTH) {
             currentFile.addedLines.push({
@@ -129,6 +204,8 @@ export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdde
               lineNumber: lineNo,
             });
             totalAdded++;
+          } else {
+            skippedLongLines++;
           }
         }
         lineNo++;
@@ -161,15 +238,34 @@ export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdde
     }
 
     if (line.startsWith("diff --git ")) {
-      const diffMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-      const filePath = diffMatch ? diffMatch[2] : "unknown";
+      // Check for quoted format: diff --git "a/..." "b/..."
+      const quotedMatch = line.match(/^diff --git ("(?:\\.|[^"])+") ("(?:\\.|[^"])+")$/);
+      let filePath = "unknown";
+      if (quotedMatch) {
+        filePath = unquoteGitPath(quotedMatch[2]);
+      } else {
+        const plainMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+        if (plainMatch) {
+          filePath = plainMatch[2];
+        } else {
+          skippedUnknownFiles++;
+        }
+      }
       currentFile = { path: filePath, addedLines: [] };
       files.push(currentFile);
       continue;
     }
 
+    if (line.startsWith("+++ /dev/null")) {
+      if (currentFile) {
+        currentFile.deleted = true;
+      }
+      continue;
+    }
+
     if (line.startsWith("+++ ")) {
-      const filePath = parsePath(line);
+      const rawPath = line.trimEnd().slice(4).trim();
+      const filePath = unquoteGitPath(rawPath);
       if (currentFile) {
         currentFile.path = filePath;
       } else {
@@ -180,8 +276,21 @@ export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdde
     }
   }
 
-  return { files, totalAdded };
+  return { files, totalAdded, skippedLongLines, skippedUnknownFiles };
 }
+
+const COMMON_EXCLUDE_SPECS = [
+  "--",
+  ".",
+  ":(exclude,glob)**/*.lock",
+  ":(exclude,glob)**/*-lock.json",
+  ":(exclude,glob)**/*.lockb",
+  ":(exclude,glob)**/dist/**",
+  ":(exclude,glob)**/build/**",
+  ":(exclude,glob)**/node_modules/**",
+  ":(exclude,glob)**/*.min.js",
+  ":(exclude,glob)**/*.map",
+];
 
 export function streamGitLog(
   cwd: string = process.cwd(),
@@ -204,16 +313,7 @@ export function streamGitLog(
     "--dst-prefix=b/",
     `--since=${since}`,
     "--format=%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%B%x1f",
-    "--",
-    ".",
-    ":(exclude,glob)**/*.lock",
-    ":(exclude,glob)**/*-lock.json",
-    ":(exclude,glob)**/*.lockb",
-    ":(exclude,glob)**/dist/**",
-    ":(exclude,glob)**/build/**",
-    ":(exclude,glob)**/node_modules/**",
-    ":(exclude,glob)**/*.min.js",
-    ":(exclude,glob)**/*.map",
+    ...COMMON_EXCLUDE_SPECS,
   ];
 
   const child = spawn("git", gitArgs, {
@@ -226,10 +326,17 @@ export function streamGitLog(
     windowsHide: true,
   });
 
+  let stderrBuffer = "";
   child.stderr.on("data", (chunk) => {
-    const errText = chunk.toString();
-    if (errText.includes("fatal:") || errText.includes("error:")) {
-      child.stdout.emit("error", new Error(errText.trim()));
+    stderrBuffer += chunk.toString();
+  });
+
+  child.on("close", (code) => {
+    if (code !== 0) {
+      child.stdout.emit(
+        "error",
+        new Error(`git log exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
+      );
     }
   });
 
@@ -239,3 +346,123 @@ export function streamGitLog(
 
   return child.stdout;
 }
+
+export function streamGitDiff(
+  cwd: string,
+  baseSha: string,
+  headSha: string
+): Readable {
+  const gitArgs = [
+    "-c", "core.quotepath=false",
+    "--no-pager",
+    "diff",
+    "-U0",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+    "--end-of-options",
+    baseSha,
+    headSha,
+    ...COMMON_EXCLUDE_SPECS,
+  ];
+
+  const child = spawn("git", gitArgs, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_PAGER: "cat",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+
+  let stderrBuffer = "";
+  child.stderr.on("data", (chunk) => {
+    stderrBuffer += chunk.toString();
+  });
+
+  child.on("close", (code) => {
+    if (code !== 0) {
+      child.stdout.emit(
+        "error",
+        new Error(`git diff exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
+      );
+    }
+  });
+
+  child.on("error", (err) => {
+    child.stdout.emit("error", err);
+  });
+
+  return child.stdout;
+}
+
+/**
+ * Validates and resolves a git ref to a full commit SHA safely using --end-of-options.
+ * Exits with code 2 on failure.
+ */
+export function resolveCommitSha(cwd: string, ref: string, roleName: string = "ref"): string {
+  const result = spawnSync("git", ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+
+  if (result.status !== 0) {
+    const isShallow = checkIfShallow(cwd);
+    const shallowHint = isShallow
+      ? "\nShallow clone detected: please configure actions/checkout with `fetch-depth: 0`."
+      : "";
+    throw new GitResolutionError(
+      `${roleName} '${ref}' could not be resolved to a valid commit object.${shallowHint}\nGit output: ${result.stderr.trim() || result.stdout.trim()}`
+    );
+  }
+
+  return result.stdout.trim();
+}
+
+/**
+ * Finds the merge-base between two commit SHAs safely using --end-of-options.
+ */
+export function findMergeBase(cwd: string, baseSha: string, headSha: string): string {
+  const result = spawnSync("git", ["merge-base", "--end-of-options", baseSha, headSha], {
+    cwd,
+    encoding: "utf8",
+    windowsHide: true,
+  });
+
+  if (result.status !== 0) {
+    const isShallow = checkIfShallow(cwd);
+    const shallowHint = isShallow
+      ? "\nShallow clone detected: repository history is truncated. Configure `fetch-depth: 0` in your workflow."
+      : "";
+    throw new GitResolutionError(
+      `Could not find a common ancestor (merge-base) between base (${baseSha.slice(0, 7)}) and head (${headSha.slice(0, 7)}).${shallowHint}\nGit output: ${result.stderr.trim() || result.stdout.trim()}`
+    );
+  }
+
+  return result.stdout.trim();
+}
+
+function checkIfShallow(cwd: string): boolean {
+  try {
+    const res = spawnSync("git", ["rev-parse", "--is-shallow-repository"], {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return res.stdout.trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
+export class GitResolutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitResolutionError";
+  }
+}
+

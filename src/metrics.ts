@@ -1,4 +1,4 @@
-import { ParsedCommit } from "./git.js";
+import { ParsedCommit, ParsedFileDiff } from "./git.js";
 import { Infraction, MetricSummary } from "./types.js";
 
 const TEST_SKIP_PATTERNS = [
@@ -10,10 +10,10 @@ const TEST_SKIP_PATTERNS = [
 ];
 
 const COMMENT_DIRECTIVE_PATTERNS = [
-  { regex: /\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
-  { regex: /\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
-  { regex: /#\s*type:\s*ignore\b/, name: "python type ignore" },
-  { regex: /\/\/\s*eslint-disable(?:-next-line)?\b/, name: "linter suppression (eslint-disable)" },
+  { regex: /^\s*\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
+  { regex: /^\s*\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
+  { regex: /(?:^\s*#\s*type:\s*ignore\b|#\s*type:\s*ignore\s*$)/, name: "python type ignore" },
+  { regex: /^\s*\/\/\s*eslint-disable(?:-next-line)?\b/, name: "linter suppression (eslint-disable)" },
 ];
 
 const CODE_TYPE_ESCAPE_PATTERNS = [
@@ -32,12 +32,120 @@ const CODE_EXTENSIONS = new Set([
 
 const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
 
-function isCodeFile(filePath: string): boolean {
+export function isCodeFile(filePath: string): boolean {
   if (IGNORED_PATH_REGEX.test(filePath)) {
     return false;
   }
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
   return CODE_EXTENSIONS.has(ext);
+}
+
+/**
+ * Audits a collection of file diffs (e.g. for PR mode) against detector rules.
+ */
+export function auditFileDiffs(
+  files: ParsedFileDiff[],
+  commitHash: string = "HEAD",
+  commitDate: string = new Date().toISOString()
+): {
+  infractions: Infraction[];
+  hasSupportedChanges: boolean;
+  filesInspected: number;
+  linesAdded: number;
+} {
+  const infractions: Infraction[] = [];
+  let hasSupportedChanges = false;
+  let filesInspected = 0;
+  let linesAdded = 0;
+
+  for (const file of files) {
+    if (file.deleted || file.path === "unknown") continue;
+    if (!isCodeFile(file.path)) continue;
+
+    hasSupportedChanges = true;
+    filesInspected++;
+    linesAdded += file.addedLines.length;
+
+    for (const added of file.addedLines) {
+      const rawLine = added.line;
+      const cleanedLine = stripStringAndRegexLiterals(rawLine);
+      const trimmedCleaned = cleanedLine.trim();
+      const isComment = isCommentOnlyLine(trimmedCleaned);
+
+      // A. Test Skips
+      if (!isComment) {
+        for (const rule of TEST_SKIP_PATTERNS) {
+          if (rule.regex.test(cleanedLine)) {
+            infractions.push({
+              type: "test-skip",
+              file: file.path,
+              lineNumber: added.lineNumber,
+              lineSnippet: rawLine.trim(),
+              commitHash,
+              commitDate,
+              reason: rule.name,
+            });
+            break;
+          }
+        }
+      }
+
+      // B. Type Escapes
+      let foundEscape = false;
+      for (const rule of COMMENT_DIRECTIVE_PATTERNS) {
+        if (rule.regex.test(cleanedLine)) {
+          infractions.push({
+            type: "type-escape",
+            file: file.path,
+            lineNumber: added.lineNumber,
+            lineSnippet: rawLine.trim(),
+            commitHash,
+            commitDate,
+            reason: rule.name,
+          });
+          foundEscape = true;
+          break;
+        }
+      }
+
+      if (!foundEscape && !isComment) {
+        for (const rule of CODE_TYPE_ESCAPE_PATTERNS) {
+          if (rule.regex.test(cleanedLine)) {
+            infractions.push({
+              type: "type-escape",
+              file: file.path,
+              lineNumber: added.lineNumber,
+              lineSnippet: rawLine.trim(),
+              commitHash,
+              commitDate,
+              reason: rule.name,
+            });
+            break;
+          }
+        }
+      }
+
+      // C. Swallowed Errors
+      if (!isComment) {
+        for (const rule of SWALLOWED_ERROR_PATTERNS) {
+          if (rule.regex.test(cleanedLine)) {
+            infractions.push({
+              type: "swallowed-error",
+              file: file.path,
+              lineNumber: added.lineNumber,
+              lineSnippet: rawLine.trim(),
+              commitHash,
+              commitDate,
+              reason: rule.name,
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return { infractions, hasSupportedChanges, filesInspected, linesAdded };
 }
 
 /**
@@ -75,11 +183,19 @@ export class MetricsCollector {
   private swallowedErrors: Infraction[] = [];
   private panicLoops: Infraction[] = [];
 
-  private lastFixCommit: { hash: string; date: number; message: string; author: string } | null = null;
+  private skippedLongLines = 0;
+  private skippedUnknownFiles = 0;
+
+  private lastFixCommit: { hash: string; date: number; message: string; author: string; files: string[] } | null = null;
   private includeAll: boolean;
 
   constructor(options: { all?: boolean } = {}) {
     this.includeAll = options.all ?? false;
+  }
+
+  recordSkipped(stats: { skippedLongLines?: number; skippedUnknownFiles?: number }): void {
+    if (stats.skippedLongLines) this.skippedLongLines += stats.skippedLongLines;
+    if (stats.skippedUnknownFiles) this.skippedUnknownFiles += stats.skippedUnknownFiles;
   }
 
   processCommit(commit: ParsedCommit): void {
@@ -107,7 +223,15 @@ export class MetricsCollector {
       ) {
         const diffMinutes = Math.abs(commitDateMs - this.lastFixCommit.date) / (1000 * 60);
         // Exclude diffMinutes === 0 to prevent false positives from rebase/squash scripts batching timestamps
-        if (diffMinutes > 0 && diffMinutes <= 15) {
+        const currentActiveFiles = new Set(
+          commit.files
+            .filter((f) => !f.deleted && f.path !== "unknown")
+            .map((f) => f.path)
+        );
+        const lastActiveFiles = new Set(this.lastFixCommit.files);
+        const touchedSameFiles = [...currentActiveFiles].some((p) => lastActiveFiles.has(p));
+
+        if (diffMinutes > 0 && diffMinutes <= 15 && (touchedSameFiles || this.lastFixCommit.files.length === 0)) {
           const attributionTag = commit.isAiAttributed
             ? "AI panic loop"
             : "Panic loop (unverified / --all mode)";
@@ -124,6 +248,9 @@ export class MetricsCollector {
         date: commitDateMs,
         message: commit.message,
         author: commit.authorEmail,
+        files: commit.files
+          .filter((f) => !f.deleted && f.path !== "unknown")
+          .map((f) => f.path),
       };
     } else {
       this.lastFixCommit = null;
@@ -152,6 +279,7 @@ export class MetricsCollector {
               this.testSkips.push({
                 type: "test-skip",
                 file: file.path,
+                lineNumber: added.lineNumber,
                 lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
@@ -171,6 +299,7 @@ export class MetricsCollector {
               this.typeEscapes.push({
                 type: "type-escape",
                 file: file.path,
+                lineNumber: added.lineNumber,
                 lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
@@ -188,6 +317,7 @@ export class MetricsCollector {
                 this.typeEscapes.push({
                   type: "type-escape",
                   file: file.path,
+                  lineNumber: added.lineNumber,
                   lineSnippet: rawLine.trim(),
                   commitHash: commit.hash,
                   commitDate: commit.date,
@@ -207,6 +337,7 @@ export class MetricsCollector {
               this.swallowedErrors.push({
                 type: "swallowed-error",
                 file: file.path,
+                lineNumber: added.lineNumber,
                 lineSnippet: rawLine.trim(),
                 commitHash: commit.hash,
                 commitDate: commit.date,
@@ -292,6 +423,7 @@ export class MetricsCollector {
     }
 
     return {
+      schemaVersion: "1.0.0",
       totalLinesAdded: this.totalLinesAdded,
       aiLinesAdded: this.aiLinesAdded,
       totalCommits: this.totalCommits,
@@ -305,6 +437,8 @@ export class MetricsCollector {
       isSufficientData,
       archetype,
       archetypeDescription,
+      skippedLongLines: this.skippedLongLines,
+      skippedUnknownFiles: this.skippedUnknownFiles,
     };
   }
 }

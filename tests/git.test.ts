@@ -157,7 +157,9 @@ describe("Streaming Git Log Parser", () => {
 
     expect(parsedCommits).toHaveLength(1);
     expect(parsedCommits[0].files).toHaveLength(2);
-    expect(parsedCommits[0].files[0].path).toBe("dev/null");
+    expect(parsedCommits[0].files[0].path).toBe("scripts/old.sh");
+    expect(parsedCommits[0].files[0].deleted).toBe(true);
+    expect(parsedCommits[0].files[0].addedLines).toHaveLength(0);
     expect(parsedCommits[0].files[1].path).toBe("scripts/new.sh");
     expect(parsedCommits[0].files[1].addedLines).toEqual([
       { line: "echo new", lineNumber: 1 },
@@ -203,4 +205,69 @@ describe("Streaming Git Log Parser", () => {
       }
     );
   });
+
+  describe("C-style Path Unquoting and Octal Escaping", () => {
+    it("unquotes escaped quotes, backslashes, and git octal-encoded UTF-8 bytes", async () => {
+      const { unquoteGitPath } = await import("../src/git.js");
+
+      // Plain paths
+      expect(unquoteGitPath("b/src/app.ts")).toBe("src/app.ts");
+      expect(unquoteGitPath("a/src/app.ts")).toBe("src/app.ts");
+
+      // Escaped quote: "b/we\"ird.ts"
+      expect(unquoteGitPath('"b/we\\"ird.ts"')).toBe('we"ird.ts');
+
+      // Escaped space and backslash
+      expect(unquoteGitPath('"b/folder with space/file\\\\test.ts"')).toBe("folder with space/file\\test.ts");
+
+      // Octal sequences produced by git core.quotepath=true for "тест.ts"
+      // т = \321\202, е = \320\265, с = \321\201, т = \321\202
+      const octalCyrillic = '"b/\\321\\202\\320\\265\\321\\201\\321\\202.ts"';
+      expect(unquoteGitPath(octalCyrillic)).toBe("тест.ts");
+    });
+  });
+
+  describe("Long Lines and Parser Robustness", () => {
+    it("tracks skipped long lines without crashing on minified bundles", async () => {
+      const { parseDiff } = await import("../src/git.js");
+
+      const longLine = "+const x = '" + "A".repeat(5000) + "';";
+      const normalLine = "+const y = 123;";
+      const diff = [
+        "diff --git a/bundle.js b/bundle.js",
+        "--- a/bundle.js",
+        "+++ b/bundle.js",
+        "@@ -1,0 +1,2 @@",
+        longLine,
+        normalLine,
+      ].join("\n");
+
+      const res = parseDiff(diff);
+      expect(res.skippedLongLines).toBe(1);
+      expect(res.totalAdded).toBe(1);
+      expect(res.files[0].addedLines).toHaveLength(1);
+      expect(res.files[0].addedLines[0].line).toBe("const y = 123;");
+    });
+
+    it("parses trailing commit record cleanly without trailing 0x1e separator", async () => {
+      const raw =
+        "\x1e" +
+        "sha_last\x1f" +
+        "2026-10-04T12:00:00Z\x1f" +
+        "Author\x1f" +
+        "a@example.com\x1f" +
+        "commit without trailing 0x1e\x1f" +
+        "diff --git a/file.ts b/file.ts\n" +
+        "@@ -1,0 +1,1 @@\n" +
+        "+line\n";
+
+      const commits: any[] = [];
+      await parseGitLogStream(Readable.from([raw]), (c) => commits.push(c));
+
+      expect(commits).toHaveLength(1);
+      expect(commits[0].hash).toBe("sha_last");
+      expect(commits[0].files[0].addedLines[0].line).toBe("line");
+    });
+  });
 });
+
