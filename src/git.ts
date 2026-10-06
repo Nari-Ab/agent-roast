@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import { Readable } from "stream";
+import { StringDecoder } from "string_decoder";
 import { CommitInfo } from "./types.js";
 import { detectAiAttribution } from "./detector.js";
 
@@ -40,87 +41,7 @@ export async function parseGitLogStream(
 
     const attribution = detectAiAttribution(authorName, authorEmail, message);
 
-    const HUNK_REGEX = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
-    const files: ParsedFileDiff[] = [];
-    let currentFile: ParsedFileDiff | null = null;
-    let lineNo = 0;
-    let oldLeft = 0;
-    let newLeft = 0;
-    let totalAdded = 0;
-
-    const parsePath = (line: string): string => {
-      // +++ b/path/to/file or +++ /dev/null
-      const trimmed = line.trimEnd();
-      if (trimmed.startsWith("+++ /dev/null")) return "dev/null";
-      const stripped = trimmed.slice(4).trim(); // remove '+++ '
-      if (stripped.startsWith("b/")) {
-        return stripped.slice(2);
-      }
-      return stripped;
-    };
-
-    const diffLines = rawDiff.split("\n");
-    for (const rawLine of diffLines) {
-      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-
-      // When inside a hunk
-      if (oldLeft > 0 || newLeft > 0) {
-        if (line.startsWith("\\")) {
-          // "\ No newline at end of file" — ignore completely, do not increment line counter
-          continue;
-        }
-
-        const char = line[0];
-        if (char === "+") {
-          if (currentFile && currentFile.path !== "dev/null") {
-            currentFile.addedLines.push({
-              line: line.slice(1),
-              lineNumber: lineNo,
-            });
-            totalAdded++;
-          }
-          lineNo++;
-          newLeft--;
-        } else if (char === "-") {
-          oldLeft--;
-        } else {
-          // Context line or empty line
-          oldLeft--;
-          newLeft--;
-          lineNo++;
-        }
-        continue;
-      }
-
-      // Outside hunk: check for new hunk or file header
-      const hunkMatch = HUNK_REGEX.exec(line);
-      if (hunkMatch) {
-        oldLeft = hunkMatch[1] === undefined ? 1 : parseInt(hunkMatch[1], 10);
-        lineNo = parseInt(hunkMatch[2], 10);
-        newLeft = hunkMatch[3] === undefined ? 1 : parseInt(hunkMatch[3], 10);
-        continue;
-      }
-
-      if (line.startsWith("diff --git ")) {
-        // e.g. diff --git a/lib/x.ts b/lib/x.ts
-        const diffMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-        const filePath = diffMatch ? diffMatch[2] : "unknown";
-        currentFile = { path: filePath, addedLines: [] };
-        files.push(currentFile);
-        continue;
-      }
-
-      if (line.startsWith("+++ ")) {
-        const filePath = parsePath(line);
-        if (currentFile) {
-          currentFile.path = filePath;
-        } else {
-          currentFile = { path: filePath, addedLines: [] };
-          files.push(currentFile);
-        }
-        continue;
-      }
-    }
+    const { files, totalAdded } = parseDiff(rawDiff);
 
     onCommit({
       hash,
@@ -136,8 +57,10 @@ export async function parseGitLogStream(
   };
 
   return new Promise((resolve, reject) => {
+    const decoder = new StringDecoder("utf8");
+
     stream.on("data", (chunk: Buffer | string) => {
-      buffer += chunk.toString();
+      buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
       const records = buffer.split("\x1e");
       // All items except the last one are complete commits
       while (records.length > 1) {
@@ -150,6 +73,7 @@ export async function parseGitLogStream(
     });
 
     stream.on("end", () => {
+      buffer += decoder.end();
       if (buffer.trim()) {
         processBlock(buffer);
       }
@@ -158,6 +82,105 @@ export async function parseGitLogStream(
 
     stream.on("error", reject);
   });
+}
+
+const HUNK_REGEX = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const MAX_LINE_LENGTH = 4096;
+
+/**
+ * Parses raw git diff text into structured files and added lines.
+ * Deterministic, robust against desynchronization and minified files.
+ */
+export function parseDiff(rawDiff: string): { files: ParsedFileDiff[]; totalAdded: number } {
+  const files: ParsedFileDiff[] = [];
+  let currentFile: ParsedFileDiff | null = null;
+  let lineNo = 0;
+  let oldLeft = 0;
+  let newLeft = 0;
+  let totalAdded = 0;
+
+  const parsePath = (line: string): string => {
+    const trimmed = line.trimEnd();
+    if (trimmed.startsWith("+++ /dev/null")) return "dev/null";
+    let stripped = trimmed.slice(4).trim(); // remove '+++ '
+    if (stripped.startsWith('"') && stripped.endsWith('"')) {
+      stripped = stripped.slice(1, -1);
+    }
+    return stripped.startsWith("b/") ? stripped.slice(2) : stripped;
+  };
+
+  const diffLines = rawDiff.split("\n");
+  for (const rawLine of diffLines) {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+
+    // When inside a hunk
+    if (oldLeft > 0 || newLeft > 0) {
+      const char = line[0];
+      if (char === "\\") {
+        // "\ No newline at end of file" — ignore completely
+        continue;
+      }
+      if (char === "+") {
+        if (currentFile && currentFile.path !== "dev/null") {
+          const content = line.slice(1);
+          if (content.length <= MAX_LINE_LENGTH) {
+            currentFile.addedLines.push({
+              line: content,
+              lineNumber: lineNo,
+            });
+            totalAdded++;
+          }
+        }
+        lineNo++;
+        newLeft--;
+        continue;
+      }
+      if (char === "-") {
+        oldLeft--;
+        continue;
+      }
+      if (char === " ") {
+        oldLeft--;
+        newLeft--;
+        lineNo++;
+        continue;
+      }
+
+      // Unexpected line inside hunk: desync detected, reset state to avoid cascaded corruption
+      oldLeft = 0;
+      newLeft = 0;
+    }
+
+    // Outside hunk: check for new hunk or file header
+    const hunkMatch = HUNK_REGEX.exec(line);
+    if (hunkMatch) {
+      oldLeft = hunkMatch[1] === undefined ? 1 : parseInt(hunkMatch[1], 10);
+      lineNo = parseInt(hunkMatch[2], 10);
+      newLeft = hunkMatch[3] === undefined ? 1 : parseInt(hunkMatch[3], 10);
+      continue;
+    }
+
+    if (line.startsWith("diff --git ")) {
+      const diffMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+      const filePath = diffMatch ? diffMatch[2] : "unknown";
+      currentFile = { path: filePath, addedLines: [] };
+      files.push(currentFile);
+      continue;
+    }
+
+    if (line.startsWith("+++ ")) {
+      const filePath = parsePath(line);
+      if (currentFile) {
+        currentFile.path = filePath;
+      } else {
+        currentFile = { path: filePath, addedLines: [] };
+        files.push(currentFile);
+      }
+      continue;
+    }
+  }
+
+  return { files, totalAdded };
 }
 
 export function streamGitLog(
