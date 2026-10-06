@@ -106,7 +106,7 @@ describe("Metrics Engine", () => {
       isAiAttributed: true,
       aiSignatures: ["author:bot"],
       totalAddedCount: 150,
-      files: [],
+      files: [{ path: "src/payment.ts", addedLines: [] }],
     };
 
     const c2: ParsedCommit = {
@@ -118,7 +118,7 @@ describe("Metrics Engine", () => {
       isAiAttributed: true,
       aiSignatures: ["author:bot"],
       totalAddedCount: 150,
-      files: [],
+      files: [{ path: "src/payment.ts", addedLines: [] }],
     };
 
     collector.processCommit(c1);
@@ -126,7 +126,60 @@ describe("Metrics Engine", () => {
 
     const summary = collector.getSummary();
     expect(summary.panicLoops).toHaveLength(1);
-    expect(summary.panicLoops[0].reason).toContain("panic loop");
+    expect(summary.panicLoops[0].reason).toContain("chain of 2 quick fixes");
+  });
+
+  it("coalesces 5 consecutive quick fixes into a single panic loop chain", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    for (let i = 1; i <= 5; i++) {
+      collector.processCommit({
+        hash: `fix${i}`,
+        date: new Date(1760000000000 + i * 2 * 60 * 1000).toISOString(),
+        authorName: "Agent",
+        authorEmail: "agent@bot",
+        message: `fix: attempt ${i}`,
+        isAiAttributed: true,
+        aiSignatures: ["author:bot"],
+        totalAddedCount: 50,
+        files: [{ path: "src/payment.ts", addedLines: [] }],
+      });
+    }
+
+    const summary = collector.getSummary();
+    expect(summary.panicLoops).toHaveLength(1);
+    expect(summary.panicLoops[0].reason).toContain("chain of 5 quick fixes");
+  });
+
+  it("does not count panic loop when consecutive fixes touch disjoint files", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    collector.processCommit({
+      hash: "f1",
+      date: "2026-10-04T14:00:00Z",
+      authorName: "Agent",
+      authorEmail: "agent@bot",
+      message: "fix: auth module",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 10,
+      files: [{ path: "src/auth.ts", addedLines: [] }],
+    });
+
+    collector.processCommit({
+      hash: "f2",
+      date: "2026-10-04T14:03:00Z",
+      authorName: "Agent",
+      authorEmail: "agent@bot",
+      message: "fix: billing module",
+      isAiAttributed: true,
+      aiSignatures: ["author:bot"],
+      totalAddedCount: 10,
+      files: [{ path: "src/billing.ts", addedLines: [] }],
+    });
+
+    const summary = collector.getSummary();
+    expect(summary.panicLoops).toHaveLength(0);
   });
 
   it("does not count panic loops across different authors or zero-diff rebase timestamps", () => {

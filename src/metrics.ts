@@ -186,7 +186,17 @@ export class MetricsCollector {
   private skippedLongLines = 0;
   private skippedUnknownFiles = 0;
 
-  private lastFixCommit: { hash: string; date: number; message: string; author: string; files: string[] } | null = null;
+  private activePanicChain: {
+    firstHash: string;
+    latestHash: string;
+    firstDate: number;
+    latestDate: number;
+    commitCount: number;
+    author: string;
+    activeFiles: Set<string>;
+    isAiAttributed: boolean;
+  } | null = null;
+
   private includeAll: boolean;
 
   constructor(options: { all?: boolean } = {}) {
@@ -196,6 +206,26 @@ export class MetricsCollector {
   recordSkipped(stats: { skippedLongLines?: number; skippedUnknownFiles?: number }): void {
     if (stats.skippedLongLines) this.skippedLongLines += stats.skippedLongLines;
     if (stats.skippedUnknownFiles) this.skippedUnknownFiles += stats.skippedUnknownFiles;
+  }
+
+  private flushPanicChain(): void {
+    if (this.activePanicChain && this.activePanicChain.commitCount >= 2) {
+      const chain = this.activePanicChain;
+      const durationMinutes = Math.max(
+        1,
+        Math.round(Math.abs(chain.latestDate - chain.firstDate) / (1000 * 60))
+      );
+      const attributionTag = chain.isAiAttributed
+        ? "AI panic loop"
+        : "Panic loop (unverified / --all mode)";
+      this.panicLoops.push({
+        type: "panic-loop",
+        commitHash: chain.latestHash,
+        commitDate: new Date(chain.latestDate).toISOString(),
+        reason: `${attributionTag}: chain of ${chain.commitCount} quick fixes across ${durationMinutes}m (${chain.firstHash.slice(0, 7)} -> ${chain.latestHash.slice(0, 7)})`,
+      });
+    }
+    this.activePanicChain = null;
   }
 
   processCommit(commit: ParsedCommit): void {
@@ -212,48 +242,66 @@ export class MetricsCollector {
       return;
     }
 
-    // 1. Check Panic Loops (consecutive fix/revert commits within 15 minutes by same author)
+    // 1. Check Panic Loops (chained fix/revert commits within 15 minutes by same author touching same files)
+    const subject = commit.message.split("\n")[0];
     const commitDateMs = Date.parse(commit.date);
-    if (PANIC_COMMIT_REGEX.test(commit.message)) {
-      if (
-        this.lastFixCommit &&
-        !isNaN(commitDateMs) &&
-        !isNaN(this.lastFixCommit.date) &&
-        this.lastFixCommit.author.toLowerCase() === commit.authorEmail.toLowerCase()
-      ) {
-        const diffMinutes = Math.abs(commitDateMs - this.lastFixCommit.date) / (1000 * 60);
-        // Exclude diffMinutes === 0 to prevent false positives from rebase/squash scripts batching timestamps
-        const currentActiveFiles = new Set(
-          commit.files
-            .filter((f) => !f.deleted && f.path !== "unknown")
-            .map((f) => f.path)
-        );
-        const lastActiveFiles = new Set(this.lastFixCommit.files);
-        const touchedSameFiles = [...currentActiveFiles].some((p) => lastActiveFiles.has(p));
+    const isFixCommit = PANIC_COMMIT_REGEX.test(subject);
+    const currentActiveFiles = new Set(
+      commit.files
+        .filter((f) => !f.deleted && f.path !== "unknown")
+        .map((f) => f.path)
+    );
 
-        if (diffMinutes > 0 && diffMinutes <= 15 && (touchedSameFiles || this.lastFixCommit.files.length === 0)) {
-          const attributionTag = commit.isAiAttributed
-            ? "AI panic loop"
-            : "Panic loop (unverified / --all mode)";
-          this.panicLoops.push({
-            type: "panic-loop",
-            commitHash: commit.hash,
-            commitDate: commit.date,
-            reason: `${attributionTag}: consecutive quick fix within ${Math.max(1, Math.round(diffMinutes))}m (${this.lastFixCommit.hash.slice(0, 7)} -> ${commit.hash.slice(0, 7)})`,
-          });
+    if (isFixCommit && !isNaN(commitDateMs)) {
+      if (
+        this.activePanicChain &&
+        this.activePanicChain.author.toLowerCase() === commit.authorEmail.toLowerCase()
+      ) {
+        const diffMinutes = Math.abs(commitDateMs - this.activePanicChain.latestDate) / (1000 * 60);
+        const touchedSameFiles =
+          currentActiveFiles.size > 0 &&
+          [...currentActiveFiles].some((p) => this.activePanicChain!.activeFiles.has(p));
+
+        if (diffMinutes > 0 && diffMinutes <= 15 && touchedSameFiles) {
+          // Extend existing panic chain
+          this.activePanicChain.commitCount++;
+          this.activePanicChain.latestHash = commit.hash;
+          this.activePanicChain.latestDate = commitDateMs;
+          for (const p of currentActiveFiles) {
+            this.activePanicChain.activeFiles.add(p);
+          }
+          if (commit.isAiAttributed) {
+            this.activePanicChain.isAiAttributed = true;
+          }
+        } else {
+          // Break chain, flush existing if valid, start new
+          this.flushPanicChain();
+          this.activePanicChain = {
+            firstHash: commit.hash,
+            latestHash: commit.hash,
+            firstDate: commitDateMs,
+            latestDate: commitDateMs,
+            commitCount: 1,
+            author: commit.authorEmail,
+            activeFiles: currentActiveFiles,
+            isAiAttributed: commit.isAiAttributed,
+          };
         }
+      } else {
+        this.flushPanicChain();
+        this.activePanicChain = {
+          firstHash: commit.hash,
+          latestHash: commit.hash,
+          firstDate: commitDateMs,
+          latestDate: commitDateMs,
+          commitCount: 1,
+          author: commit.authorEmail,
+          activeFiles: currentActiveFiles,
+          isAiAttributed: commit.isAiAttributed,
+        };
       }
-      this.lastFixCommit = {
-        hash: commit.hash,
-        date: commitDateMs,
-        message: commit.message,
-        author: commit.authorEmail,
-        files: commit.files
-          .filter((f) => !f.deleted && f.path !== "unknown")
-          .map((f) => f.path),
-      };
     } else {
-      this.lastFixCommit = null;
+      this.flushPanicChain();
     }
 
     // 2. Scan added lines in each file
@@ -353,6 +401,8 @@ export class MetricsCollector {
   }
 
   getSummary(): MetricSummary {
+    this.flushPanicChain();
+
     const linesSample = this.includeAll ? this.totalLinesAdded : this.aiLinesAdded;
     const isSufficientData = linesSample >= MIN_SAMPLE_LOC;
 

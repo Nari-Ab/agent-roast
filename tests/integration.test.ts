@@ -160,7 +160,7 @@ describe("Real Git Integration with Hostile Environment", () => {
           cwd: tempDir,
           base: "main",
           head: "feature/agent-diff",
-          failOn: ["unknown-detector" as any],
+          failOn: [("unknown-detector" as unknown) as import("../src/types.js").DetectorType],
         })
       ).rejects.toThrow(InvalidDetectorError);
 

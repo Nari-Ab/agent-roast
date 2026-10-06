@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "child_process";
-import { Readable } from "stream";
+import { PassThrough, Readable } from "stream";
 import { StringDecoder } from "string_decoder";
 import { CommitInfo } from "./types.js";
 import { detectAiAttribution } from "./detector.js";
@@ -27,6 +27,16 @@ export interface ParseDiffResult {
   skippedUnknownFiles: number;
 }
 
+export const RECORD_SEPARATOR = "\x1e__ROAST_REC__\x1e";
+export const FIELD_SEPARATOR = "\x1f__ROAST_FIELD__\x1f";
+
+export const HERMETIC_GIT_FLAGS = [
+  "-c", "core.quotepath=false",
+  "-c", "diff.noprefix=false",
+  "-c", "diff.mnemonicPrefix=false",
+  "--no-pager",
+] as const;
+
 const MAX_RECORD_BUFFER_SIZE = 50 * 1024 * 1024; // 50MB protection against OOM
 
 export async function parseGitLogStream(
@@ -36,12 +46,15 @@ export async function parseGitLogStream(
   let buffer = "";
   let totalSkippedLongLines = 0;
   let totalSkippedUnknownFiles = 0;
+  let scanFrom = 0;
+  let activeRecSep: string | null = null;
+  let activeFieldSep: string | null = null;
 
   const processBlock = (block: string) => {
     if (!block.trim()) return;
 
-    // Field separator \x1f separates hash, date, author, email, message, diff
-    const parts = block.split("\x1f");
+    const fieldSep = activeFieldSep || (block.includes(FIELD_SEPARATOR) ? FIELD_SEPARATOR : "\x1f");
+    const parts = block.split(fieldSep);
     if (parts.length < 5) return;
 
     const hash = parts[0].trim();
@@ -49,7 +62,7 @@ export async function parseGitLogStream(
     const authorName = parts[2].trim();
     const authorEmail = parts[3].trim();
     const message = parts[4].trim();
-    const rawDiff = parts.slice(5).join("\x1f");
+    const rawDiff = parts.slice(5).join(fieldSep);
 
     const attribution = detectAiAttribution(authorName, authorEmail, message);
 
@@ -86,21 +99,54 @@ export async function parseGitLogStream(
         return;
       }
 
-      const records = buffer.split("\x1e");
-      // All items except the last one are complete commits
-      while (records.length > 1) {
-        const completeBlock = records.shift();
-        if (completeBlock !== undefined) {
-          processBlock(completeBlock);
+      if (activeRecSep === null) {
+        if (buffer.includes(RECORD_SEPARATOR)) {
+          activeRecSep = RECORD_SEPARATOR;
+          activeFieldSep = FIELD_SEPARATOR;
+          scanFrom = 0;
+        } else if (buffer.includes("\x1e")) {
+          const first1e = buffer.indexOf("\x1e");
+          const remaining = buffer.slice(first1e);
+          if (remaining.length >= RECORD_SEPARATOR.length || !RECORD_SEPARATOR.startsWith(remaining)) {
+            activeRecSep = "\x1e";
+            activeFieldSep = "\x1f";
+            scanFrom = 0;
+          }
         }
       }
-      buffer = records[0] || "";
+
+      if (activeRecSep === null) {
+        // Still ambiguous prefix, wait for next chunk
+        return;
+      }
+
+      const recSep = activeRecSep;
+
+      let idx: number;
+      while ((idx = buffer.indexOf(recSep, scanFrom)) !== -1) {
+        const completeBlock = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + recSep.length);
+        scanFrom = 0;
+        try {
+          processBlock(completeBlock);
+        } catch (err) {
+          stream.destroy();
+          reject(err);
+          return;
+        }
+      }
+      scanFrom = buffer.length;
     });
 
     stream.on("end", () => {
       buffer += decoder.end();
       if (buffer.trim()) {
-        processBlock(buffer);
+        try {
+          processBlock(buffer);
+        } catch (err) {
+          reject(err);
+          return;
+        }
       }
       resolve({ totalSkippedLongLines, totalSkippedUnknownFiles });
     });
@@ -114,14 +160,15 @@ const MAX_LINE_LENGTH = 4096;
 
 /**
  * Unquotes git C-style escaped path (e.g. "b/foo\"bar.ts" or "b/\321\202\320\265\321\201\321\202.ts")
- * decoding octal escape sequences into UTF-8.
+ * decoding octal escape sequences and full Unicode code points safely without surrogate splitting.
  */
 export function unquoteGitPath(pathStr: string): string {
-  let s = pathStr.trim();
+  let s = pathStr;
   if (s.startsWith('"') && s.endsWith('"')) {
     s = s.slice(1, -1);
     const bytes: number[] = [];
-    for (let i = 0; i < s.length; i++) {
+    let i = 0;
+    while (i < s.length) {
       if (s[i] === "\\" && i + 1 < s.length) {
         const next = s[i + 1];
         if (next >= "0" && next <= "7") {
@@ -132,34 +179,47 @@ export function unquoteGitPath(pathStr: string): string {
             j++;
           }
           bytes.push(parseInt(octal, 8));
-          i = j - 1;
+          i = j;
+        } else if (next === "a") {
+          bytes.push(0x07);
+          i += 2;
+        } else if (next === "b") {
+          bytes.push(0x08);
+          i += 2;
+        } else if (next === "f") {
+          bytes.push(0x0c);
+          i += 2;
         } else if (next === "n") {
           bytes.push(0x0a);
-          i++;
-        } else if (next === "t") {
-          bytes.push(0x09);
-          i++;
+          i += 2;
         } else if (next === "r") {
           bytes.push(0x0d);
-          i++;
+          i += 2;
+        } else if (next === "t") {
+          bytes.push(0x09);
+          i += 2;
+        } else if (next === "v") {
+          bytes.push(0x0b);
+          i += 2;
         } else if (next === "\\") {
           bytes.push(0x5c);
-          i++;
+          i += 2;
         } else if (next === '"') {
           bytes.push(0x22);
-          i++;
+          i += 2;
         } else {
-          bytes.push(s.charCodeAt(i + 1));
-          i++;
+          const codePoint = s.codePointAt(i + 1)!;
+          const charStr = String.fromCodePoint(codePoint);
+          const buf = Buffer.from(charStr, "utf8");
+          for (const b of buf) bytes.push(b);
+          i += 1 + charStr.length;
         }
       } else {
-        const code = s.charCodeAt(i);
-        if (code < 128) {
-          bytes.push(code);
-        } else {
-          const buf = Buffer.from(s[i], "utf8");
-          for (const b of buf) bytes.push(b);
-        }
+        const codePoint = s.codePointAt(i)!;
+        const charStr = String.fromCodePoint(codePoint);
+        const buf = Buffer.from(charStr, "utf8");
+        for (const b of buf) bytes.push(b);
+        i += charStr.length;
       }
     }
     s = Buffer.from(bytes).toString("utf8");
@@ -182,17 +242,15 @@ export function parseDiff(rawDiff: string): ParseDiffResult {
   let newLeft = 0;
   let totalAdded = 0;
   let skippedLongLines = 0;
-  let skippedUnknownFiles = 0;
 
   const diffLines = rawDiff.split("\n");
   for (const rawLine of diffLines) {
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
 
-    // When inside a hunk
+    // Inside hunk
     if (oldLeft > 0 || newLeft > 0) {
       const char = line[0];
       if (char === "\\") {
-        // "\ No newline at end of file" — ignore completely
         continue;
       }
       if (char === "+") {
@@ -223,12 +281,12 @@ export function parseDiff(rawDiff: string): ParseDiffResult {
         continue;
       }
 
-      // Unexpected line inside hunk: desync detected, reset state to avoid cascaded corruption
+      // Unexpected line inside hunk: desync detected, reset state
       oldLeft = 0;
       newLeft = 0;
     }
 
-    // Outside hunk: check for new hunk or file header
+    // Outside hunk
     const hunkMatch = HUNK_REGEX.exec(line);
     if (hunkMatch) {
       oldLeft = hunkMatch[1] === undefined ? 1 : parseInt(hunkMatch[1], 10);
@@ -238,7 +296,6 @@ export function parseDiff(rawDiff: string): ParseDiffResult {
     }
 
     if (line.startsWith("diff --git ")) {
-      // Check for quoted format: diff --git "a/..." "b/..."
       const quotedMatch = line.match(/^diff --git ("(?:\\.|[^"])+") ("(?:\\.|[^"])+")$/);
       let filePath = "unknown";
       if (quotedMatch) {
@@ -247,8 +304,6 @@ export function parseDiff(rawDiff: string): ParseDiffResult {
         const plainMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/);
         if (plainMatch) {
           filePath = plainMatch[2];
-        } else {
-          skippedUnknownFiles++;
         }
       }
       currentFile = { path: filePath, addedLines: [] };
@@ -276,6 +331,14 @@ export function parseDiff(rawDiff: string): ParseDiffResult {
     }
   }
 
+  // Count skippedUnknownFiles only for files that finished parsing with unresolved "unknown" path
+  let skippedUnknownFiles = 0;
+  for (const file of files) {
+    if (file.path === "unknown" && !file.deleted) {
+      skippedUnknownFiles++;
+    }
+  }
+
   return { files, totalAdded, skippedLongLines, skippedUnknownFiles };
 }
 
@@ -296,10 +359,8 @@ export function streamGitLog(
   cwd: string = process.cwd(),
   since: string = "90 days ago"
 ): Readable {
-  // Format: \x1e %H \x1f %aI \x1f %an \x1f %ae \x1f %B \x1f
   const gitArgs = [
-    "-c", "core.quotepath=false",
-    "--no-pager",
+    ...HERMETIC_GIT_FLAGS,
     "log",
     "-p",
     "-U0",
@@ -312,9 +373,11 @@ export function streamGitLog(
     "--src-prefix=a/",
     "--dst-prefix=b/",
     `--since=${since}`,
-    "--format=%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%B%x1f",
+    `--format=${RECORD_SEPARATOR}%H${FIELD_SEPARATOR}%aI${FIELD_SEPARATOR}%an${FIELD_SEPARATOR}%ae${FIELD_SEPARATOR}%B${FIELD_SEPARATOR}`,
     ...COMMON_EXCLUDE_SPECS,
   ];
+
+  const output = new PassThrough();
 
   const child = spawn("git", gitArgs, {
     cwd,
@@ -326,6 +389,10 @@ export function streamGitLog(
     windowsHide: true,
   });
 
+  child.stdout.on("data", (chunk) => {
+    output.write(chunk);
+  });
+
   let stderrBuffer = "";
   child.stderr.on("data", (chunk) => {
     stderrBuffer += chunk.toString();
@@ -333,18 +400,19 @@ export function streamGitLog(
 
   child.on("close", (code) => {
     if (code !== 0) {
-      child.stdout.emit(
-        "error",
+      output.destroy(
         new Error(`git log exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
       );
+    } else {
+      output.end();
     }
   });
 
   child.on("error", (err) => {
-    child.stdout.emit("error", err);
+    output.destroy(err);
   });
 
-  return child.stdout;
+  return output;
 }
 
 export function streamGitDiff(
@@ -353,8 +421,7 @@ export function streamGitDiff(
   headSha: string
 ): Readable {
   const gitArgs = [
-    "-c", "core.quotepath=false",
-    "--no-pager",
+    ...HERMETIC_GIT_FLAGS,
     "diff",
     "-U0",
     "--no-color",
@@ -368,6 +435,8 @@ export function streamGitDiff(
     ...COMMON_EXCLUDE_SPECS,
   ];
 
+  const output = new PassThrough();
+
   const child = spawn("git", gitArgs, {
     cwd,
     env: {
@@ -378,6 +447,10 @@ export function streamGitDiff(
     windowsHide: true,
   });
 
+  child.stdout.on("data", (chunk) => {
+    output.write(chunk);
+  });
+
   let stderrBuffer = "";
   child.stderr.on("data", (chunk) => {
     stderrBuffer += chunk.toString();
@@ -385,18 +458,19 @@ export function streamGitDiff(
 
   child.on("close", (code) => {
     if (code !== 0) {
-      child.stdout.emit(
-        "error",
+      output.destroy(
         new Error(`git diff exited with code ${code}: ${stderrBuffer.trim() || "unknown error"}`)
       );
+    } else {
+      output.end();
     }
   });
 
   child.on("error", (err) => {
-    child.stdout.emit("error", err);
+    output.destroy(err);
   });
 
-  return child.stdout;
+  return output;
 }
 
 /**
@@ -404,11 +478,19 @@ export function streamGitDiff(
  * Exits with code 2 on failure.
  */
 export function resolveCommitSha(cwd: string, ref: string, roleName: string = "ref"): string {
-  const result = spawnSync("git", ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], {
-    cwd,
-    encoding: "utf8",
-    windowsHide: true,
-  });
+  const result = spawnSync(
+    "git",
+    [...HERMETIC_GIT_FLAGS, "rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`],
+    {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+    }
+  );
+
+  if (result.error) {
+    throw new GitResolutionError(`Git command execution failed: ${result.error.message}. Ensure git is installed and in your PATH.`);
+  }
 
   if (result.status !== 0) {
     const isShallow = checkIfShallow(cwd);
@@ -427,11 +509,19 @@ export function resolveCommitSha(cwd: string, ref: string, roleName: string = "r
  * Finds the merge-base between two commit SHAs safely using --end-of-options.
  */
 export function findMergeBase(cwd: string, baseSha: string, headSha: string): string {
-  const result = spawnSync("git", ["merge-base", "--end-of-options", baseSha, headSha], {
-    cwd,
-    encoding: "utf8",
-    windowsHide: true,
-  });
+  const result = spawnSync(
+    "git",
+    [...HERMETIC_GIT_FLAGS, "merge-base", "--end-of-options", baseSha, headSha],
+    {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+    }
+  );
+
+  if (result.error) {
+    throw new GitResolutionError(`Git command execution failed: ${result.error.message}. Ensure git is installed and in your PATH.`);
+  }
 
   if (result.status !== 0) {
     const isShallow = checkIfShallow(cwd);
@@ -448,7 +538,7 @@ export function findMergeBase(cwd: string, baseSha: string, headSha: string): st
 
 function checkIfShallow(cwd: string): boolean {
   try {
-    const res = spawnSync("git", ["rev-parse", "--is-shallow-repository"], {
+    const res = spawnSync("git", [...HERMETIC_GIT_FLAGS, "rev-parse", "--is-shallow-repository"], {
       cwd,
       encoding: "utf8",
       windowsHide: true,

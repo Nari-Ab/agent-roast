@@ -21,9 +21,14 @@
 `agent-roast` scans recorded git diffs for shortcuts taken by AI coding assistants (Claude Code, Cursor, Aider). It checks for skipped tests, compiler type escapes (`as any`), swallowed errors, and panic revert loops, then outputs a discipline score and line proofs. 100% offline, zero API keys, zero telemetry.
 
 ```bash
+# Audit repository history
 npx agent-roast            # scan AI-attributed commits (last 90 days)
 npx agent-roast --all      # scan entire repository history
 npx agent-roast --verbose  # show commit SHAs and line proofs
+
+# Audit pull request diffs (CI gate)
+npx agent-roast --base origin/main --head HEAD
+npx agent-roast --base origin/main --head HEAD --fail-on test-skip,swallowed-error --format github
 ```
 
 What a report looks like (a real repository audit, trimmed):
@@ -54,25 +59,60 @@ INFRACTIONS DETECTED (42)
 
 ---
 
+### GitHub Actions Integration
+
+Add `agent-roast` as a gate in your pull request workflow (`.github/workflows/audit.yml`):
+
+```yaml
+name: Agent Audit
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for complete merge-base history
+
+      - name: Run agent-roast audit
+        uses: Nari-Ab/agent-roast@v0.2.0
+        with:
+          base: ${{ github.base_ref }}
+          head: ${{ github.event.pull_request.head.sha }}
+          fail-on: test-skip,swallowed-error
+          format: github
+```
+
+---
+
 ### What it checks
 
-Only **added lines** (`+`) in source files are scanned — file moves and refactoring never trigger false alarms.
+Only **added lines** (`+`) in source code files are scanned — deleted lines, file moves, and comments never trigger false alarms.
 
-- **Skipped tests:** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added when tests fail.
+- **Skipped tests:** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests.
 - **Type escapes:** `as any`, `// @ts-ignore`, `// @ts-expect-error`, `# type: ignore`, `eslint-disable`.
-- **Swallowed errors:** Empty `catch {}` or `except: pass` blocks hiding production errors.
-- **Panic fix loops:** Rapid-fire fix and revert commits by the same author within 15 minutes.
+- **Swallowed errors:** Empty `catch {}` or `except: pass` blocks hiding runtime failures.
+- **Panic fix loops:** Chains of rapid-fire fix/revert commits by the same author within 15 minutes touching overlapping files.
 
 ---
 
-### Privacy
+### Requirements & Privacy
 
-- **100% Local:** Runs streaming `git log` on your machine in <200ms.
-- **Zero Telemetry:** No cloud dependencies, no LLM API calls, no network traffic.
-- **Hermetic:** Source code never leaves your computer.
+- **Requirements:** Git 2.30+ (for `--end-of-options` argument isolation), Node.js 18+.
+- **100% Local:** Instant streaming parser runs directly on your machine.
+- **Zero Telemetry:** No cloud dependencies, no LLM API calls, no network traffic. Verified by static bundle inspection.
+- **Hermetic:** Enforces `-c core.quotepath=false -c diff.noprefix=false` to guarantee identical behavior across all environments.
 
 ---
+
+### Author & Support
+
+Created by Nariman Abdukarimov ([abdukarimov.nariman07@gmail.com](mailto:abdukarimov.nariman07@gmail.com)).
 
 ### License
 
 [MIT](LICENSE)
+
