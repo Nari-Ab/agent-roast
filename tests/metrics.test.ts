@@ -53,6 +53,10 @@ describe("Metrics Engine", () => {
             { line: "const payload = data as any;", lineNumber: 5 },
             { line: "// @ts-ignore", lineNumber: 10 },
             { line: "// eslint-disable-next-line @typescript-eslint/no-explicit-any", lineNumber: 20 },
+            { line: "// @ts-nocheck", lineNumber: 25 },
+            { line: "const parsed = obj as unknown as Target;", lineNumber: 30 },
+            { line: "const empty = val as never;", lineNumber: 35 },
+            { line: "import foo  # noqa", lineNumber: 40 },
           ],
         },
       ],
@@ -61,7 +65,7 @@ describe("Metrics Engine", () => {
     collector.processCommit(commit);
     const summary = collector.getSummary();
 
-    expect(summary.typeEscapes).toHaveLength(3);
+    expect(summary.typeEscapes).toHaveLength(7);
   });
 
   it("detects swallowed errors: empty catch blocks", () => {

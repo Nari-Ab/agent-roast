@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Zero-telemetry CLI scorecard analyzing git history for AI coding agent infractions and panic loops",
   "type": "module",
   "main": "./dist/index.js",

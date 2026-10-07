@@ -12,12 +12,16 @@ const TEST_SKIP_PATTERNS = [
 const COMMENT_DIRECTIVE_PATTERNS = [
   { regex: /^\s*\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
   { regex: /^\s*\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
+  { regex: /^\s*\/\/\s*@ts-nocheck\b/, name: "compiler check disable (@ts-nocheck)" },
   { regex: /(?:^\s*#\s*type:\s*ignore\b|#\s*type:\s*ignore\s*$)/, name: "python type ignore" },
+  { regex: /(?:^\s*#\s*noqa\b|#\s*noqa\s*$)/, name: "python linter suppression (# noqa)" },
   { regex: /^\s*\/\/\s*eslint-disable(?:-next-line)?\b/, name: "linter suppression (eslint-disable)" },
 ];
 
 const CODE_TYPE_ESCAPE_PATTERNS = [
   { regex: /\bas\s+any\b/, name: "type bypass (as any)" },
+  { regex: /\bas\s+unknown\s+as\b/, name: "double assertion bypass (as unknown as)" },
+  { regex: /\bas\s+never\b/, name: "type escape (as never)" },
 ];
 
 const SWALLOWED_ERROR_PATTERNS = [
