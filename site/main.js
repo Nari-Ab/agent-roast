@@ -143,6 +143,32 @@ const SCENARIOS = {
       { text: "" },
       { text: "VERDICT: Clean engineering. Ready to merge with confidence.", cls: "t-dim" }
     ]
+  },
+  "pr-gate": {
+    file: "tests/auth.test.ts",
+    verdict: "ci: FAILED (--fail-on test-skip violated)",
+    lines: [
+      { type: "ctx", ln: "23", text: "describe('Bearer token authentication', () => {" },
+      { type: "del", ln: "24", text: "-  it('verifies RSA cryptographic signature', async () => {" },
+      { type: "hit", ln: "24", text: "+  it.skip('verifies RSA cryptographic signature', async () => {" },
+      { type: "ctx", ln: "25", text: "    const res = await client.request('/api/v1/user');" },
+      { type: "ctx", ln: "26", text: "    expect(res.status).toBe(200);" },
+      { type: "ctx", ln: "27", text: "  });" },
+      { type: "ctx", ln: "28", text: "});" }
+    ],
+    terminal: [
+      { text: "::notice::agent-roast auditing range: origin/main..HEAD (PR delta mode)", cls: "t-dim" },
+      { text: "audited 3 commits in pull request branch...", cls: "t-dim" },
+      { text: "" },
+      { text: "::error file=tests/auth.test.ts,line=24::[test-skip] skipped test added: it.skip('verifies RSA cryptographic signature')", cls: "t-deny" },
+      { text: "" },
+      { text: "INFRACTIONS DETECTED IN PR:", cls: "t-deny" },
+      { text: "  ● test-skip (1) — disabled test suite added in PR", cls: "t-deny" },
+      { text: "      tests/auth.test.ts:24 — it.skip('verifies RSA cryptographic signature')", cls: "t-dim" },
+      { text: "" },
+      { text: "FAIL: Blocking failure requested for rule: test-skip", cls: "t-deny" },
+      { text: "Error: Process completed with exit code 1.", cls: "t-deny" }
+    ]
   }
 };
 

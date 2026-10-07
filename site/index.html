@@ -25,6 +25,7 @@
       <ul class="nav-links">
         <li><a href="#how">How it works</a></li>
         <li><a href="#demo">Diff audit</a></li>
+        <li><a href="#ci-gate">CI Gate</a></li>
         <li><a href="#fork">The fork</a></li>
         <li><a href="#privacy">Privacy</a></li>
         <li><a href="https://github.com/Nari-Ab/agent-roast" target="_blank" rel="noopener">GitHub <svg class="ic ic-ext" width="12" height="12" viewBox="0 0 12 12"><path d="M3 1h8v8M11 1L1 11" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></a></li>
@@ -48,9 +49,9 @@
     <div class="container">
       <div class="hero-top">
         <div class="hero-head">
-          <h1 id="hero-title">Audit git history for AI coding agent infractions.</h1>
+          <h1 id="hero-title">Audit git history &amp; block AI infractions in CI.</h1>
           <div class="hero-row">
-            <p class="lead">AI coding agents make pipelines green by skipping failing tests, erasing types with <code>as any</code>, and spinning rapid-fire commit loops. <code>agent-roast</code> streams recorded git diffs and scores discipline from 0 to 100 with line proofs.</p>
+            <p class="lead">AI coding agents make pipelines green by skipping failing tests, erasing types with <code>as any</code>, and spinning rapid-fire commit loops. <code>agent-roast</code> scores git history and acts as a strict, zero-dependency GitHub Actions gate.</p>
             <div class="hero-cta">
               <div class="hero-actions">
                 <div class="install-pill">
@@ -93,6 +94,7 @@
                   <li class="ed-dir">src</li>
                   <li class="ed-f ed-on" id="file-tree-auth">client.ts</li>
                   <li class="ed-f" id="file-tree-test">client.test.ts</li>
+                  <li class="ed-f" id="file-tree-authtest">auth.test.ts</li>
                   <li class="ed-f">package.json</li>
                 </ul>
                 <div class="ed-scenarios">
@@ -101,6 +103,7 @@
                   <button class="sc-btn" data-scenario="test-skip">02. Test skip</button>
                   <button class="sc-btn" data-scenario="type-escape">03. Type bypass</button>
                   <button class="sc-btn" data-scenario="clean">04. Clean repo</button>
+                  <button class="sc-btn" data-scenario="pr-gate">05. CI Gate (PR)</button>
                 </div>
               </nav>
 
@@ -170,6 +173,100 @@
         </div>
       </div>
 
+      <!-- CI Quality Gate Section -->
+      <section class="ci-gate" id="ci-gate">
+        <div class="section-head">
+          <div class="badge-v02">v0.2.0 Release</div>
+          <h2>Block AI test skips and shortcuts in pull requests</h2>
+          <p>Enforce strict discipline in GitHub Actions. Zero telemetry, supply-chain hardened, runs in &lt;200ms.</p>
+        </div>
+
+        <div class="ci-gate-grid">
+          <div class="ci-code-card">
+            <div class="ci-card-bar">
+              <span class="tt-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+              <span class="ci-card-title">.github/workflows/agent-roast.yml</span>
+              <button class="copy-btn copy-btn-sm" type="button" data-copy="name: Agent Discipline Gate
+on: [pull_request]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Audit PR Discipline
+        uses: Nari-Ab/agent-roast@v1
+        with:
+          fail-on: test-skip,type-escape
+          range: origin/${{ github.base_ref }}..HEAD" data-select="ci-yaml-code" aria-label="Copy workflow">
+                <svg class="ic" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>
+                <span class="copy-label">Copy</span>
+              </button>
+            </div>
+            <pre class="ci-yaml" id="ci-yaml-code"><code><span class="y-k">name</span>: <span class="y-s">Agent Discipline Gate</span>
+<span class="y-k">on</span>: <span class="y-p">[</span><span class="y-s">pull_request</span><span class="y-p">]</span>
+
+<span class="y-k">jobs</span>:
+  <span class="y-k">audit</span>:
+    <span class="y-k">runs-on</span>: <span class="y-s">ubuntu-latest</span>
+    <span class="y-k">steps</span>:
+      - <span class="y-k">uses</span>: <span class="y-s">actions/checkout@v4</span>
+        <span class="y-k">with</span>:
+          <span class="y-k">fetch-depth</span>: <span class="y-m">0</span>
+
+      - <span class="y-k">name</span>: <span class="y-s">Audit PR Discipline</span>
+        <span class="y-k">uses</span>: <span class="y-s">Nari-Ab/agent-roast@v1</span>
+        <span class="y-k">with</span>:
+          <span class="y-k">fail-on</span>: <span class="y-s">test-skip,type-escape</span>
+          <span class="y-k">range</span>: <span class="y-s">origin/${{ github.base_ref }}..HEAD</span></code></pre>
+          </div>
+
+          <div class="ci-features">
+            <div class="ci-feat-item">
+              <div class="ci-feat-icon">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+              </div>
+              <div class="ci-feat-body">
+                <h4>PR-Delta Scrutiny</h4>
+                <p>Audits only the newly added commits in the PR branch. Existing legacy technical debt never causes false failures.</p>
+              </div>
+            </div>
+
+            <div class="ci-feat-item">
+              <div class="ci-feat-icon">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+              </div>
+              <div class="ci-feat-body">
+                <h4>Zero-Config <code>--fail-on</code></h4>
+                <p>Returns exit code 1 whenever critical rules (<code>test-skip</code>, <code>type-escape</code>, <code>panic-loop</code>) are violated in new code.</p>
+              </div>
+            </div>
+
+            <div class="ci-feat-item">
+              <div class="ci-feat-icon">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+              </div>
+              <div class="ci-feat-body">
+                <h4>Supply-Chain Hardened</h4>
+                <p>Isolated in dedicated runner temporary directory (<code>$RUNNER_TEMP</code>). No repo contamination, zero shell injection risks.</p>
+              </div>
+            </div>
+
+            <div class="ci-feat-item">
+              <div class="ci-feat-icon">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+              </div>
+              <div class="ci-feat-body">
+                <h4>Inline Diff Annotations</h4>
+                <p>Automatically emits GitHub Actions workflow commands to annotate offending lines directly in the pull request view.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- How It Works Section -->
       <section class="how" id="how">
         <div class="section-head">
@@ -203,9 +300,10 @@
             <p>Identifies author thrashing: rapid consecutive bugfix commits touching the same files within a 15-minute window.</p>
           </div>
 
-          <div class="tile">
-            <h3>6. CI/CD Integration Ready</h3>
-            <p>Outputs clean text or <code>--json</code>. Can be integrated into pre-commit hooks and GitHub Actions workflows.</p>
+          <div class="tile tile-highlight">
+            <span class="tile-pill">GitHub Action</span>
+            <h3>6. PR Quality Gate (@v1)</h3>
+            <p>Deploy <code>uses: Nari-Ab/agent-roast@v1</code> in GitHub Actions. Enforce <code>--fail-on test-skip</code> or block panic loops before merging pull requests.</p>
           </div>
         </div>
       </section>
@@ -238,7 +336,7 @@
         </div>
       </section>
 
-      <!-- Install / Run Callout -->
+      <!-- Quickstart and install block -->
       <section class="install-block">
         <div class="install-box">
           <h2>Audit your repository now</h2>

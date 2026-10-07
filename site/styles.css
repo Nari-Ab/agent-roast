@@ -614,6 +614,140 @@ code {
   color: var(--ink);
 }
 
+/* 4b. CI Quality Gate (v0.2.0) ------------------------------------------ */
+.ci-gate {
+  padding: 50px 0;
+  border-top: 1px solid var(--line);
+}
+
+.badge-v02 {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(78, 203, 127, 0.12);
+  color: var(--allow-text);
+  border: 1px solid rgba(78, 203, 127, 0.25);
+  margin-bottom: 12px;
+}
+
+.ci-gate-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.ci-code-card {
+  background: var(--term-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.ci-card-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--term-chrome);
+  border-bottom: 1px solid var(--line);
+}
+
+.ci-card-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ci-yaml {
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--term-fg);
+  overflow-x: auto;
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.ci-yaml code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.y-k { color: #82aaff; font-weight: 600; }
+.y-s { color: #c3e88d; }
+.y-p { color: #89ddff; }
+.y-m { color: #f78c6c; }
+
+.ci-features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ci-feat-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  transition: border-color 0.15s ease;
+}
+
+.ci-feat-item:hover {
+  border-color: var(--line-strong);
+}
+
+.ci-feat-icon {
+  flex-shrink: 0;
+  color: var(--allow-text);
+  margin-top: 2px;
+}
+
+.ci-feat-body h4 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+
+.ci-feat-body p {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.tile-highlight {
+  border-color: rgba(78, 203, 127, 0.3);
+  background: linear-gradient(180deg, rgba(78, 203, 127, 0.05) 0%, var(--paper-2) 100%);
+  position: relative;
+}
+
+.tile-pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--allow-tint);
+  color: var(--allow-text);
+  margin-bottom: 8px;
+}
+
 /* 5. Bento Grid / How It Works ------------------------------------------ */
 .how {
   padding: 50px 0;
@@ -845,6 +979,9 @@ code {
     display: none;
   }
   .fork-panes {
+    grid-template-columns: 1fr;
+  }
+  .ci-gate-grid {
     grid-template-columns: 1fr;
   }
   .bento-grid {
