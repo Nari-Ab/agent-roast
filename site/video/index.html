@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agent-roast — Video Reel Animation</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo-dark.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="studio-app">
+  <!-- Top Bar -->
+  <header class="studio-head">
+    <div class="head-left">
+      <a href="../" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13L5 8l5-5"/></svg>
+        <span>Back to agent-roast</span>
+      </a>
+      <span class="sep">/</span>
+      <span class="head-title">Official Video Reel</span>
+      <span class="tag-format">9:16 Vertical Reel</span>
+    </div>
+    <div class="head-right">
+      <div class="audio-picker">
+        <span class="opt-label">Voiceover:</span>
+        <button class="btn-toggle active" data-voice="en">English (Daniel)</button>
+        <button class="btn-toggle" data-voice="ru">Russian (Milena)</button>
+        <button class="btn-toggle" data-voice="none">Mute VO</button>
+      </div>
+      <button class="btn-primary" id="btn-export">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2v9m0 0l-3-3m3 3l3-3M2 13h12"/></svg>
+        <span>Export MP4 / WebM</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Studio Stage -->
+  <main class="studio-main">
+    <div class="viewport-wrapper">
+      <div class="phone-frame" id="phone-frame">
+        <div class="phone-screen">
+          <!-- Canvas for 60fps high-res rendering -->
+          <canvas id="render-canvas" width="1080" height="1920"></canvas>
+          
+          <!-- Overlays: Rec indicator & Watermark -->
+          <div class="screen-hud">
+            <div class="hud-top">
+              <span class="rec-dot"></span>
+              <span class="hud-time" id="hud-time">00:00:00</span>
+              <span class="hud-res">1080×1920 · 60FPS</span>
+            </div>
+            <div class="hud-bottom">
+              <span class="hud-brand">agent-roast</span>
+              <span class="hud-rule">stroq-grade discipline</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom Timeline & Control Bar -->
+  <footer class="studio-controls">
+    <div class="ctrl-row">
+      <div class="ctrl-playback">
+        <button class="btn-icon" id="btn-play" aria-label="Play or Pause">
+          <svg class="ic-play" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l10 5-10 5V3z"/></svg>
+          <svg class="ic-pause" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
+        </button>
+        <button class="btn-icon" id="btn-restart" aria-label="Restart Video">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9L2 6M2 2v4h4"/></svg>
+        </button>
+        <span class="time-label" id="time-display">00:00 / 00:29</span>
+      </div>
+
+      <!-- Scene Jumpers -->
+      <div class="scene-jumpers">
+        <button class="sc-jump" data-time="0">01. The Hook (0s)</button>
+        <button class="sc-jump" data-time="4.5">02. Infraction (4.5s)</button>
+        <button class="sc-jump" data-time="10.7">03. The Audit (10.7s)</button>
+        <button class="sc-jump" data-time="16.9">04. The Roast (16.9s)</button>
+        <button class="sc-jump" data-time="24.1">05. Outro (24.1s)</button>
+      </div>
+
+      <div class="ctrl-extra">
+        <button class="btn-subtle" id="btn-sound-test">Test SFX</button>
+        <button class="btn-subtle" id="btn-aspect">Toggle 16:9 / 9:16</button>
+      </div>
+    </div>
+
+    <!-- Timeline Scrubber -->
+    <div class="timeline-container">
+      <div class="timeline-track" id="timeline-track">
+        <div class="timeline-progress" id="timeline-progress"></div>
+        <div class="timeline-playhead" id="timeline-playhead"></div>
+        <div class="marker m1" style="left: 0%" title="The Hook"></div>
+        <div class="marker m2" style="left: 15.5%" title="The Infraction"></div>
+        <div class="marker m3" style="left: 36.9%" title="The Audit"></div>
+        <div class="marker m4" style="left: 58.3%" title="The Roast"></div>
+        <div class="marker m5" style="left: 83.1%" title="Outro"></div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script src="video.js"></script>
+</body>
+</html>
