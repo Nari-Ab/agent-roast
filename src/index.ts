@@ -29,6 +29,7 @@ export * from "./git.js";
 export * from "./metrics.js";
 export * from "./renderer.js";
 export * from "./config.js";
+export * from "./init.js";
 
 export class InvalidDetectorError extends Error {
   constructor(message: string) {
