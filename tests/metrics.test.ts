@@ -354,4 +354,116 @@ describe("Metrics Engine", () => {
     expect(summary.archetype).toBe("The Pragmatic Builder");
     expect(summary.archetype).not.toBe("The Silent Vandal");
   });
+
+  it("detects trivial assertions in test files", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "c-trivial",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Claude",
+      authorEmail: "claude@test.com",
+      message: "fix: passing tests",
+      isAiAttributed: true,
+      aiSignatures: ["trailer:claude"],
+      totalAddedCount: 300,
+      files: [
+        {
+          path: "tests/auth.test.ts",
+          addedLines: [
+            { line: "expect(true).toBe(true);", lineNumber: 10 },
+            { line: "expect(1).toBe(1);", lineNumber: 11 },
+            { line: "expect(false).toBe(false);", lineNumber: 12 },
+          ],
+        },
+        {
+          path: "tests/test_backend.py",
+          addedLines: [
+            { line: "assert True", lineNumber: 20 },
+            { line: "assert 1 == 1", lineNumber: 21 },
+            { line: "self.assertTrue(True)", lineNumber: 22 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.trivialAsserts).toHaveLength(6);
+    expect(summary.trivialAsserts[0].type).toBe("trivial-assert");
+  });
+
+  it("does not flag assertions in non-test production files", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "c-prod",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Dev",
+      authorEmail: "dev@test.com",
+      message: "feat: prod code with assert",
+      isAiAttributed: true,
+      aiSignatures: ["trailer:cursor"],
+      totalAddedCount: 300,
+      files: [
+        {
+          path: "src/utils.py",
+          addedLines: [
+            { line: "assert True  # prod sanity check", lineNumber: 15 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.trivialAsserts).toHaveLength(0);
+  });
+
+  it("detects stub abandonment in added lines", () => {
+    const collector = new MetricsCollector({ all: true });
+
+    const commit: ParsedCommit = {
+      hash: "c-stub",
+      date: "2026-10-04T12:00:00Z",
+      authorName: "Cursor",
+      authorEmail: "cursor@test.com",
+      message: "feat: skeleton implementation",
+      isAiAttributed: true,
+      aiSignatures: ["trailer:cursor"],
+      totalAddedCount: 300,
+      files: [
+        {
+          path: "src/service.ts",
+          addedLines: [
+            { line: 'throw new Error("Not implemented");', lineNumber: 40 },
+            { line: "throw new Error('TODO: implement auth');", lineNumber: 45 },
+          ],
+        },
+        {
+          path: "src/worker.py",
+          addedLines: [
+            { line: "raise NotImplementedError('TODO')", lineNumber: 50 },
+            { line: "raise NotImplemented", lineNumber: 55 },
+          ],
+        },
+        {
+          path: "src/lib.rs",
+          addedLines: [
+            { line: "todo!()", lineNumber: 60 },
+            { line: "unimplemented!()", lineNumber: 65 },
+          ],
+        },
+      ],
+    };
+
+    collector.processCommit(commit);
+    const summary = collector.getSummary();
+
+    expect(summary.stubAbandonments).toHaveLength(6);
+    expect(summary.stubAbandonments[0].type).toBe("stub-abandonment");
+  });
 });
+

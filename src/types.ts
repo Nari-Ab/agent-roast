@@ -8,13 +8,21 @@ export interface CommitInfo {
   aiSignatures: string[];
 }
 
-export type DetectorType = "test-skip" | "type-escape" | "swallowed-error" | "panic-loop";
+export type DetectorType =
+  | "test-skip"
+  | "type-escape"
+  | "swallowed-error"
+  | "panic-loop"
+  | "trivial-assert"
+  | "stub-abandonment";
 
 export const VALID_DETECTORS: readonly DetectorType[] = [
   "test-skip",
   "type-escape",
   "swallowed-error",
   "panic-loop",
+  "trivial-assert",
+  "stub-abandonment",
 ] as const;
 
 export interface Infraction {
@@ -37,6 +45,8 @@ export interface MetricSummary {
   typeEscapes: Infraction[];
   swallowedErrors: Infraction[];
   panicLoops: Infraction[];
+  trivialAsserts: Infraction[];
+  stubAbandonments: Infraction[];
   rawScore: number;
   score: number | null; // 0 - 100 or null if insufficient data
   isSufficientData: boolean;

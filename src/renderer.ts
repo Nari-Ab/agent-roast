@@ -42,15 +42,17 @@ export function formatTerminalCard(
   lines.push("");
 
   const totalInfractions =
-    summary.testSkips.length +
-    summary.typeEscapes.length +
-    summary.swallowedErrors.length +
-    summary.panicLoops.length;
+    (summary.testSkips?.length || 0) +
+    (summary.typeEscapes?.length || 0) +
+    (summary.swallowedErrors?.length || 0) +
+    (summary.panicLoops?.length || 0) +
+    (summary.trivialAsserts?.length || 0) +
+    (summary.stubAbandonments?.length || 0);
 
   lines.push(pc.bold(`  INFRACTIONS (${totalInfractions})`));
   lines.push(pc.dim("  ──────────────────────────────────────────────────────────"));
 
-  if (summary.panicLoops.length > 0) {
+  if (summary.panicLoops && summary.panicLoops.length > 0) {
     lines.push(
       `  ${pc.magenta("●")} ${pc.bold("panic-loop")} (${summary.panicLoops.length})  ${pc.dim("consecutive quick fixes < 15m apart")}`
     );
@@ -58,17 +60,17 @@ export function formatTerminalCard(
     lines.push(`      ${pc.dim(sample.reason)}`);
   }
 
-  if (summary.typeEscapes.length > 0) {
+  if (summary.trivialAsserts && summary.trivialAsserts.length > 0) {
     lines.push(
-      `  ${pc.yellow("●")} ${pc.bold("type-escape")} (${summary.typeEscapes.length})  ${pc.dim("compiler bypasses (as any, @ts-ignore)")}`
+      `  ${pc.red("●")} ${pc.bold("trivial-assert")} (${summary.trivialAsserts.length})  ${pc.dim("vacuous test assertions (expect(true).toBe(true), assert True)")}`
     );
-    const sample = summary.typeEscapes[0];
+    const sample = summary.trivialAsserts[0];
     if (sample.file) {
       lines.push(`      ${pc.dim(`${sample.file}: ${sample.lineSnippet || ""}`)}`);
     }
   }
 
-  if (summary.testSkips.length > 0) {
+  if (summary.testSkips && summary.testSkips.length > 0) {
     lines.push(
       `  ${pc.red("●")} ${pc.bold("test-skip")} (${summary.testSkips.length})  ${pc.dim("skipped or disabled tests")}`
     );
@@ -78,11 +80,31 @@ export function formatTerminalCard(
     }
   }
 
-  if (summary.swallowedErrors.length > 0) {
+  if (summary.swallowedErrors && summary.swallowedErrors.length > 0) {
     lines.push(
       `  ${pc.red("●")} ${pc.bold("swallowed-error")} (${summary.swallowedErrors.length})  ${pc.dim("empty catch blocks or except: pass")}`
     );
     const sample = summary.swallowedErrors[0];
+    if (sample.file) {
+      lines.push(`      ${pc.dim(`${sample.file}: ${sample.lineSnippet || ""}`)}`);
+    }
+  }
+
+  if (summary.stubAbandonments && summary.stubAbandonments.length > 0) {
+    lines.push(
+      `  ${pc.yellow("●")} ${pc.bold("stub-abandonment")} (${summary.stubAbandonments.length})  ${pc.dim("unimplemented placeholders (throw new Error('TODO'), NotImplementedError)")}`
+    );
+    const sample = summary.stubAbandonments[0];
+    if (sample.file) {
+      lines.push(`      ${pc.dim(`${sample.file}: ${sample.lineSnippet || ""}`)}`);
+    }
+  }
+
+  if (summary.typeEscapes && summary.typeEscapes.length > 0) {
+    lines.push(
+      `  ${pc.yellow("●")} ${pc.bold("type-escape")} (${summary.typeEscapes.length})  ${pc.dim("compiler bypasses (as any, @ts-ignore)")}`
+    );
+    const sample = summary.typeEscapes[0];
     if (sample.file) {
       lines.push(`      ${pc.dim(`${sample.file}: ${sample.lineSnippet || ""}`)}`);
     }
@@ -109,10 +131,12 @@ export function formatTerminalCard(
     }
 
     const allInfractions = [
-      ...summary.testSkips,
-      ...summary.typeEscapes,
-      ...summary.swallowedErrors,
-      ...summary.panicLoops,
+      ...(summary.testSkips || []),
+      ...(summary.trivialAsserts || []),
+      ...(summary.swallowedErrors || []),
+      ...(summary.stubAbandonments || []),
+      ...(summary.typeEscapes || []),
+      ...(summary.panicLoops || []),
     ];
 
     if (allInfractions.length > 0) {
@@ -195,7 +219,7 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
  */
 function sortInfractionsDeterministic(infractions: import("./types.js").Infraction[]): import("./types.js").Infraction[] {
   const getLevelRank = (type: string) => {
-    return type === "test-skip" || type === "swallowed-error" ? 0 : 1;
+    return type === "test-skip" || type === "trivial-assert" || type === "swallowed-error" ? 0 : 1;
   };
 
   return [...infractions].sort((a, b) => {
@@ -226,7 +250,7 @@ export function formatGithubAnnotations(result: import("./types.js").PrAuditResu
   for (const inf of sorted) {
     if (!inf.file || inf.file === "unknown") continue;
 
-    const isError = result.failedRules.includes(inf.type) || inf.type === "test-skip" || inf.type === "swallowed-error";
+    const isError = result.failedRules.includes(inf.type) || inf.type === "test-skip" || inf.type === "trivial-assert" || inf.type === "swallowed-error";
     const line = inf.lineNumber || 1;
     const title = inf.reason.replace(/[\r\n]/g, " ");
     const msg = (inf.lineSnippet || inf.reason).replace(/[\r\n]/g, " ");

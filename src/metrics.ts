@@ -29,12 +29,30 @@ const SWALLOWED_ERROR_PATTERNS = [
   { regex: /except(?:\s+[^:]*)?:\s*pass\b/, name: "silent python error swallow (except: pass)" },
 ];
 
+const TRIVIAL_ASSERT_PATTERNS = [
+  { regex: /expect\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)\.toBe\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)/, name: "trivial assertion (expect(val).toBe(val))" },
+  { regex: /expect\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)\.toEqual\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)/, name: "trivial assertion (expect(val).toEqual(val))" },
+  { regex: /\bassert\s+(?:True|False|1\s*==\s*1)\b/, name: "trivial python assert (assert True / 1 == 1)" },
+  { regex: /self\.assertTrue\s*\(\s*(?:True|1)\s*\)/, name: "trivial assert (self.assertTrue(True))" },
+  { regex: /self\.assertEqual\s*\(\s*(?:1\s*,\s*1|True\s*,\s*True)\s*\)/, name: "trivial assert (self.assertEqual(1, 1))" },
+  { regex: /assert\.(?:strictEqual|equal)\s*\(\s*(?:true\s*,\s*true|1\s*,\s*1)\s*\)/, name: "trivial assert (assert.equal(1, 1))" },
+];
+
+const STUB_ABANDONMENT_PATTERNS = [
+  { regex: /(?:^|[;{}]\s*|\breturn\s+)throw\s+new\s+Error\s*\(\s*["'](?:TODO|Not implemented|to be implemented|stub|implement me)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
+  { regex: /\braise\s+NotImplementedError\b/, name: "unimplemented stub (raise NotImplementedError)" },
+  { regex: /\braise\s+NotImplemented\b/, name: "unimplemented stub (raise NotImplemented)" },
+  { regex: /\btodo!\s*\(\s*\)/, name: "unimplemented rust stub (todo!())" },
+  { regex: /\bunimplemented!\s*\(\s*\)/, name: "unimplemented rust stub (unimplemented!())" },
+];
+
 const CODE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c"
 ]);
 
 const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
+const TEST_PATH_REGEX = /(?:^|\/)(?:tests?|__tests__|specs?)\/|[._-](?:test|spec)\.[a-z0-9]+$/i;
 
 export function isCodeFile(filePath: string): boolean {
   if (IGNORED_PATH_REGEX.test(filePath)) {
@@ -42,6 +60,10 @@ export function isCodeFile(filePath: string): boolean {
   }
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
   return CODE_EXTENSIONS.has(ext);
+}
+
+export function isTestFile(filePath: string): boolean {
+  return TEST_PATH_REGEX.test(filePath);
 }
 
 /**
@@ -146,6 +168,42 @@ export function auditFileDiffs(
           }
         }
       }
+
+      // D. Trivial Assertions (only in test files)
+      if (!isComment && isTestFile(file.path)) {
+        for (const rule of TRIVIAL_ASSERT_PATTERNS) {
+          if (rule.regex.test(cleanedLine)) {
+            infractions.push({
+              type: "trivial-assert",
+              file: file.path,
+              lineNumber: added.lineNumber,
+              lineSnippet: rawLine.trim(),
+              commitHash,
+              commitDate,
+              reason: rule.name,
+            });
+            break;
+          }
+        }
+      }
+
+      // E. Stub Abandonment
+      if (!isComment) {
+        for (const rule of STUB_ABANDONMENT_PATTERNS) {
+          if (rule.regex.test(rawLine)) {
+            infractions.push({
+              type: "stub-abandonment",
+              file: file.path,
+              lineNumber: added.lineNumber,
+              lineSnippet: rawLine.trim(),
+              commitHash,
+              commitDate,
+              reason: rule.name,
+            });
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -186,6 +244,8 @@ export class MetricsCollector {
   private typeEscapes: Infraction[] = [];
   private swallowedErrors: Infraction[] = [];
   private panicLoops: Infraction[] = [];
+  private trivialAsserts: Infraction[] = [];
+  private stubAbandonments: Infraction[] = [];
 
   private skippedLongLines = 0;
   private skippedUnknownFiles = 0;
@@ -312,6 +372,8 @@ export class MetricsCollector {
     let commitSkips = 0;
     let commitEscapes = 0;
     let commitSwallowed = 0;
+    let commitTrivial = 0;
+    let commitStubs = 0;
 
     for (const file of commit.files) {
       if (!isCodeFile(file.path)) {
@@ -400,6 +462,44 @@ export class MetricsCollector {
             }
           }
         }
+
+        // D. Trivial Assertions (only in test files)
+        if (!isComment && isTestFile(file.path) && commitTrivial < MAX_INFRACTIONS_PER_COMMIT) {
+          for (const rule of TRIVIAL_ASSERT_PATTERNS) {
+            if (rule.regex.test(cleanedLine)) {
+              this.trivialAsserts.push({
+                type: "trivial-assert",
+                file: file.path,
+                lineNumber: added.lineNumber,
+                lineSnippet: rawLine.trim(),
+                commitHash: commit.hash,
+                commitDate: commit.date,
+                reason: rule.name,
+              });
+              commitTrivial++;
+              break;
+            }
+          }
+        }
+
+        // E. Stub Abandonment (only in non-comment code)
+        if (!isComment && commitStubs < MAX_INFRACTIONS_PER_COMMIT) {
+          for (const rule of STUB_ABANDONMENT_PATTERNS) {
+            if (rule.regex.test(rawLine)) {
+              this.stubAbandonments.push({
+                type: "stub-abandonment",
+                file: file.path,
+                lineNumber: added.lineNumber,
+                lineSnippet: rawLine.trim(),
+                commitHash: commit.hash,
+                commitDate: commit.date,
+                reason: rule.name,
+              });
+              commitStubs++;
+              break;
+            }
+          }
+        }
       }
     }
   }
@@ -413,7 +513,9 @@ export class MetricsCollector {
     // Code infractions penalty
     const codeInfractionPoints =
       this.testSkips.length * 15 +
+      this.trivialAsserts.length * 15 +
       this.swallowedErrors.length * 10 +
+      this.stubAbandonments.length * 8 +
       this.typeEscapes.length * 3;
 
     // Panic loops penalty: logarithmic weighting by chain length
@@ -458,11 +560,13 @@ export class MetricsCollector {
       } else {
         // Score is < 90: infractions are statistically notable and warrant a roast
         const testSkipPoints = this.testSkips.length * 15;
+        const trivialPoints = this.trivialAsserts.length * 15;
         const panicPoints = this.panicLoops.length * 8;
+        const stubPoints = this.stubAbandonments.length * 8;
         const escapePoints = this.typeEscapes.length * 3;
         const swallowPoints = this.swallowedErrors.length * 10;
 
-        const maxPoints = Math.max(testSkipPoints, panicPoints, escapePoints, swallowPoints);
+        const maxPoints = Math.max(testSkipPoints, trivialPoints, panicPoints, stubPoints, escapePoints, swallowPoints);
 
         if (maxPoints === panicPoints && this.panicLoops.length >= 2) {
           archetype = "The Panic Looper";
@@ -470,6 +574,12 @@ export class MetricsCollector {
         } else if (maxPoints === testSkipPoints && this.testSkips.length >= 3) {
           archetype = "The Silent Vandal";
           archetypeDescription = "When test suites push back, tends to disable or skip tests to keep pipelines green.";
+        } else if (maxPoints === trivialPoints && this.trivialAsserts.length >= 2) {
+          archetype = "The Fake Asserter";
+          archetypeDescription = "Masks broken tests by replacing real assertions with trivial expect(true).toBe(true) or assert True.";
+        } else if (maxPoints === stubPoints && this.stubAbandonments.length >= 2) {
+          archetype = "The Stub Abandoner";
+          archetypeDescription = "Rushes through implementations by leaving unimplemented placeholders and TODO throws.";
         } else if (maxPoints === escapePoints && this.typeEscapes.length >= 5) {
           archetype = "The Any Architect";
           archetypeDescription = "Leans on compiler bypasses (`as any`, `@ts-ignore`) rather than strict type modeling.";
@@ -496,6 +606,8 @@ export class MetricsCollector {
       typeEscapes: this.typeEscapes,
       swallowedErrors: this.swallowedErrors,
       panicLoops: this.panicLoops,
+      trivialAsserts: this.trivialAsserts,
+      stubAbandonments: this.stubAbandonments,
       rawScore: totalInfractionPoints,
       score,
       isSufficientData,
