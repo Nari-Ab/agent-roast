@@ -46,6 +46,8 @@ const STUB_ABANDONMENT_PATTERNS = [
   { regex: /\bunimplemented!\s*\(\s*\)/, name: "unimplemented rust stub (unimplemented!())" },
 ];
 
+import { matchIgnorePath } from "./config.js";
+
 const CODE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
   ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c"
@@ -54,8 +56,11 @@ const CODE_EXTENSIONS = new Set([
 const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
 const TEST_PATH_REGEX = /(?:^|\/)(?:tests?|__tests__|specs?)\/|[._-](?:test|spec)\.[a-z0-9]+$/i;
 
-export function isCodeFile(filePath: string): boolean {
+export function isCodeFile(filePath: string, customIgnorePaths?: string[]): boolean {
   if (IGNORED_PATH_REGEX.test(filePath)) {
+    return false;
+  }
+  if (customIgnorePaths && matchIgnorePath(filePath, customIgnorePaths)) {
     return false;
   }
   const ext = filePath.slice(filePath.lastIndexOf(".")).toLowerCase();
@@ -72,7 +77,8 @@ export function isTestFile(filePath: string): boolean {
 export function auditFileDiffs(
   files: ParsedFileDiff[],
   commitHash: string = "HEAD",
-  commitDate: string = new Date().toISOString()
+  commitDate: string = new Date().toISOString(),
+  options: { ignorePaths?: string[] } = {}
 ): {
   infractions: Infraction[];
   hasSupportedChanges: boolean;
@@ -86,7 +92,7 @@ export function auditFileDiffs(
 
   for (const file of files) {
     if (file.deleted || file.path === "unknown") continue;
-    if (!isCodeFile(file.path)) continue;
+    if (!isCodeFile(file.path, options.ignorePaths)) continue;
 
     hasSupportedChanges = true;
     filesInspected++;
@@ -262,9 +268,11 @@ export class MetricsCollector {
   } | null = null;
 
   private includeAll: boolean;
+  private ignorePaths?: string[];
 
-  constructor(options: { all?: boolean } = {}) {
+  constructor(options: { all?: boolean; ignorePaths?: string[] } = {}) {
     this.includeAll = options.all ?? false;
+    this.ignorePaths = options.ignorePaths;
   }
 
   recordSkipped(stats: { skippedLongLines?: number; skippedUnknownFiles?: number }): void {
@@ -376,7 +384,7 @@ export class MetricsCollector {
     let commitStubs = 0;
 
     for (const file of commit.files) {
-      if (!isCodeFile(file.path)) {
+      if (!isCodeFile(file.path, this.ignorePaths)) {
         continue;
       }
 

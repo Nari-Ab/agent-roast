@@ -28,6 +28,7 @@ export * from "./detector.js";
 export * from "./git.js";
 export * from "./metrics.js";
 export * from "./renderer.js";
+export * from "./config.js";
 
 export class InvalidDetectorError extends Error {
   constructor(message: string) {
@@ -43,7 +44,7 @@ export async function roastRepository(
   const since = options.since || "90 days ago";
   const repoName = path.basename(cwd);
 
-  const collector = new MetricsCollector({ all: options.all });
+  const collector = new MetricsCollector({ all: options.all, ignorePaths: options.ignorePaths });
   const gitStream = streamGitLog(cwd, since);
 
   await parseGitLogStream(gitStream, (commit, stats) => {
@@ -98,7 +99,7 @@ export async function auditPullRequest(
   const { files, skippedLongLines, skippedUnknownFiles } = parseDiff(rawDiff);
 
   // 5. Audit files
-  const audit = auditFileDiffs(files, headSha);
+  const audit = auditFileDiffs(files, headSha, new Date().toISOString(), { ignorePaths: options.ignorePaths });
   const infractions = audit.infractions;
 
   const defectDensityPer100Lines = audit.linesAdded > 0

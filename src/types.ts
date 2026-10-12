@@ -63,6 +63,8 @@ export interface RoastOptions {
   verbose?: boolean;
   json?: boolean;
   authors?: boolean;
+  ignorePaths?: string[];
+  scoreThreshold?: number;
 }
 
 export interface PrAuditOptions {
@@ -73,6 +75,7 @@ export interface PrAuditOptions {
   format?: "terminal" | "json" | "github";
   verbose?: boolean;
   authors?: boolean;
+  ignorePaths?: string[];
 }
 
 export interface PrAuditResult {
