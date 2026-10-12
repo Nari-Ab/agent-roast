@@ -18,17 +18,23 @@
 
 </div>
 
-`agent-roast` scans recorded git diffs for shortcuts taken by AI coding assistants (Claude Code, Cursor, Codex, Antigravity, Aider). It checks for skipped tests, compiler type escapes (`as any`), swallowed errors, and panic revert loops, then outputs a discipline score and line proofs. 100% offline, zero API keys, zero telemetry.
+`agent-roast` scans recorded git diffs for shortcuts taken by AI coding assistants (Claude Code, Cursor, Codex, Antigravity, Aider). It checks for skipped tests, fake tautological assertions, abandoned stubs, compiler type escapes (`as any`), swallowed errors, and panic revert loops, then outputs a discipline score and line proofs. 100% offline, zero API keys, zero telemetry.
 
 ```bash
+# Initialize in your repository (creates .agentroastrc.json)
+npx agent-roast init
+npx agent-roast init --ci      # generate .github/workflows/agent-roast.yml
+npx agent-roast init --hook    # install .git/hooks/pre-commit
+
 # Audit repository history
 npx agent-roast            # scan AI-attributed commits (last 90 days)
 npx agent-roast --all      # scan entire repository history
 npx agent-roast --verbose  # show commit SHAs and line proofs
+npx agent-roast --fail-under 70 # exit code 1 if score is below 70
 
 # Audit pull request diffs (CI gate)
 npx agent-roast --base origin/main --head HEAD
-npx agent-roast --base origin/main --head HEAD --fail-on test-skip,swallowed-error --format github
+npx agent-roast --base origin/main --head HEAD --fail-on test-skip,trivial-assert,stub-abandonment --format github
 ```
 
 What a report looks like (a real repository audit, trimmed):
@@ -50,6 +56,12 @@ INFRACTIONS DETECTED (42)
   ● test-skip (6) — disabled or skipped test suites
       e.g. tests/test_outbound.py:18 — pytest.skip(...)
 
+  ● trivial-assert (2) — tautological assertions faking test coverage
+      e.g. tests/auth.test.ts:31 — expect(true).toBe(true)
+
+  ● stub-abandonment (1) — incomplete stubs left behind
+      e.g. src/payment.ts:18 — throw new Error("Not implemented")
+
   ● swallowed-error (2) — empty catch blocks or except: pass
 ```
 
@@ -59,12 +71,38 @@ INFRACTIONS DETECTED (42)
 
 ---
 
+### Configuration (`.agentroastrc.json`)
+
+Configure custom ignore paths, rule severities, and CI thresholds with a `.agentroastrc.json` file in your repository root:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/sidzuya/agent-roast/main/schema.json",
+  "ignorePaths": [
+    "**/*.min.js",
+    "**/vendor/**",
+    "**/dist/**",
+    "**/fixtures/**"
+  ],
+  "rules": {
+    "hallucinated-package": "error",
+    "empty-catch": "warn",
+    "trivial-assert": "warn",
+    "stub-abandonment": "warn",
+    "mock-leak": "warn"
+  },
+  "scoreThreshold": 70
+}
+```
+
+---
+
 ### GitHub Actions Integration
 
-Add `agent-roast` as a gate in your pull request workflow (`.github/workflows/audit.yml`):
+Add `agent-roast` as a gate in your pull request workflow (`.github/workflows/agent-roast.yml`):
 
 ```yaml
-name: Agent Audit
+name: Agent Roast
 on:
   pull_request:
     branches: [main]
@@ -83,7 +121,7 @@ jobs:
       - name: Run agent-roast audit
         uses: Nari-Ab/agent-roast@v1
         with:
-          fail-on: test-skip
+          fail-on: test-skip,trivial-assert,stub-abandonment
           format: github
 ```
 
@@ -96,6 +134,8 @@ jobs:
 Only **added lines** (`+`) in source code files are scanned — deleted lines, file moves, and comments never trigger false alarms.
 
 - **Skipped tests (`test-skip`):** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests. (Default blocking gate).
+- **Trivial assertions (`trivial-assert`):** Tautological or dummy assertions added to fabricate test green checks (`expect(true).toBe(true)`, `expect(1).toBe(1)`, `assert True`, `self.assertTrue(True)`).
+- **Stub abandonment (`stub-abandonment`):** Dummy stubs left unimplemented in committed code (`throw new Error("Not implemented")`, `raise NotImplementedError`, Rust `todo!()` / `unimplemented!()`).
 - **Type escapes (`type-escape`):** `as any`, `as unknown as`, `as never`, `// @ts-ignore`, `// @ts-nocheck`, `// @ts-expect-error`, `# type: ignore`, `# noqa`, `eslint-disable`.
 - **Swallowed errors (`swallowed-error`):** Empty `catch {}` or `except: pass` blocks hiding runtime failures.
 - **Panic fix loops (`panic-loop`):** Heuristic chain analysis of rapid-fire fix/revert commits by the same author within 15 minutes touching overlapping files. *(Observational metric for repository audits; not a PR blocker)*.

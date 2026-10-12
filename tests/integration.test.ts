@@ -211,5 +211,111 @@ describe("Real Git Integration with Hostile Environment", () => {
       fs.rmSync(emptyDir, { recursive: true, force: true });
     }
   });
+
+  it("detects trivial-assert and stub-abandonment in PR diff while respecting ignorePaths", async () => {
+    const testRepoDir = path.join(process.cwd(), ".tmp-v03-repo");
+    fs.rmSync(testRepoDir, { recursive: true, force: true });
+    fs.mkdirSync(testRepoDir, { recursive: true });
+
+    const env = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: hostileConfigPath,
+    };
+
+    try {
+      execSync("git init -b main", { cwd: testRepoDir, env, stdio: "ignore" });
+      execSync('git config user.name "AI Tester"', { cwd: testRepoDir, env, stdio: "ignore" });
+      execSync('git config user.email "ai@test.local"', { cwd: testRepoDir, env, stdio: "ignore" });
+
+      // Base commit
+      fs.writeFileSync(path.join(testRepoDir, "readme.txt"), "hello base\n");
+      execSync("git add . && git commit -m 'initial'", { cwd: testRepoDir, env, stdio: "ignore" });
+
+      // Feature branch
+      execSync("git checkout -b feature/agent-shortcuts", { cwd: testRepoDir, env, stdio: "ignore" });
+
+      // 1. Trivial assert in test file
+      fs.writeFileSync(
+        path.join(testRepoDir, "worker.test.ts"),
+        'describe("worker", () => { it("works", () => { expect(true).toBe(true); }); });\n'
+      );
+
+      // 2. Stub abandonment in source file
+      fs.writeFileSync(
+        path.join(testRepoDir, "worker.ts"),
+        'export function processTask() {\n  throw new Error("Not implemented");\n}\n'
+      );
+
+      // 3. Stub abandonment in ignored fixture directory
+      fs.mkdirSync(path.join(testRepoDir, "fixtures"), { recursive: true });
+      fs.writeFileSync(
+        path.join(testRepoDir, "fixtures", "mock.ts"),
+        'export function dummy() {\n  throw new Error("Not implemented");\n}\n'
+      );
+
+      execSync("git add . && git commit -m 'feat: add agent changes'", { cwd: testRepoDir, env, stdio: "ignore" });
+
+      // Audit PR
+      const prResult = await auditPullRequest({
+        cwd: testRepoDir,
+        base: "main",
+        head: "feature/agent-shortcuts",
+        failOn: ["trivial-assert", "stub-abandonment"],
+        ignorePaths: ["**/fixtures/**"],
+      });
+
+      expect(prResult.hasSupportedChanges).toBe(true);
+      expect(prResult.passed).toBe(false);
+      expect(prResult.exitCode).toBe(1);
+      expect(prResult.failedRules).toContain("trivial-assert");
+      expect(prResult.failedRules).toContain("stub-abandonment");
+
+      const types = prResult.infractions.map((i) => i.type);
+      expect(types).toContain("trivial-assert");
+      expect(types).toContain("stub-abandonment");
+
+      // Verify ignored file was NOT included in infractions
+      const filesWithInfractions = prResult.infractions.map((i) => i.file);
+      expect(filesWithInfractions).toContain("worker.test.ts");
+      expect(filesWithInfractions).toContain("worker.ts");
+      expect(filesWithInfractions.some((f) => f.includes("fixtures"))).toBe(false);
+    } finally {
+      fs.rmSync(testRepoDir, { recursive: true, force: true });
+    }
+  });
+
+  it("executes 'agent-roast init --ci --hook' successfully via CLI binary", () => {
+    const initTestDir = path.join(process.cwd(), ".tmp-v03-init");
+    fs.rmSync(initTestDir, { recursive: true, force: true });
+    fs.mkdirSync(initTestDir, { recursive: true });
+
+    const env = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: hostileConfigPath,
+    };
+
+    try {
+      execSync("git init -b main", { cwd: initTestDir, env, stdio: "ignore" });
+
+      const output = execSync(
+        `node ./dist/cli.js init "${initTestDir}" --yes --ci --hook`,
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+        }
+      );
+
+      expect(output).toContain("Initialized agent-roast in");
+      expect(output).toContain(".agentroastrc.json");
+      expect(output).toContain(".github/workflows/agent-roast.yml");
+      expect(output).toContain(".git/hooks/pre-commit");
+
+      expect(fs.existsSync(path.join(initTestDir, ".agentroastrc.json"))).toBe(true);
+      expect(fs.existsSync(path.join(initTestDir, ".github", "workflows", "agent-roast.yml"))).toBe(true);
+      expect(fs.existsSync(path.join(initTestDir, ".git", "hooks", "pre-commit"))).toBe(true);
+    } finally {
+      fs.rmSync(initTestDir, { recursive: true, force: true });
+    }
+  });
 });
 

@@ -15,7 +15,7 @@ inputs:
     required: false
     default: ""
   fail-on:
-    description: "Comma-separated detectors that trigger pipeline failure (test-skip, type-escape, swallowed-error)"
+    description: "Comma-separated detectors that trigger pipeline failure (test-skip, type-escape, swallowed-error, trivial-assert, stub-abandonment)"
     required: false
     default: "test-skip"
   format:
@@ -60,7 +60,7 @@ runs:
 
         INSTALL_DIR="${RUNNER_TEMP:-/tmp}/agent-roast-bin"
         mkdir -p "$INSTALL_DIR"
-        npm install --prefix "$INSTALL_DIR" agent-roast@0.2.0 --ignore-scripts --no-audit --no-fund > /dev/null 2>&1
+        npm install --prefix "$INSTALL_DIR" agent-roast@^0.3.0 --ignore-scripts --no-audit --no-fund > /dev/null 2>&1
 
         "$INSTALL_DIR/node_modules/.bin/agent-roast" \
           --base "$ROAST_BASE" \

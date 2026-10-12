@@ -39,7 +39,7 @@ const TRIVIAL_ASSERT_PATTERNS = [
 ];
 
 const STUB_ABANDONMENT_PATTERNS = [
-  { regex: /(?:^|[;{}]\s*|\breturn\s+)throw\s+new\s+Error\s*\(\s*["'](?:TODO|Not implemented|to be implemented|stub|implement me)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
+  { regex: /\bthrow\s+new\s+Error\s*\(\s*["'](?:TODO|Not implemented|to be implemented|stub|implement me)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
   { regex: /\braise\s+NotImplementedError\b/, name: "unimplemented stub (raise NotImplementedError)" },
   { regex: /\braise\s+NotImplemented\b/, name: "unimplemented stub (raise NotImplemented)" },
   { regex: /\btodo!\s*\(\s*\)/, name: "unimplemented rust stub (todo!())" },
