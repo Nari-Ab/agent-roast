@@ -13,6 +13,7 @@ import {
   formatTerminalCard,
   formatPrTerminalCard,
   formatGithubAnnotations,
+  formatPrMarkdownComment,
 } from "./renderer.js";
 import {
   MetricSummary,
@@ -30,6 +31,7 @@ export * from "./metrics.js";
 export * from "./renderer.js";
 export * from "./config.js";
 export * from "./init.js";
+export * from "./badge.js";
 
 export class InvalidDetectorError extends Error {
   constructor(message: string) {
@@ -138,6 +140,8 @@ export async function auditPullRequest(
     result.output = JSON.stringify(result, null, 2);
   } else if (format === "github") {
     result.output = formatGithubAnnotations(result);
+  } else if (format === "markdown") {
+    result.output = formatPrMarkdownComment(result);
   } else {
     result.output = formatPrTerminalCard(result);
   }

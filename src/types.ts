@@ -72,7 +72,7 @@ export interface PrAuditOptions {
   base: string;
   head: string;
   failOn?: string[];
-  format?: "terminal" | "json" | "github";
+  format?: "terminal" | "json" | "github" | "markdown";
   verbose?: boolean;
   authors?: boolean;
   ignorePaths?: string[];

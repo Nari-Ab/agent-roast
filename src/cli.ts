@@ -1,11 +1,15 @@
 import { Command } from "commander";
 import { createRequire } from "module";
 import * as fs from "fs";
+import * as path from "path";
 import {
   roastRepository,
   auditPullRequest,
   loadConfig,
   initProject,
+  generateSvgBadge,
+  generateShieldsMarkdown,
+  generateShieldsJson,
   GitResolutionError,
   InvalidDetectorError,
   GitError,
@@ -20,7 +24,7 @@ const program = new Command();
 program
   .name("agent-roast")
   .description("Audit your git history or PR diffs for AI coding shortcuts and panic loops")
-  .version(pkg.version || "0.3.0")
+  .version(pkg.version || "0.4.0")
   .argument("[path]", "Path to git repository (default: current directory)", ".")
   .option("-a, --all", "Audit ALL commits regardless of AI attribution tags", false)
   .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
@@ -30,7 +34,7 @@ program
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
   .option("--fail-under <score>", "Fail CI if agent score is below threshold (0-100)")
-  .option("--format <format>", "Output format: terminal, json, github", "terminal")
+  .option("--format <format>", "Output format: terminal, json, github, markdown", "terminal")
   .option("--authors", "Display author names and emails in report", false)
   .action(async (repoPath: string, options: any) => {
     try {
@@ -176,6 +180,59 @@ program
       }
     } catch (err: any) {
       console.error(`Failed to initialize agent-roast: ${err.message}`);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("badge")
+  .description("Generate an AI discipline badge (SVG, Markdown, or Shields JSON)")
+  .argument("[path]", "Path to git repository (default: current directory)", ".")
+  .option("-a, --all", "Audit ALL commits regardless of AI attribution tags", false)
+  .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
+  .option("--label <text>", "Badge label text", "AI Discipline")
+  .option("--out <file>", "Output SVG file path (e.g. ./badge.svg)")
+  .action(async (repoPath: string, opts: any) => {
+    try {
+      const rootOpts = program.opts();
+      const isJson = Boolean(opts.json || rootOpts.json);
+      const isAll = Boolean(opts.all || rootOpts.all);
+      const since = opts.since || rootOpts.since || "90 days ago";
+
+      const config = await loadConfig(repoPath);
+      const result = await roastRepository({
+        cwd: repoPath,
+        since,
+        all: isAll,
+        ignorePaths: config.ignorePaths,
+      });
+
+      const score = result.summary.score;
+      const label = opts.label || "AI Discipline";
+
+      if (isJson) {
+        const payload = generateShieldsJson(score, label);
+        console.log(JSON.stringify(payload, null, 2));
+        process.exitCode = 0;
+        return;
+      }
+
+      if (opts.out) {
+        const svg = generateSvgBadge(score, label);
+        const outPath = path.resolve(opts.out);
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, svg, "utf-8");
+        console.log(`Generated SVG badge at: ${opts.out}`);
+        process.exitCode = 0;
+        return;
+      }
+
+      // Default: print Markdown badge
+      const markdown = generateShieldsMarkdown(score, label);
+      console.log(`\nBadge for README.md:\n\n${markdown}\n`);
+      process.exitCode = 0;
+    } catch (err: any) {
+      console.error(`Error generating badge: ${err.message}`);
       process.exitCode = 1;
     }
   });

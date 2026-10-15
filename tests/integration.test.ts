@@ -317,5 +317,49 @@ describe("Real Git Integration with Hostile Environment", () => {
       fs.rmSync(initTestDir, { recursive: true, force: true });
     }
   });
+
+  it("executes 'agent-roast badge' with --json and --out flags via CLI", () => {
+    const badgeRepoDir = path.join(process.cwd(), ".tmp-v04-badge");
+    fs.rmSync(badgeRepoDir, { recursive: true, force: true });
+    fs.mkdirSync(badgeRepoDir, { recursive: true });
+
+    const env = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: hostileConfigPath,
+    };
+
+    try {
+      execSync("git init -b main", { cwd: badgeRepoDir, env, stdio: "ignore" });
+      execSync('git config user.name "AI Tester"', { cwd: badgeRepoDir, env, stdio: "ignore" });
+      execSync('git config user.email "ai@test.local"', { cwd: badgeRepoDir, env, stdio: "ignore" });
+
+      fs.writeFileSync(path.join(badgeRepoDir, "index.ts"), "export const a = 1;\n");
+      execSync("git add . && git commit -m 'feat: initial'", { cwd: badgeRepoDir, env, stdio: "ignore" });
+
+      // 1. Test badge --json
+      const jsonOutput = execSync(
+        `node ./dist/cli.js badge "${badgeRepoDir}" --all --json`,
+        { cwd: process.cwd(), encoding: "utf8", env }
+      );
+      const parsed = JSON.parse(jsonOutput.trim());
+      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.label).toBe("AI Discipline");
+      expect(parsed.message).toBeDefined();
+
+      // 2. Test badge --out
+      const svgPath = path.join(badgeRepoDir, "badge.svg");
+      const outOutput = execSync(
+        `node ./dist/cli.js badge "${badgeRepoDir}" --all --out "${svgPath}"`,
+        { cwd: process.cwd(), encoding: "utf8", env }
+      );
+      expect(outOutput).toContain("Generated SVG badge at");
+      expect(fs.existsSync(svgPath)).toBe(true);
+      const svgContent = fs.readFileSync(svgPath, "utf-8");
+      expect(svgContent).toContain("<svg");
+      expect(svgContent).toContain("AI Discipline");
+    } finally {
+      fs.rmSync(badgeRepoDir, { recursive: true, force: true });
+    }
+  });
 });
 

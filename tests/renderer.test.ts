@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatTerminalCard, generateShareUrl } from "../src/renderer.js";
+import { formatTerminalCard, generateShareUrl, formatPrMarkdownComment } from "../src/renderer.js";
 import { MetricSummary } from "../src/types.js";
 
 describe("Card Renderer", () => {
@@ -78,5 +78,53 @@ describe("Card Renderer", () => {
 
     const card = formatTerminalCard(summary, { repoName: "tiny-repo", verbose: false });
     expect(card).toContain("insufficient data");
+  });
+
+  it("formats GitHub PR markdown comment with status and details", () => {
+    const passedResult: import("../src/types.js").PrAuditResult = {
+      schemaVersion: "1.0.0",
+      baseSha: "1111111",
+      headSha: "2222222",
+      mergeBaseSha: "0000000",
+      hasSupportedChanges: true,
+      filesInspected: 3,
+      linesAdded: 150,
+      defectDensityPer100Lines: 0,
+      infractions: [],
+      failedRules: [],
+      passed: true,
+      output: "",
+      exitCode: 0,
+    };
+
+    const passedComment = formatPrMarkdownComment(passedResult);
+    expect(passedComment).toContain("PASSED");
+    expect(passedComment).toContain("Clean pull request");
+    expect(passedComment).toContain("agent-roast");
+
+    const failedResult: import("../src/types.js").PrAuditResult = {
+      ...passedResult,
+      passed: false,
+      exitCode: 1,
+      failedRules: ["trivial-assert"],
+      defectDensityPer100Lines: 1.33,
+      infractions: [
+        {
+          type: "trivial-assert",
+          file: "tests/auth.test.ts",
+          lineNumber: 42,
+          lineSnippet: "expect(true).toBe(true)",
+          commitHash: "2222222",
+          commitDate: "2026-10-04T12:00:00Z",
+          reason: "trivial test assert",
+        },
+      ],
+    };
+
+    const failedComment = formatPrMarkdownComment(failedResult);
+    expect(failedComment).toContain("BLOCKED");
+    expect(failedComment).toContain("<details>");
+    expect(failedComment).toContain("tests/auth.test.ts:42");
+    expect(failedComment).toContain("expect(true).toBe(true)");
   });
 });

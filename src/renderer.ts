@@ -327,3 +327,62 @@ export function formatGithubStepSummary(result: import("./types.js").PrAuditResu
   return lines.join("\n");
 }
 
+/**
+ * Generates rich GitHub PR Comment Markdown (for PR comments / sticky bots)
+ */
+export function formatPrMarkdownComment(result: import("./types.js").PrAuditResult): string {
+  const lines: string[] = [];
+
+  const titleEmoji = result.passed ? "✅" : "❌";
+  const titleStatus = result.passed ? "PASSED" : "BLOCKED";
+
+  lines.push(`## 🛡️ agent-roast audit: ${titleStatus} ${titleEmoji}`);
+  lines.push("");
+
+  if (!result.hasSupportedChanges) {
+    lines.push("No supported source file changes detected in this pull request.");
+    lines.push("");
+    lines.push("---");
+    lines.push("*Audited 100% offline with [agent-roast](https://github.com/Nari-Ab/agent-roast)*");
+    return lines.join("\n");
+  }
+
+  const statusText = result.passed
+    ? "✅ Passed"
+    : `❌ Blocked on ${result.failedRules.join(", ")}`;
+
+  lines.push("| Status | Defect Density | Files Inspected | Lines Added | Infractions |");
+  lines.push("| :--- | :--- | :--- | :--- | :--- |");
+  lines.push(
+    `| ${statusText} | ${result.defectDensityPer100Lines} / 100 LOC | ${result.filesInspected} | +${result.linesAdded} | ${result.infractions.length} |`
+  );
+  lines.push("");
+
+  if (result.infractions.length > 0) {
+    lines.push("<details>");
+    lines.push(`<summary><b>View Detected Infractions (${result.infractions.length})</b></summary>`);
+    lines.push("");
+    lines.push("| Type | File:Line | Description | Snippet |");
+    lines.push("| :--- | :--- | :--- | :--- |");
+
+    const sorted = sortInfractionsDeterministic(result.infractions);
+    for (const inf of sorted) {
+      const loc = inf.file ? `\`${inf.file}:${inf.lineNumber || 1}\`` : "*history*";
+      const snippet = inf.lineSnippet ? `\`${inf.lineSnippet.replace(/\|/g, "\\|")}\`` : "-";
+      lines.push(`| \`${inf.type}\` | ${loc} | ${inf.reason} | ${snippet} |`);
+    }
+
+    lines.push("");
+    lines.push("</details>");
+    lines.push("");
+  } else {
+    lines.push("✨ **Clean pull request**: Zero AI shortcuts, bypassed tests, or compiler type escapes detected.");
+    lines.push("");
+  }
+
+  lines.push("---");
+  lines.push("*Audited 100% offline with [agent-roast](https://github.com/Nari-Ab/agent-roast)*");
+
+  return lines.join("\n");
+}
+

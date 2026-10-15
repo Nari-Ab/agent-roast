@@ -35,6 +35,12 @@ npx agent-roast --fail-under 70 # exit code 1 if score is below 70
 # Audit pull request diffs (CI gate)
 npx agent-roast --base origin/main --head HEAD
 npx agent-roast --base origin/main --head HEAD --fail-on test-skip,trivial-assert,stub-abandonment --format github
+npx agent-roast --base origin/main --format markdown # rich markdown for PR comments
+
+# Generate AI discipline badge for your README
+npx agent-roast badge          # prints Shields.io Markdown snippet
+npx agent-roast badge --out ./badge.svg # exports standalone SVG badge
+npx agent-roast badge --json   # Shields.io dynamic endpoint payload
 ```
 
 What a report looks like (a real repository audit, trimmed):
