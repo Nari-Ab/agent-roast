@@ -83,7 +83,7 @@ Configure custom ignore paths, rule severities, and CI thresholds with a `.agent
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/sidzuya/agent-roast/main/schema.json",
+  "$schema": "https://raw.githubusercontent.com/Nari-Ab/agent-roast/main/schema.json",
   "ignorePaths": [
     "**/*.min.js",
     "**/vendor/**",

@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>agent-roast — Video Reel Animation</title>
+  <title>agent-roast — Cinematic Video Reel</title>
   <link rel="icon" type="image/svg+xml" href="../assets/logo-dark.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="studio-app">
-  <!-- Top Bar -->
+  <!-- Studio Header -->
   <header class="studio-head">
     <div class="head-left">
       <a href="../" class="back-link">
@@ -21,16 +21,15 @@
         <span>Back to agent-roast</span>
       </a>
       <span class="sep">/</span>
-      <span class="head-title">Official Video Reel</span>
-      <span class="tag-format">9:16 Vertical Reel</span>
+      <span class="head-title">Official Product Reel</span>
+      <span class="tag-format">9:16 Vertical Reel · 60 FPS</span>
+      <span class="tag-neural">Neural AI Voice (Christopher)</span>
     </div>
     <div class="head-right">
-      <div class="audio-picker">
-        <span class="opt-label">Voiceover:</span>
-        <button class="btn-toggle active" data-voice="en">English (Daniel)</button>
-        <button class="btn-toggle" data-voice="ru">Russian (Milena)</button>
-        <button class="btn-toggle" data-voice="none">Mute VO</button>
-      </div>
+      <button class="btn-toggle active" id="btn-audio-toggle">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.536 14.01A8.473 8.473 0 0 0 14 8c0-2.298-.915-4.382-2.39-5.908l-.708.707A7.473 7.473 0 0 1 13 8c0 2.029-.808 3.87-2.118 5.218l.654.792zM9.707 3.293a6.474 6.474 0 0 1 1.793 4.707c0 1.768-.7 3.374-1.83 4.568l-.71-.706A5.474 5.474 0 0 0 10.5 8c0-1.493-.591-2.852-1.545-3.864l.752-.843zM7 2.5a.5.5 0 0 0-.812-.39L2.825 5H1a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.825l3.363 2.89a.5.5 0 0 0 .812-.39V2.5z"/></svg>
+        <span id="audio-status-label">Voiceover: ON</span>
+      </button>
       <button class="btn-primary" id="btn-export">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2v9m0 0l-3-3m3 3l3-3M2 13h12"/></svg>
         <span>Export MP4 / WebM</span>
@@ -38,57 +37,326 @@
     </div>
   </header>
 
-  <!-- Studio Stage -->
+  <!-- Studio Viewport -->
   <main class="studio-main">
     <div class="viewport-wrapper">
       <div class="phone-frame" id="phone-frame">
-        <div class="phone-screen">
-          <!-- Canvas for 60fps high-res rendering -->
-          <canvas id="render-canvas" width="1080" height="1920"></canvas>
+        <div class="phone-screen" id="phone-screen">
           
-          <!-- Overlays: Rec indicator & Watermark -->
-          <div class="screen-hud">
-            <div class="hud-top">
+          <!-- Background Atmospheric Canvas (3D Grid & Particle Trails) -->
+          <canvas id="bg-canvas" width="1080" height="1920"></canvas>
+
+          <!-- Ambient Radial Glows -->
+          <div class="ambient-glow glow-top" id="ambient-glow"></div>
+
+          <!-- Cinematic 3D Camera Rig -->
+          <div class="scene-camera" id="scene-camera">
+
+            <!-- ================= SCENE 1: THE HOOK ================= -->
+            <section class="scene-layer" id="scene-1">
+              <div class="hook-container">
+                <div class="terminal-prompt-tag">
+                  <span class="prompt-arrow">&gt;</span> git diff HEAD~1 --stat
+                </div>
+                
+                <div class="kinetic-text-wrap">
+                  <h1 class="kinetic-line line-1" id="kline-1">
+                    YOUR AI AGENT
+                  </h1>
+                  <h1 class="kinetic-line line-2" id="kline-2">
+                    MADE CI GREEN.
+                  </h1>
+                  <div class="kinetic-box" id="kbox-3">
+                    <span class="glitch-text" data-text="YOU NEVER CHECKED HOW.">YOU NEVER CHECKED HOW.</span>
+                  </div>
+                </div>
+
+                <div class="hook-subline" id="hook-subline">
+                  <span>commit audit</span> · <span>diff scrutiny</span> · <span>zero excuses</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- ================= SCENE 2: THE INFRACTION ================= -->
+            <section class="scene-layer" id="scene-2">
+              <div class="infraction-container">
+                <div class="scene-badge badge-danger">
+                  <span class="pulse-red-dot"></span>
+                  <span>UNVERIFIED SHORTCUT DETECTED</span>
+                </div>
+
+                <!-- Floating Code Window -->
+                <div class="code-window" id="code-window">
+                  <div class="window-bar">
+                    <div class="traffic-lights">
+                      <span class="dot-red"></span>
+                      <span class="dot-yellow"></span>
+                      <span class="dot-green"></span>
+                    </div>
+                    <div class="window-tab">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/></svg>
+                      <span>tests/auth.test.ts</span>
+                    </div>
+                    <span class="window-branch">git: HEAD~1</span>
+                  </div>
+
+                  <div class="code-body">
+                    <div class="code-row ctx-row">
+                      <span class="ln">21</span>
+                      <span class="code-txt"><span class="k">describe</span>(<span class="s">'Bearer token verification'</span>, () =&gt; {</span>
+                    </div>
+                    <div class="code-row del-row">
+                      <span class="ln">22</span>
+                      <span class="code-txt"><span class="del-sign">-</span>  <span class="k">it</span>(<span class="s">'verifies RSA cryptographic signature'</span>, <span class="k">async</span> () =&gt; {</span>
+                    </div>
+                    <div class="code-row add-row highlight-focus" id="row-target-skip">
+                      <span class="ln">22</span>
+                      <span class="code-txt">
+                        <span class="add-sign">+</span>  <span class="k">it</span><span class="tok-skip">.skip</span>(<span class="s">'verifies RSA cryptographic signature'</span>, <span class="k">async</span> () =&gt; {
+                      </span>
+                      <!-- Animated HUD Target Reticle -->
+                      <div class="target-reticle" id="target-reticle">
+                        <span class="ret-tl"></span><span class="ret-tr"></span>
+                        <span class="ret-bl"></span><span class="ret-br"></span>
+                        <span class="ret-scanline"></span>
+                        <span class="ret-tag">RULE: test-skip</span>
+                      </div>
+                    </div>
+                    <div class="code-row add-row" id="row-target-any">
+                      <span class="ln">23</span>
+                      <span class="code-txt">
+                        <span class="add-sign">+</span>    <span class="k">const</span> payload = jwt.decode(token) <span class="tok-any">as any</span>;
+                      </span>
+                    </div>
+                    <div class="code-row add-row">
+                      <span class="ln">24</span>
+                      <span class="code-txt">
+                        <span class="add-sign">+</span>    <span class="k">return</span> { roles: [<span class="s">'root'</span>] <span class="tok-any">as any</span> };
+                      </span>
+                    </div>
+                    <div class="code-row ctx-row">
+                      <span class="ln">25</span>
+                      <span class="code-txt">  });</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Infraction Stack -->
+                <div class="infraction-stack" id="infraction-stack">
+                  <div class="inf-pill pill-skip" id="pill-1">
+                    <div class="pill-icon">⚠</div>
+                    <div class="pill-body">
+                      <strong>test-skip: critical security suite disabled</strong>
+                      <span>Line 22 · it.skip suppresses failing RSA assertions</span>
+                    </div>
+                  </div>
+                  <div class="inf-pill pill-any" id="pill-2">
+                    <div class="pill-icon">⚡</div>
+                    <div class="pill-body">
+                      <strong>type-escape: compiler safety bypassed</strong>
+                      <span>2x 'as any' casts suppress TypeScript checks</span>
+                    </div>
+                  </div>
+                  <div class="inf-pill pill-loop" id="pill-3">
+                    <div class="pill-icon">🔁</div>
+                    <div class="pill-body">
+                      <strong>panic-loop: 8 rapid commits in 3 minutes</strong>
+                      <span>Vague commit messages: 'fix', 'try again', 'wip'</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ================= SCENE 3: THE AUDIT ================= -->
+            <section class="scene-layer" id="scene-3">
+              <div class="audit-container">
+                <div class="audit-head">
+                  <div class="logo-pill">
+                    <span class="logo-dot"></span>
+                    <span>AGENT DISCIPLINE AUDITOR</span>
+                  </div>
+                  <h2 class="audit-title">agent-roast</h2>
+                  <p class="audit-sub">Deterministic static analysis on streaming git diffs.</p>
+                </div>
+
+                <!-- Terminal Execution Card -->
+                <div class="term-card" id="audit-term">
+                  <div class="term-bar">
+                    <div class="term-dots"><span></span><span></span><span></span></div>
+                    <span class="term-tab">zsh — npx agent-roast</span>
+                    <span class="term-speed">&lt; 182ms</span>
+                  </div>
+                  <div class="term-body">
+                    <div class="term-line cmd-line">
+                      <span class="t-prompt">$</span>
+                      <span class="t-cmd" id="audit-cmd-text">npx agent-roast</span>
+                      <span class="t-cursor"></span>
+                    </div>
+                    <div class="term-feed" id="term-feed">
+                      <div class="feed-item"><span class="f-chk">✔</span> Spawning git log -p -U0 pipeline...</div>
+                      <div class="feed-item"><span class="f-chk">✔</span> Scanning added-only lines (+) without false alarms...</div>
+                      <div class="feed-item"><span class="f-chk">✔</span> Stripping string literals & test fixtures...</div>
+                      <div class="feed-item"><span class="f-chk">✔</span> Calculating author thrashing & velocity windows...</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Specs Grid -->
+                <div class="specs-grid" id="specs-grid">
+                  <div class="spec-tile tile-1">
+                    <div class="tile-tag">AIR-GAPPED</div>
+                    <h3>100% OFFLINE</h3>
+                    <p>Zero external API calls. Runs in your terminal.</p>
+                  </div>
+                  <div class="spec-tile tile-2">
+                    <div class="tile-tag">SECURITY</div>
+                    <h3>ZERO TELEMETRY</h3>
+                    <p>Source code never touches the network.</p>
+                  </div>
+                  <div class="spec-tile tile-3">
+                    <div class="tile-tag">LATENCY</div>
+                    <h3>&lt; 200MS SPEED</h3>
+                    <p>Streaming git subprocess architecture.</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ================= SCENE 4: THE ROAST & CI GATE ================= -->
+            <section class="scene-layer" id="scene-4">
+              <div class="roast-container">
+                <div class="roast-head">
+                  <span>DISCIPLINE AUDIT REPORT</span>
+                </div>
+
+                <!-- Radial HUD Score Gauge -->
+                <div class="gauge-card">
+                  <div class="gauge-ring-wrap">
+                    <svg class="gauge-svg" viewBox="0 0 200 200">
+                      <circle class="gauge-bg" cx="100" cy="100" r="82"/>
+                      <circle class="gauge-arc" id="gauge-arc" cx="100" cy="100" r="82"/>
+                    </svg>
+                    <div class="gauge-val">
+                      <span class="score-num" id="score-counter">0</span>
+                      <span class="score-denom">/ 100</span>
+                    </div>
+                  </div>
+
+                  <!-- Heavy Verdict Stamp -->
+                  <div class="verdict-stamp" id="verdict-stamp">
+                    <div class="stamp-pill">VERDICT CITATION</div>
+                    <h3>THE SILENT VANDAL</h3>
+                    <p>Pipeline turned green by disabling test assertions.</p>
+                  </div>
+                </div>
+
+                <!-- Exact Line Proof Card -->
+                <div class="proof-card" id="proof-card">
+                  <div class="proof-tag">EXACT LINE PROOF CITATION</div>
+                  <div class="proof-code">
+                    tests/auth.test.ts:22 — <code>it.skip('verifies RSA token')</code>
+                  </div>
+                  <div class="proof-meta">
+                    Commit 880ecc3 · Co-authored by Claude Code
+                  </div>
+                </div>
+
+                <!-- GitHub Action CI Gate Card -->
+                <div class="ci-gate-card" id="ci-gate-card">
+                  <div class="ci-gate-left">
+                    <div class="ci-fail-icon">✕</div>
+                  </div>
+                  <div class="ci-gate-body">
+                    <div class="ci-title">CI QUALITY GATE: PR BLOCKED</div>
+                    <div class="ci-action-tag">uses: Nari-Ab/agent-roast@v1</div>
+                    <div class="ci-desc">FAIL: Rule 'test-skip' violated in PR delta (Exit Code 1)</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- ================= SCENE 5: OUTRO & CTA ================= -->
+            <section class="scene-layer" id="scene-5">
+              <div class="outro-container">
+                <div class="outro-center">
+                  <div class="brand-crest">
+                    <svg width="44" height="44" viewBox="0 0 32 32" fill="none">
+                      <rect width="32" height="32" rx="8" fill="#10b981" fill-opacity="0.15"/>
+                      <path d="M8 8h16v4H8zM8 14h10v4H8zM8 20h13v4H8z" fill="#10b981"/>
+                    </svg>
+                  </div>
+                  <h1 class="outro-brand">agent-roast</h1>
+                  <p class="outro-tagline">Stop silent test skips and AI coding shortcuts.</p>
+
+                  <div class="outro-cmd-box" id="outro-cmd">
+                    <span class="cmd-dollar">$</span>
+                    <span class="cmd-run">npx agent-roast</span>
+                  </div>
+
+                  <div class="outro-ci-box">
+                    <span>GitHub Actions: <code>uses: Nari-Ab/agent-roast@v1</code></span>
+                  </div>
+
+                  <div class="outro-meta">
+                    <span class="repo-link">github.com/Nari-Ab/agent-roast</span>
+                    <span class="meta-dot">·</span>
+                    <span class="meta-mit">MIT Open Source</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+          </div> <!-- /scene-camera -->
+
+          <!-- Film Grain & Scanline Overlays -->
+          <div class="hud-overlay-frame">
+            <div class="hud-corner tl"></div>
+            <div class="hud-corner tr"></div>
+            <div class="hud-corner bl"></div>
+            <div class="hud-corner br"></div>
+            <div class="hud-top-bar">
               <span class="rec-dot"></span>
-              <span class="hud-time" id="hud-time">00:00:00</span>
-              <span class="hud-res">1080×1920 · 60FPS</span>
+              <span class="timecode" id="hud-timecode">00:00:00</span>
+              <span class="hud-fps">1080×1920 · 60FPS</span>
             </div>
-            <div class="hud-bottom">
-              <span class="hud-brand">agent-roast</span>
-              <span class="hud-rule">stroq-grade discipline</span>
+            <div class="hud-bottom-bar">
+              <span>SECURITY REEL</span>
+              <span>AGENT-ROAST v0.2.0</span>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+
+        </div> <!-- /phone-screen -->
+      </div> <!-- /phone-frame -->
+    </div> <!-- /viewport-wrapper -->
   </main>
 
-  <!-- Bottom Timeline & Control Bar -->
+  <!-- Studio Bottom Controls -->
   <footer class="studio-controls">
     <div class="ctrl-row">
       <div class="ctrl-playback">
-        <button class="btn-icon" id="btn-play" aria-label="Play or Pause">
+        <button class="btn-icon" id="btn-play" aria-label="Play/Pause">
           <svg class="ic-play" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3l10 5-10 5V3z"/></svg>
           <svg class="ic-pause" width="18" height="18" viewBox="0 0 16 16" fill="currentColor"><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
         </button>
-        <button class="btn-icon" id="btn-restart" aria-label="Restart Video">
+        <button class="btn-icon" id="btn-restart" aria-label="Restart">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9L2 6M2 2v4h4"/></svg>
         </button>
-        <span class="time-label" id="time-display">00:00 / 00:29</span>
+        <span class="time-label" id="time-display">00:00 / 00:33</span>
       </div>
 
       <!-- Scene Jumpers -->
       <div class="scene-jumpers">
-        <button class="sc-jump" data-time="0">01. The Hook (0s)</button>
-        <button class="sc-jump" data-time="4.5">02. Infraction (4.5s)</button>
-        <button class="sc-jump" data-time="10.7">03. The Audit (10.7s)</button>
-        <button class="sc-jump" data-time="16.9">04. The Roast (16.9s)</button>
-        <button class="sc-jump" data-time="24.1">05. Outro (24.1s)</button>
+        <button class="sc-jump is-active" data-time="0">01. The Hook (0s)</button>
+        <button class="sc-jump" data-time="5.6">02. The Crime (5.6s)</button>
+        <button class="sc-jump" data-time="13.0">03. The Audit (13.0s)</button>
+        <button class="sc-jump" data-time="20.8">04. The Roast (20.8s)</button>
+        <button class="sc-jump" data-time="27.0">05. Outro (27.0s)</button>
       </div>
 
       <div class="ctrl-extra">
-        <button class="btn-subtle" id="btn-sound-test">Test SFX</button>
-        <button class="btn-subtle" id="btn-aspect">Toggle 16:9 / 9:16</button>
+        <button class="btn-subtle" id="btn-sound-test">Test Bass Drop</button>
+        <button class="btn-subtle" id="btn-aspect">Toggle Aspect</button>
       </div>
     </div>
 
@@ -98,10 +366,10 @@
         <div class="timeline-progress" id="timeline-progress"></div>
         <div class="timeline-playhead" id="timeline-playhead"></div>
         <div class="marker m1" style="left: 0%" title="The Hook"></div>
-        <div class="marker m2" style="left: 15.5%" title="The Infraction"></div>
-        <div class="marker m3" style="left: 36.9%" title="The Audit"></div>
-        <div class="marker m4" style="left: 58.3%" title="The Roast"></div>
-        <div class="marker m5" style="left: 83.1%" title="Outro"></div>
+        <div class="marker m2" style="left: 16.7%" title="The Crime"></div>
+        <div class="marker m3" style="left: 38.8%" title="The Audit"></div>
+        <div class="marker m4" style="left: 62.1%" title="The Roast"></div>
+        <div class="marker m5" style="left: 80.6%" title="Outro"></div>
       </div>
     </div>
   </footer>
