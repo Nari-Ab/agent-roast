@@ -131,7 +131,7 @@ describe("current-tree check", () => {
   it("escapes terminal control characters and markdown images in source names", async () => {
     write("hostile\u001b[31m![image](https--example).test.ts", "it.skip('auth');\n");
     const terminal = await checkProject({ cwd: dir });
-    expect(terminal.output).not.toContain("\u001b[31m");
+    expect(terminal.output).not.toContain("hostile\u001b[31m");
     expect(terminal.output).toContain("\\u001b[31m");
     const markdown = await checkProject({ cwd: dir, format: "markdown" });
     expect(markdown.output).not.toContain("![image]");
