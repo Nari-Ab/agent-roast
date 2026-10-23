@@ -58,11 +58,10 @@ describe("Configuration Loader", () => {
     expect(config.failOn).toEqual(DEFAULT_CONFIG.failOn);
   });
 
-  it("handles malformed JSON gracefully by returning defaults", () => {
+  it("rejects malformed JSON instead of silently weakening CI policy", () => {
     fs.writeFileSync(path.join(tmpDir, ".agentroastrc.json"), "{ invalid json", "utf8");
 
-    const config = loadConfig(tmpDir);
-    expect(config).toEqual(DEFAULT_CONFIG);
+    expect(() => loadConfig(tmpDir)).toThrow("Invalid .agentroastrc.json");
   });
 
   it("matches ignore paths correctly using glob wildcards and prefixes", () => {

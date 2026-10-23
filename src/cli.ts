@@ -4,6 +4,10 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   roastRepository,
+  checkProject,
+  writeBaseline,
+  RULE_GUIDES,
+  VALID_DETECTORS,
   auditPullRequest,
   loadConfig,
   initProject,
@@ -13,6 +17,7 @@ import {
   GitResolutionError,
   InvalidDetectorError,
   GitError,
+  ConfigError,
   formatGithubStepSummary,
 } from "./index.js";
 
@@ -30,6 +35,7 @@ program
   .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
   .option("-v, --verbose", "Show commit SHAs and line snippets for all infractions", false)
   .option("--json", "Output results as raw JSON", false)
+  .option("--staged", "Audit staged changes before committing (including the first commit)", false)
   .option("--base <ref>", "Base git ref/branch for PR mode audit (e.g. origin/main)")
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
@@ -44,32 +50,42 @@ program
         );
       }
 
+      if (options.staged && options.base) throw new ConfigError("--staged cannot be combined with --base.");
+      if (!["terminal", "json", "github", "markdown"].includes(options.format)) {
+        throw new ConfigError("--format must be terminal, json, github, or markdown.");
+      }
+      if (options.failUnder !== undefined &&
+          (options.failUnder.trim() === "" || !Number.isFinite(Number(options.failUnder)) || Number(options.failUnder) < 0 || Number(options.failUnder) > 100)) {
+        throw new ConfigError("--fail-under must be a number between 0 and 100.");
+      }
+      if (!options.base && !options.staged && options.failOn !== undefined) {
+        throw new ConfigError("--fail-on requires --base or --staged.");
+      }
+      if (!options.base && !options.staged && !options.json && !["terminal", "json"].includes(options.format)) {
+        throw new ConfigError("Repository audits support terminal or json format; use --base or --staged for github/markdown.");
+      }
+
       // Load repository config (.agentroastrc.json / agent-roast.config.json)
       const config = await loadConfig(repoPath);
 
-      if (options.base) {
-        // PR Mode
-        let failOnRules: string[];
-        if (options.failOn) {
-          failOnRules = options.failOn.split(",").map((s: string) => s.trim()).filter(Boolean);
-        } else {
-          const errorRules = Object.entries(config.rules || {})
-            .filter(([_, level]) => level === "error")
-            .map(([rule]) => rule);
-          failOnRules = errorRules.length > 0 ? errorRules : ["test-skip"];
-        }
+      if (options.base || options.staged) {
+        const failOnRules = options.failOn !== undefined
+          ? options.failOn.split(",").map((s: string) => s.trim()).filter(Boolean)
+          : config.failOn;
 
         const chosenFormat = options.json ? "json" : options.format || "terminal";
 
         const prResult = await auditPullRequest({
           cwd: repoPath,
           base: options.base,
+          staged: options.staged,
           head: options.head || "HEAD",
           failOn: failOnRules,
           format: chosenFormat,
           verbose: options.verbose,
           authors: options.authors,
           ignorePaths: config.ignorePaths,
+          rules: config.rules,
         });
 
         // Write GitHub Step Summary if running in GitHub Actions
@@ -106,10 +122,12 @@ program
           all: options.all,
           verbose: options.verbose,
           json: options.json,
+          panicLoopWindowMinutes: config.panicLoopWindowMinutes,
           ignorePaths: config.ignorePaths,
+          rules: config.rules,
         });
 
-        if (options.json) {
+        if (options.json || options.format === "json") {
           console.log(JSON.stringify(result.summary, null, 2));
         } else {
           console.log(result.output);
@@ -132,6 +150,7 @@ program
       }
     } catch (err: any) {
       if (
+        err instanceof ConfigError ||
         err instanceof GitResolutionError ||
         err instanceof InvalidDetectorError ||
         err instanceof GitError ||
@@ -144,6 +163,57 @@ program
         process.exitCode = 1;
       }
     }
+  });
+
+program
+  .command("check")
+  .description("Check current tracked and non-ignored untracked source files")
+  .argument("[path]", "Path to a git repository", ".")
+  .option("--baseline <file>", "Report only findings not accepted in this baseline")
+  .option("--write-baseline <file>", "Save current findings for adoption (refuses to overwrite)")
+  .addHelpText("after", "\nOutput options: --format terminal|json|github|markdown, --json, --fail-on <rules>\nExamples:\n  agent-roast check\n  agent-roast check --write-baseline .agentroast-baseline.json\n  agent-roast check --baseline .agentroast-baseline.json --format json")
+  .action(async (repoPath: string, opts: { baseline?: string; writeBaseline?: string }) => {
+    try {
+      const global = program.opts();
+      if (global.base || global.staged || global.failUnder !== undefined || global.all ||
+          program.getOptionValueSource("head") === "cli" || program.getOptionValueSource("since") === "cli") {
+        throw new ConfigError("check inspects current files; history, --base, --head, --staged and --fail-under options do not apply.");
+      }
+      if (opts.baseline && opts.writeBaseline) throw new ConfigError("--baseline and --write-baseline cannot be combined.");
+      const result = await checkProject({
+        cwd: repoPath,
+        baseline: opts.baseline,
+        failOn: global.failOn !== undefined ? global.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+        format: global.json ? "json" : global.format,
+      });
+      if (opts.writeBaseline) {
+        if (!result.complete) throw new ConfigError("Cannot create a baseline from an incomplete scan. Resolve skipped files first.");
+        const basePath = path.resolve(repoPath, opts.writeBaseline);
+        writeBaseline(basePath, result.infractions);
+        const message = `Baseline created: ${basePath}\nAccepted ${result.totalFindings} existing findings. The code has not been fixed.\nReview and commit the baseline, then run check --baseline <file> to catch new findings.`;
+        console.log(global.json || global.format === "json" ? JSON.stringify({ operation: "write-baseline", baseline: basePath, acceptedFindings: result.totalFindings }, null, 2) : message);
+        process.exitCode = 0;
+        return;
+      }
+      console.log(result.output);
+      process.exitCode = result.exitCode;
+    } catch (err: unknown) {
+      console.error(`agent-roast check error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command("explain <rule>")
+  .description("Explain a detector, its limits, and how to address a finding")
+  .action((rule: string) => {
+    if (!VALID_DETECTORS.includes(rule as import("./types.js").DetectorType)) {
+      console.error(`Unknown rule '${rule}'. Valid rules: ${VALID_DETECTORS.join(", ")}`);
+      process.exitCode = 2;
+      return;
+    }
+    const guide = RULE_GUIDES[rule as import("./types.js").DetectorType];
+    console.log(`${rule}: ${guide.title}\n\nWhy: ${guide.why}\n\nNext: ${guide.suggestion}\n\nExample: ${guide.example}\n`);
   });
 
 program
@@ -205,6 +275,8 @@ program
         since,
         all: isAll,
         ignorePaths: config.ignorePaths,
+        rules: config.rules,
+        panicLoopWindowMinutes: config.panicLoopWindowMinutes,
       });
 
       const score = result.summary.score;

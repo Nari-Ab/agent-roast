@@ -24,22 +24,23 @@ export function formatTerminalCard(
   lines.push("");
 
   if (!summary.isSufficientData || summary.score === null) {
-    lines.push(pc.yellow(`  insufficient data (< 200 lines added by AI)`));
-    lines.push(pc.dim("  commit more code and run `npx agent-roast` again."));
+    lines.push(pc.yellow(`  insufficient data (< 200 analyzed lines added)`));
+    lines.push(pc.dim("  Findings below remain actionable; a score needs a larger sample."));
     lines.push("");
-    return lines.join("\n");
   }
 
   // Score Color
-  let scoreColor = pc.green;
-  if (summary.score < 60) scoreColor = pc.red;
-  else if (summary.score < 80) scoreColor = pc.yellow;
+  if (summary.isSufficientData && summary.score !== null) {
+    let scoreColor = pc.green;
+    if (summary.score < 60) scoreColor = pc.red;
+    else if (summary.score < 80) scoreColor = pc.yellow;
 
-  lines.push(
-    `  ${pc.bold("SCORE:")} ${scoreColor(pc.bold(`${summary.score} / 100`))}  ${pc.dim("·")}  ${pc.magenta(pc.bold(summary.archetype))}`
-  );
-  lines.push(`  ${pc.dim(summary.archetypeDescription)}`);
-  lines.push("");
+    lines.push(
+      `  ${pc.bold("SCORE:")} ${scoreColor(pc.bold(`${summary.score} / 100`))}  ${pc.dim("·")}  ${pc.magenta(pc.bold(summary.archetype))}`
+    );
+    lines.push(`  ${pc.dim(summary.archetypeDescription)}`);
+    lines.push("");
+  }
 
   const totalInfractions =
     (summary.testSkips?.length || 0) +
@@ -54,7 +55,7 @@ export function formatTerminalCard(
 
   if (summary.panicLoops && summary.panicLoops.length > 0) {
     lines.push(
-      `  ${pc.magenta("●")} ${pc.bold("panic-loop")} (${summary.panicLoops.length})  ${pc.dim("consecutive quick fixes < 15m apart")}`
+      `  ${pc.magenta("●")} ${pc.bold("panic-loop")} (${summary.panicLoops.length})  ${pc.dim("rapid consecutive fixes touching overlapping files")}`
     );
     const sample = summary.panicLoops[0];
     lines.push(`      ${pc.dim(sample.reason)}`);
@@ -168,11 +169,11 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
 
   lines.push("");
   lines.push(
-    `${pc.bold(pc.cyan("agent-roast"))} ${pc.dim("— pull request audit")} ${pc.white(`${result.baseSha.slice(0, 7)}...${result.headSha.slice(0, 7)}`)}`
+    `${pc.bold(pc.cyan("agent-roast"))} ${pc.dim(result.mode === "staged" ? "— staged changes audit" : "— pull request audit")} ${pc.white(`${result.baseSha.slice(0, 7)}...${result.headSha.slice(0, 7)}`)}`
   );
 
   if (!result.hasSupportedChanges) {
-    lines.push(`  ${pc.dim("no supported source changes detected in pull request.")}`);
+    lines.push(`  ${pc.dim("no supported source changes detected in the audited diff.")}`);
     lines.push("");
     return lines.join("\n");
   }
@@ -183,7 +184,7 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
   lines.push("");
 
   if (result.infractions.length === 0) {
-    lines.push(`  ${pc.green("PASS")} ${pc.dim("zero infractions detected across all pull request changes.")}`);
+    lines.push(`  ${pc.green("PASS")} ${pc.dim("zero infractions detected across all audited changes.")}`);
   } else {
     lines.push(pc.bold(`  INFRACTIONS DETECTED (${result.infractions.length})`));
     lines.push(pc.dim("  ──────────────────────────────────────────────────────────"));
@@ -196,6 +197,7 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
       if (inf.lineSnippet) {
         lines.push(`      ${pc.dim(`└─ ${inf.lineSnippet}`)}`);
       }
+      if (inf.suggestion) lines.push(`      ${pc.dim(`Next: ${inf.suggestion}`)}`);
     }
   }
 
@@ -238,7 +240,12 @@ function sortInfractionsDeterministic(infractions: import("./types.js").Infracti
  * Generates GitHub Actions workflow commands (::error and ::warning)
  * respecting GitHub's limits (max 10 annotations per level per step).
  */
-export function formatGithubAnnotations(result: import("./types.js").PrAuditResult): string {
+function escapeCommand(value: string, property = false): string {
+  const escaped = value.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A");
+  return property ? escaped.replace(/:/g, "%3A").replace(/,/g, "%2C") : escaped;
+}
+
+export function formatGithubAnnotations(result: Pick<import("./types.js").PrAuditResult, "infractions" | "failedRules">): string {
   const outputLines: string[] = [];
   const sorted = sortInfractionsDeterministic(result.infractions);
 
@@ -250,21 +257,21 @@ export function formatGithubAnnotations(result: import("./types.js").PrAuditResu
   for (const inf of sorted) {
     if (!inf.file || inf.file === "unknown") continue;
 
-    const isError = result.failedRules.includes(inf.type) || inf.type === "test-skip" || inf.type === "trivial-assert" || inf.type === "swallowed-error";
+    const isError = result.failedRules.includes(inf.type);
     const line = inf.lineNumber || 1;
-    const title = inf.reason.replace(/[\r\n]/g, " ");
-    const msg = (inf.lineSnippet || inf.reason).replace(/[\r\n]/g, " ");
+    const title = escapeCommand(inf.reason, true);
+    const msg = escapeCommand(inf.lineSnippet || inf.reason);
 
     if (isError) {
       if (errorCount < MAX_PER_LEVEL) {
-        outputLines.push(`::error file=${inf.file},line=${line},title=${title}::${msg}`);
+        outputLines.push(`::error file=${escapeCommand(inf.file, true)},line=${line},title=${title}::${msg}`);
         errorCount++;
       } else {
         omittedCount++;
       }
     } else {
       if (warnCount < MAX_PER_LEVEL) {
-        outputLines.push(`::warning file=${inf.file},line=${line},title=${title}::${msg}`);
+        outputLines.push(`::warning file=${escapeCommand(inf.file, true)},line=${line},title=${title}::${msg}`);
         warnCount++;
       } else {
         omittedCount++;
@@ -287,11 +294,11 @@ export function formatGithubAnnotations(result: import("./types.js").PrAuditResu
 export function formatGithubStepSummary(result: import("./types.js").PrAuditResult): string {
   const lines: string[] = [];
 
-  lines.push("### agent-roast Pull Request Audit");
+  lines.push(result.mode === "staged" ? "### agent-roast Staged Changes Audit" : "### agent-roast Pull Request Audit");
   lines.push("");
 
   if (!result.hasSupportedChanges) {
-    lines.push("No supported source file changes detected in this pull request.");
+    lines.push("No supported source file changes detected in the audited diff.");
     return lines.join("\n");
   }
 
@@ -340,7 +347,7 @@ export function formatPrMarkdownComment(result: import("./types.js").PrAuditResu
   lines.push("");
 
   if (!result.hasSupportedChanges) {
-    lines.push("No supported source file changes detected in this pull request.");
+    lines.push("No supported source file changes detected in the audited diff.");
     lines.push("");
     lines.push("---");
     lines.push("*Audited 100% offline with [agent-roast](https://github.com/Nari-Ab/agent-roast)*");
@@ -386,3 +393,40 @@ export function formatPrMarkdownComment(result: import("./types.js").PrAuditResu
   return lines.join("\n");
 }
 
+
+function terminalText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+/** Current-tree report emphasizes next actions and explicitly accounts for baseline debt. */
+export function formatCheckTerminal(result: import("./types.js").CheckResult): string {
+  const lines = ["", pc.bold("agent-roast — current code check"),
+    `  ${result.filesInspected} files · ${result.linesInspected} lines inspected`,
+    `  ${result.infractions.length} findings to review · ${result.baselineCount} accepted baseline findings`];
+  if (result.staleBaselineCount) lines.push(`  ${result.staleBaselineCount} baseline findings no longer present (or now disabled/ignored).`);
+  for (const inf of result.infractions.slice(0, 20)) {
+    lines.push("", `  ${result.failedRules.includes(inf.type) ? pc.red("FAIL") : pc.yellow("WARN")} [${inf.type}] ${terminalText(inf.file || "unknown")}:${inf.lineNumber}`, `    ${terminalText(inf.lineSnippet || inf.reason)}`);
+    if (inf.suggestion) lines.push(`    Next: ${inf.suggestion}`);
+  }
+  if (result.infractions.length > 20) lines.push(`\n  ${result.infractions.length - 20} more findings. Use --format json for the complete report.`);
+  for (const skipped of result.skippedFiles) lines.push(`\n  NOT SCANNED ${terminalText(skipped.file)}: ${terminalText(skipped.reason)}`);
+  lines.push("", !result.complete ? pc.red("  INCOMPLETE: some source could not be inspected; exit 2.") : result.passed ? pc.green("  PASSED: no new blocking findings.") : pc.red(`  BLOCKED: ${result.failedRules.join(", ")}.`), "");
+  if (!result.filesInspected) lines.push("  No supported source files inspected.", "");
+  return lines.join("\n");
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/[\\[\]()*_!]/g, "\\$&").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\|/g, "\\|").replace(/`/g, "&#96;").replace(/[\r\n]/g, " ");
+}
+
+export function formatCheckMarkdown(result: import("./types.js").CheckResult): string {
+  const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
+  const lines = [`## agent-roast current code check: ${status}`, "",
+    `${result.filesInspected} files, ${result.linesInspected} lines inspected. ${result.infractions.length} findings to review; ${result.baselineCount} accepted baseline findings.`, "",
+    "| Rule | Location | Finding | Next step |", "| --- | --- | --- | --- |"];
+  for (const inf of result.infractions) lines.push(`| ${inf.type} | ${markdownCell(`${inf.file}:${inf.lineNumber}`)} | ${markdownCell(inf.lineSnippet || inf.reason)} | ${markdownCell(inf.suggestion || "Review this occurrence.")} |`);
+  if (result.staleBaselineCount) lines.push("", `${result.staleBaselineCount} baseline findings no longer present (or now disabled/ignored).`);
+  for (const skipped of result.skippedFiles) lines.push("", `Not scanned: ${markdownCell(skipped.file)} — ${markdownCell(skipped.reason)}`);
+  return lines.join("\n");
+}

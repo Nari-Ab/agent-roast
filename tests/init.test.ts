@@ -24,7 +24,7 @@ describe("agent-roast init", () => {
 
     const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     expect(parsed.scoreThreshold).toBe(70);
-    expect(parsed.rules["trivial-assert"]).toBe("warn");
+    expect(parsed.rules["trivial-assert"]).toBe("error");
     expect(parsed.rules["stub-abandonment"]).toBe("warn");
     expect(Array.isArray(parsed.ignorePaths)).toBe(true);
   });
@@ -61,7 +61,7 @@ describe("agent-roast init", () => {
     expect(res.created).toContain(".git/hooks/pre-commit");
 
     const hookContent = fs.readFileSync(hookPath, "utf-8");
-    expect(hookContent).toContain("npx agent-roast");
+    expect(hookContent).toContain("npx --no-install agent-roast --staged");
     
     // Verify file is executable
     const stat = fs.statSync(hookPath);

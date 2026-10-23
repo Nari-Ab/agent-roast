@@ -33,6 +33,7 @@ export interface Infraction {
   commitHash: string;
   commitDate: string;
   reason: string;
+  suggestion?: string;
 }
 
 export interface MetricSummary {
@@ -65,20 +66,25 @@ export interface RoastOptions {
   authors?: boolean;
   ignorePaths?: string[];
   scoreThreshold?: number;
+  rules?: Record<string, "error" | "warn" | "off">;
+  panicLoopWindowMinutes?: number;
 }
 
 export interface PrAuditOptions {
   cwd?: string;
-  base: string;
-  head: string;
+  base?: string;
+  head?: string;
+  staged?: boolean;
   failOn?: string[];
   format?: "terminal" | "json" | "github" | "markdown";
   verbose?: boolean;
   authors?: boolean;
   ignorePaths?: string[];
+  rules?: Record<string, "error" | "warn" | "off">;
 }
 
 export interface PrAuditResult {
+  mode?: "pr" | "staged";
   schemaVersion: string;
   baseSha: string;
   headSha: string;
@@ -97,3 +103,28 @@ export interface PrAuditResult {
 }
 
 
+
+export interface CheckOptions {
+  cwd?: string;
+  failOn?: string[];
+  format?: "terminal" | "json" | "github" | "markdown";
+  baseline?: string;
+  signal?: AbortSignal;
+}
+
+export interface CheckResult {
+  schemaVersion: string;
+  mode: "check";
+  filesInspected: number;
+  linesInspected: number;
+  totalFindings: number;
+  infractions: Infraction[];
+  baselineCount: number;
+  staleBaselineCount: number;
+  skippedFiles: { file: string; reason: string }[];
+  complete: boolean;
+  failedRules: string[];
+  passed: boolean;
+  exitCode: number;
+  output: string;
+}

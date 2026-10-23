@@ -1,0 +1,46 @@
+
+> agent-roast@0.4.0 pretest
+> npm run build
+
+
+> agent-roast@0.4.0 build
+> tsup
+
+CLI Building entry: src/cli.ts, src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /private/tmp/agent-roast-improvements/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js          1.70 KB
+ESM dist/chunk-7QRT3PNK.js 63.21 KB
+ESM dist/cli.js            8.45 KB
+ESM ⚡️ Build success in 10ms
+DTS Build start
+DTS ⚡️ Build success in 649ms
+DTS dist/cli.d.ts   13.00 B
+DTS dist/index.d.ts 10.85 KB
+
+> agent-roast@0.4.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /private/tmp/agent-roast-improvements
+
+ ✓ tests/badge.test.ts (5 tests) 2ms
+ ✓ tests/detector.test.ts (5 tests) 4ms
+ ✓ tests/init.test.ts (5 tests) 7ms
+ ✓ tests/config.test.ts (5 tests) 7ms
+ ✓ tests/renderer.test.ts (4 tests) 4ms
+ ✓ tests/metrics.test.ts (14 tests) 7ms
+ ✓ tests/git.test.ts (14 tests) 22ms
+ ✓ tests/telemetry.test.ts (2 tests) 35ms
+ ✓ tests/integration.test.ts (5 tests) 1030ms
+   ✓ Real Git Integration with Hostile Environment > handles hostile git environment with Cyrillic quotes, no-newline, renames, and PR audit  553ms
+ ✓ tests/regressions.test.ts (33 tests) 2802ms
+
+ Test Files  10 passed (10)
+      Tests  92 passed (92)
+   Start at  10:24:29
+   Duration  3.08s (transform 397ms, setup 0ms, collect 746ms, tests 3.92s, environment 1ms, prepare 564ms)

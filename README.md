@@ -5,11 +5,10 @@
   <img src="docs/assets/logo.svg" alt="agent-roast" width="380">
 </picture>
 
-<h2>Audit your git history for AI coding agent infractions and panic loops</h2>
+<h2>Catch coding shortcuts before they ship</h2>
 
 <p>
-  <a href="https://github.com/Nari-Ab/agent-roast/actions"><img src="https://img.shields.io/badge/CI-passing-2ea44f?logo=github&logoColor=white" alt="CI"></a>
-  <a href="https://github.com/Nari-Ab/agent-roast"><img src="https://img.shields.io/badge/roast%20audit-verified-2ea44f" alt="Roast Audit"></a>
+  <a href="https://github.com/Nari-Ab/agent-roast/actions/workflows/test.yml"><img src="https://github.com/Nari-Ab/agent-roast/actions/workflows/test.yml/badge.svg" alt="CLI tests"></a>
   <a href="https://www.npmjs.com/package/agent-roast"><img src="https://img.shields.io/npm/v/agent-roast?color=cb3837&logo=npm&logoColor=white" alt="npm"></a>
   <a href="https://www.npmjs.com/package/agent-roast"><img src="https://img.shields.io/npm/dt/agent-roast?label=downloads&color=0969da" alt="downloads"></a>
   <a href="https://nari-ab.github.io/agent-roast/"><img src="https://img.shields.io/badge/site-live-1f9d55" alt="site"></a>
@@ -18,30 +17,62 @@
 
 </div>
 
-`agent-roast` scans recorded git diffs for shortcuts taken by AI coding assistants (Claude Code, Cursor, Codex, Antigravity, Aider). It checks for skipped tests, fake tautological assertions, abandoned stubs, compiler type escapes (`as any`), swallowed errors, and panic revert loops, then outputs a discipline score and line proofs. 100% offline, zero API keys, zero telemetry.
+`agent-roast` is an offline review aid for skipped tests, fake assertions, swallowed
+errors, unfinished stubs and type-check bypasses. Start with the code you have now;
+no AI commit tags, cloud account, API key or commit history are required for `check`.
+A Git repository is required; `git init` is sufficient.
 
 ```bash
-# Initialize in your repository (creates .agentroastrc.json)
-npx agent-roast init
-npx agent-roast init --ci      # generate .github/workflows/agent-roast.yml
-npx agent-roast init --hook    # install .git/hooks/pre-commit
+# Inspect current tracked + non-ignored untracked source files
+npx agent-roast check
 
-# Audit repository history
-npx agent-roast            # scan AI-attributed commits (last 90 days)
-npx agent-roast --all      # scan entire repository history
-npx agent-roast --verbose  # show commit SHAs and line proofs
-npx agent-roast --fail-under 70 # exit code 1 if score is below 70
+# Understand a finding and what to do next
+npx agent-roast explain swallowed-error
+
+# Adopt it in an existing project without blocking on all historical debt
+npx agent-roast check --write-baseline .agentroast-baseline.json
+# Review the findings and commit this policy file, then gate only new problems
+npx agent-roast check --baseline .agentroast-baseline.json
+
+# Verify precisely what you are about to commit
+npx agent-roast --staged
 
 # Audit pull request diffs (CI gate)
-npx agent-roast --base origin/main --head HEAD
-npx agent-roast --base origin/main --head HEAD --fail-on test-skip,trivial-assert,stub-abandonment --format github
-npx agent-roast --base origin/main --format markdown # rich markdown for PR comments
+npx agent-roast --base origin/main --head HEAD --format github
 
-# Generate AI discipline badge for your README
-npx agent-roast badge          # prints Shields.io Markdown snippet
-npx agent-roast badge --out ./badge.svg # exports standalone SVG badge
-npx agent-roast badge --json   # Shields.io dynamic endpoint payload
+# Optional historical audit
+npx agent-roast --all --verbose
 ```
+
+A finding includes its file and line, the source snippet, and a concrete next step.
+To see the complete machine-readable result, use `check --format json`; terminal
+output shows the first 20 findings. `check --format markdown` produces a review table.
+
+### Baseline adoption
+
+A baseline explicitly accepts the findings present at adoption time. It does not fix
+or hide new code. Fingerprints use the rule, repository-relative filename and source
+snippet; line numbers are excluded so adding clean code above a finding does not
+break it. Occurrence counts ensure a second identical shortcut is still new. Moving
+a finding to another file or changing its snippet requires a fresh review. Baselines
+contain hashes and counts, not source code. The report shows both accepted and new
+findings and counts accepted findings no longer present.
+
+Baseline use is explicit (`--baseline`), and writes refuse to overwrite existing
+files. To refresh accepted debt, inspect the full scan and write a **new** baseline
+file for review. Treat baseline changes as policy changes in code review. Do not
+silently regenerate one in CI. Input/output baseline paths are relative to the
+directory passed to `check` (or the current directory if omitted).
+
+`check` scans the repository containing the supplied path, applies its root config,
+respects Git ignores for untracked files, and excludes generated dependencies/build
+outputs. It checks working files, while `--staged` checks the index. Git submodules
+are not recursively scanned. A supported file that is binary, too large, unreadable
+or a symlink makes the scan incomplete (exit 2); incomplete scans cannot create a
+baseline. Limits are 2 MiB per source file and 50 MiB per scan. Intentional generated
+or unsupported input should be excluded in `ignorePaths`, not silently counted clean.
+
+History auditing remains available when you want an overview of prior shortcuts:
 
 What a report looks like (a real repository audit, trimmed):
 
@@ -102,6 +133,51 @@ Configure custom ignore paths, rule severities, and CI thresholds with a `.agent
 ```
 
 ---
+
+### Check code before committing
+
+```bash
+npm install --save-dev agent-roast
+npx agent-roast --staged
+npx agent-roast init --hook
+```
+
+`--staged` audits exactly the Git index, including an initial commit without HEAD.
+Unstaged edits and untracked files are excluded. The generated hook uses the locally
+installed CLI (`--no-install`) and blocks on configured error rules instead of scoring
+old commits. It preserves an existing pre-commit hook.
+
+### Configure what blocks a change
+
+Create `.agentroastrc.json` (or run `npx agent-roast init`):
+
+```json
+{
+  "rules": {
+    "test-skip": "error",
+    "trivial-assert": "error",
+    "swallowed-error": "warn",
+    "type-escape": "off"
+  },
+  "ignorePaths": ["**/generated/**", "**/vendor/**"],
+  "panicLoopWindowMinutes": 10,
+  "scoreThreshold": 70
+}
+```
+
+`off` removes findings and score penalties; `warn` reports without blocking a diff;
+`error` blocks PR/staged checks. An explicit `failOn` array overrides which enabled
+rules block (`[]` makes the audit advisory). CLI `--fail-on` takes precedence over
+that array. History and badge audits honor disabled rules and the panic-loop window.
+History exit status is controlled by `scoreThreshold` or `--fail-under`.
+Invalid JSON, unknown rule names and invalid settings stop the audit with exit code 2.
+Configurations generated by older versions may contain unsupported rules such as
+`hallucinated-package`, `empty-catch` or `mock-leak`; remove these entries and use
+`swallowed-error` for empty catches.
+
+Exit codes: `0` passed, `1` blocking findings/score threshold, `2` invalid audit
+configuration or Git refs. `--format json` also works for history audits. A history
+sample below 200 added lines has no score, but its findings are still shown.
 
 ### GitHub Actions Integration
 
@@ -165,6 +241,28 @@ Only **added lines** (`+`) in source code files are scanned — deleted lines, f
 - **Hermetic:** Enforces `-c core.quotepath=false -c diff.noprefix=false` to guarantee identical behavior across all environments.
 
 ---
+
+### Scope and limitations
+
+Use this as a focused review aid for skipped tests, compiler suppressions and obvious
+stubs, alongside a compiler, test runner and language-aware linter. Findings identify
+patterns, not proof of AI authorship or developer intent. Deliberate skips and abstract
+methods can be legitimate. Contiguous block comments, Python docstrings and multi-line empty handlers are
+recognized. Template interpolation, complex language syntax and context outside
+the added diff are not fully parsed. Panic loops are an observational history heuristic.
+The discipline score summarizes added history; it does not certify current code quality.
+`check` reports actionable findings without assigning a personality or quality score.
+
+### Development
+
+```bash
+npm ci
+npm run typecheck
+npm test
+```
+
+`npm test` builds the distribution first so CLI integration and bundle checks run
+against current code. Regression tests use disposable Git repositories.
 
 ### Author & Support
 

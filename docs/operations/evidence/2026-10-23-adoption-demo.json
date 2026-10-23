@@ -1,0 +1,52 @@
+[
+  {
+    "step": "initial review",
+    "complete": true,
+    "passed": false,
+    "exitCode": 1,
+    "files": 2,
+    "newFindings": 3,
+    "acceptedFindings": 0,
+    "staleBaselineFindings": 0,
+    "rules": [
+      "test-skip",
+      "trivial-assert",
+      "swallowed-error"
+    ]
+  },
+  {
+    "step": "adopt accepted debt",
+    "complete": true,
+    "passed": true,
+    "exitCode": 0,
+    "files": 2,
+    "newFindings": 0,
+    "acceptedFindings": 3,
+    "staleBaselineFindings": 0,
+    "rules": []
+  },
+  {
+    "step": "duplicate shortcut added",
+    "complete": true,
+    "passed": false,
+    "exitCode": 1,
+    "files": 2,
+    "newFindings": 1,
+    "acceptedFindings": 3,
+    "staleBaselineFindings": 0,
+    "rules": [
+      "test-skip"
+    ]
+  },
+  {
+    "step": "real fixes applied",
+    "complete": true,
+    "passed": true,
+    "exitCode": 0,
+    "files": 2,
+    "newFindings": 0,
+    "acceptedFindings": 0,
+    "staleBaselineFindings": 3,
+    "rules": []
+  }
+]

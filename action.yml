@@ -17,7 +17,7 @@ inputs:
   fail-on:
     description: "Comma-separated detectors that trigger pipeline failure (test-skip, type-escape, swallowed-error, trivial-assert, stub-abandonment)"
     required: false
-    default: "test-skip"
+    default: ""
   format:
     description: "Output format: github, terminal, json"
     required: false
@@ -60,10 +60,15 @@ runs:
 
         INSTALL_DIR="${RUNNER_TEMP:-/tmp}/agent-roast-bin"
         mkdir -p "$INSTALL_DIR"
-        npm install --prefix "$INSTALL_DIR" agent-roast@^0.3.0 --ignore-scripts --no-audit --no-fund > /dev/null 2>&1
+        npm install --prefix "$INSTALL_DIR" agent-roast@0.5.0 --ignore-scripts --no-audit --no-fund > /dev/null 2>&1
+
+        EXTRA_ARGS=()
+        if [ -n "$ROAST_FAIL_ON" ]; then
+          EXTRA_ARGS+=(--fail-on "$ROAST_FAIL_ON")
+        fi
 
         "$INSTALL_DIR/node_modules/.bin/agent-roast" \
           --base "$ROAST_BASE" \
           --head "$ROAST_HEAD" \
-          --fail-on "$ROAST_FAIL_ON" \
+          "${EXTRA_ARGS[@]}" \
           --format "$ROAST_FORMAT"

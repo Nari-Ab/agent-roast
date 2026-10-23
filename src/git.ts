@@ -39,6 +39,7 @@ export class GitError extends Error {
 
 export const HERMETIC_GIT_FLAGS = [
   "-c", "core.quotepath=false",
+  "-c", "core.fsmonitor=false",
   "-c", "diff.noprefix=false",
   "-c", "diff.mnemonicPrefix=false",
   "--no-pager",
@@ -452,7 +453,8 @@ export function streamGitLog(
 export function streamGitDiff(
   cwd: string,
   baseSha: string,
-  headSha: string
+  headSha: string,
+  staged: boolean = false
 ): Readable {
   const gitArgs = [
     ...HERMETIC_GIT_FLAGS,
@@ -463,9 +465,9 @@ export function streamGitDiff(
     "--no-textconv",
     "--src-prefix=a/",
     "--dst-prefix=b/",
+    ...(staged ? ["--cached"] : []),
     "--end-of-options",
-    baseSha,
-    headSha,
+    ...(staged ? [] : [baseSha, headSha]),
     ...COMMON_EXCLUDE_SPECS,
   ];
 

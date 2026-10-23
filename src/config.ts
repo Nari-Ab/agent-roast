@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { VALID_DETECTORS } from "./types.js";
 
 export interface AgentRoastConfig {
   /** Detector rules to fail CI on in PR mode */
@@ -42,38 +43,76 @@ const CONFIG_FILENAMES = [
   "agent-roast.config.json",
 ];
 
-/**
- * Discovers and parses repository configuration file.
- * Returns DEFAULT_CONFIG if no configuration file is found or if parsing fails.
- */
-export function loadConfig(cwd: string = process.cwd()): AgentRoastConfig {
-  for (const filename of CONFIG_FILENAMES) {
-    const filePath = path.join(cwd, filename);
-    if (fs.existsSync(filePath)) {
-      try {
-        const raw = fs.readFileSync(filePath, "utf8");
-        const parsed = JSON.parse(raw);
-        if (typeof parsed === "object" && parsed !== null) {
-          return {
-            ...DEFAULT_CONFIG,
-            ...parsed,
-            failOn: Array.isArray(parsed.failOn) ? parsed.failOn : DEFAULT_CONFIG.failOn,
-            ignorePaths: Array.isArray(parsed.ignorePaths)
-              ? Array.from(new Set([...(DEFAULT_CONFIG.ignorePaths || []), ...parsed.ignorePaths]))
-              : DEFAULT_CONFIG.ignorePaths,
-            rules: {
-              ...DEFAULT_CONFIG.rules,
-              ...(parsed.rules || {}),
-            },
-          };
-        }
-      } catch (err: any) {
-        console.warn(`Warning: Failed to parse ${filename}: ${err.message}. Using default configuration.`);
+export class ConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigError";
+  }
+}
+
+function validateConfig(value: unknown): asserts value is AgentRoastConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ConfigError("Configuration must be a JSON object.");
+  }
+  const config = value as Record<string, unknown>;
+  const knownRules = new Set<string>(VALID_DETECTORS);
+  if (config.failOn !== undefined && (!Array.isArray(config.failOn) ||
+      config.failOn.some(rule => typeof rule !== "string" || !knownRules.has(rule)))) {
+    throw new ConfigError(`failOn must contain known rules: ${VALID_DETECTORS.join(", ")}`);
+  }
+  if (config.ignorePaths !== undefined && (!Array.isArray(config.ignorePaths) ||
+      config.ignorePaths.some(pattern => typeof pattern !== "string"))) {
+    throw new ConfigError("ignorePaths must be an array of strings.");
+  }
+  if (config.scoreThreshold !== undefined && (typeof config.scoreThreshold !== "number" ||
+      !Number.isFinite(config.scoreThreshold) || config.scoreThreshold < 0 || config.scoreThreshold > 100)) {
+    throw new ConfigError("scoreThreshold must be a number between 0 and 100.");
+  }
+  if (config.panicLoopWindowMinutes !== undefined && (typeof config.panicLoopWindowMinutes !== "number" ||
+      !Number.isFinite(config.panicLoopWindowMinutes) || config.panicLoopWindowMinutes <= 0)) {
+    throw new ConfigError("panicLoopWindowMinutes must be a positive number.");
+  }
+  if (config.rules !== undefined) {
+    if (!config.rules || typeof config.rules !== "object" || Array.isArray(config.rules)) {
+      throw new ConfigError("rules must be an object.");
+    }
+    for (const [rule, level] of Object.entries(config.rules)) {
+      if (!knownRules.has(rule) || !["error", "warn", "off"].includes(String(level))) {
+        throw new ConfigError(`Invalid rule '${rule}' or level '${level}'. Use known rules with error, warn, or off.`);
       }
     }
   }
+}
 
-  return { ...DEFAULT_CONFIG };
+/** Invalid policy must stop the audit instead of silently changing CI behavior. */
+export function loadConfig(cwd: string = process.cwd()): AgentRoastConfig {
+  for (const filename of CONFIG_FILENAMES) {
+    const filePath = path.join(cwd, filename);
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      validateConfig(parsed);
+      const rules = { ...DEFAULT_CONFIG.rules, ...parsed.rules };
+      // An explicit failOn wins; otherwise error/warn/off determines blocking rules.
+      const failOn = parsed.failOn ?? Object.entries(rules)
+        .filter(([, level]) => level === "error").map(([rule]) => rule);
+      return {
+        ...DEFAULT_CONFIG,
+        ...parsed,
+        failOn,
+        ignorePaths: [...new Set([...(DEFAULT_CONFIG.ignorePaths || []), ...(parsed.ignorePaths || [])])],
+        rules,
+      };
+    } catch (err) {
+      throw new ConfigError(`Invalid ${filename}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return {
+    ...DEFAULT_CONFIG,
+    failOn: [...(DEFAULT_CONFIG.failOn || [])],
+    ignorePaths: [...(DEFAULT_CONFIG.ignorePaths || [])],
+    rules: { ...DEFAULT_CONFIG.rules },
+  };
 }
 
 /**
@@ -92,11 +131,27 @@ export function matchIgnorePath(filePath: string, ignorePatterns?: string[]): bo
     // Convert simple glob pattern to RegExp
     const cleanPattern = pattern.replace(/\\/g, "/");
 
-    let regexPattern = cleanPattern
-      .replace(/[.+^${}()|[\]]/g, "\\$&")
-      .replace(/\*\*\//g, "(?:^|.*?/)")
-      .replace(/\/\*\*/g, "(?:/.*)?")
-      .replace(/\*/g, "[^/]*");
+    // Tokenize globs before expanding them: replacing '*' afterwards corrupts
+    // regex fragments generated for '**/' and breaks deep directory matches.
+    let regexPattern = "";
+    for (let i = 0; i < cleanPattern.length; i++) {
+      const char = cleanPattern[i];
+      if (char === "*" && cleanPattern[i + 1] === "*") {
+        i++;
+        if (cleanPattern[i + 1] === "/") {
+          regexPattern += "(?:.*/)?";
+          i++;
+        } else {
+          regexPattern += ".*";
+        }
+      } else if (char === "*") {
+        regexPattern += "[^/]*";
+      } else if (char === "?") {
+        regexPattern += "[^/]";
+      } else {
+        regexPattern += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      }
+    }
 
     if (!regexPattern.startsWith("^") && !regexPattern.startsWith("(?:^")) {
       regexPattern = "(?:^|/)" + regexPattern;

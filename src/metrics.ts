@@ -1,8 +1,10 @@
 import { ParsedCommit, ParsedFileDiff } from "./git.js";
 import { Infraction, MetricSummary } from "./types.js";
+import { SourceMasker } from "./source.js";
+import { RULE_GUIDES } from "./rules.js";
 
 const TEST_SKIP_PATTERNS = [
-  { regex: /(?:it|test|describe)\.skip\b/, name: "skipped test (it.skip / describe.skip)" },
+  { regex: /\b(?:it|test|describe)\.skip\b/, name: "skipped test (it.skip / describe.skip)" },
   { regex: /\b(?:xit|xtest)\(/, name: "disabled test (xit / xtest)" },
   { regex: /@pytest\.mark\.skip\b/, name: "skipped pytest (@pytest.mark.skip)" },
   { regex: /\bpytest\.skip\(/, name: "imperative pytest skip (pytest.skip)" },
@@ -30,9 +32,9 @@ const SWALLOWED_ERROR_PATTERNS = [
 ];
 
 const TRIVIAL_ASSERT_PATTERNS = [
-  { regex: /expect\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)\.toBe\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)/, name: "trivial assertion (expect(val).toBe(val))" },
-  { regex: /expect\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)\.toEqual\s*\(\s*(?:true|false|1|0|null|undefined)\s*\)/, name: "trivial assertion (expect(val).toEqual(val))" },
-  { regex: /\bassert\s+(?:True|False|1\s*==\s*1)\b/, name: "trivial python assert (assert True / 1 == 1)" },
+  { regex: /expect\s*\(\s*(true|false|1|0|null|undefined)\s*\)\.toBe\s*\(\s*\1\s*\)/, name: "trivial assertion (expect(val).toBe(val))" },
+  { regex: /expect\s*\(\s*(true|false|1|0|null|undefined)\s*\)\.toEqual\s*\(\s*\1\s*\)/, name: "trivial assertion (expect(val).toEqual(val))" },
+  { regex: /\bassert\s+(?:True|1\s*==\s*1)\s*(?=$|#|,)/, name: "trivial python assert (assert True / 1 == 1)" },
   { regex: /self\.assertTrue\s*\(\s*(?:True|1)\s*\)/, name: "trivial assert (self.assertTrue(True))" },
   { regex: /self\.assertEqual\s*\(\s*(?:1\s*,\s*1|True\s*,\s*True)\s*\)/, name: "trivial assert (self.assertEqual(1, 1))" },
   { regex: /assert\.(?:strictEqual|equal)\s*\(\s*(?:true\s*,\s*true|1\s*,\s*1)\s*\)/, name: "trivial assert (assert.equal(1, 1))" },
@@ -54,7 +56,7 @@ const CODE_EXTENSIONS = new Set([
 ]);
 
 const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
-const TEST_PATH_REGEX = /(?:^|\/)(?:tests?|__tests__|specs?)\/|[._-](?:test|spec)\.[a-z0-9]+$/i;
+const TEST_PATH_REGEX = /(?:^|\/)test_[^/]+\.py$|(?:^|\/)(?:tests?|__tests__|specs?)\/|[._-](?:test|spec)\.[a-z0-9]+$/i;
 
 export function isCodeFile(filePath: string, customIgnorePaths?: string[]): boolean {
   if (IGNORED_PATH_REGEX.test(filePath)) {
@@ -78,7 +80,7 @@ export function auditFileDiffs(
   files: ParsedFileDiff[],
   commitHash: string = "HEAD",
   commitDate: string = new Date().toISOString(),
-  options: { ignorePaths?: string[] } = {}
+  options: { ignorePaths?: string[]; rules?: Record<string, "error" | "warn" | "off"> } = {}
 ): {
   infractions: Infraction[];
   hasSupportedChanges: boolean;
@@ -98,11 +100,14 @@ export function auditFileDiffs(
     filesInspected++;
     linesAdded += file.addedLines.length;
 
+    const masker = new SourceMasker(file.path);
+    const maskedLines: { code: string; raw: string; number: number }[] = [];
     for (const added of file.addedLines) {
       const rawLine = added.line;
-      const cleanedLine = stripStringAndRegexLiterals(rawLine);
-      const trimmedCleaned = cleanedLine.trim();
-      const isComment = isCommentOnlyLine(trimmedCleaned);
+      const masked = masker.mask(rawLine, added.lineNumber);
+      const cleanedLine = masked.code;
+      maskedLines.push({ code: cleanedLine, raw: rawLine, number: added.lineNumber });
+      const isComment = !cleanedLine.trim();
 
       // A. Test Skips
       if (!isComment) {
@@ -125,7 +130,7 @@ export function auditFileDiffs(
       // B. Type Escapes
       let foundEscape = false;
       for (const rule of COMMENT_DIRECTIVE_PATTERNS) {
-        if (rule.regex.test(cleanedLine)) {
+        if (rule.regex.test(masked.comments)) {
           infractions.push({
             type: "type-escape",
             file: file.path,
@@ -196,7 +201,8 @@ export function auditFileDiffs(
       // E. Stub Abandonment
       if (!isComment) {
         for (const rule of STUB_ABANDONMENT_PATTERNS) {
-          if (rule.regex.test(rawLine)) {
+          const match = rule.regex.exec(rawLine);
+          if (match && cleanedLine[match.index] === rawLine[match.index]) {
             infractions.push({
               type: "stub-abandonment",
               file: file.path,
@@ -211,9 +217,36 @@ export function auditFileDiffs(
         }
       }
     }
+
+    // Empty handlers frequently span several lines. Only contiguous added code
+    // can prove emptiness; hunk gaps must not be joined into a fabricated block.
+    for (let index = 0; index < maskedLines.length; index++) {
+      const start = maskedLines[index];
+      const isCatch = /\bcatch\s*(?:\([^)]*\))?\s*\{\s*$/.test(start.code);
+      const isExcept = /\bexcept(?:\s+[^:]*)?:\s*$/.test(start.code);
+      if (!isCatch && !isExcept) continue;
+      let next = index + 1;
+      while (next < maskedLines.length && maskedLines[next].number === maskedLines[next - 1].number + 1 && !maskedLines[next].code.trim()) next++;
+      const end = maskedLines[next];
+      if (!end || end.number !== maskedLines[next - 1].number + 1) continue;
+      const closesCatch = isCatch && /^\s*}/.test(end.code);
+      let closesExcept = isExcept && /^\s*pass\s*$/.test(end.code);
+      if (closesExcept) {
+        const indent = start.raw.search(/\S/);
+        if (end.raw.search(/\S/) <= indent) closesExcept = false;
+        let after = next + 1;
+        while (after < maskedLines.length && maskedLines[after].number === maskedLines[after - 1].number + 1 && !maskedLines[after].code.trim()) after++;
+        if (after < maskedLines.length && maskedLines[after].number === maskedLines[after - 1].number + 1 && maskedLines[after].raw.search(/\S/) > indent) closesExcept = false;
+      }
+      if (closesCatch || closesExcept) infractions.push({
+        type: "swallowed-error", file: file.path, lineNumber: start.number,
+        lineSnippet: maskedLines.slice(index, next + 1).map(line => line.raw.trim()).join(" "),
+        commitHash, commitDate, reason: closesCatch ? "empty multi-line catch block" : "silent multi-line python error swallow",
+      });
+    }
   }
 
-  return { infractions, hasSupportedChanges, filesInspected, linesAdded };
+  return { infractions: infractions.filter(inf => options.rules?.[inf.type] !== "off").map(inf => ({ ...inf, suggestion: RULE_GUIDES[inf.type].suggestion })), hasSupportedChanges, filesInspected, linesAdded };
 }
 
 /**
@@ -221,18 +254,7 @@ export function auditFileDiffs(
  * test fixtures and string constants (e.g. { line: "it.skip" }) are not flagged.
  */
 export function stripStringAndRegexLiterals(line: string): string {
-  return line
-    .replace(/(["'`])(?:\\.|(?!\1)[^\\\r\n])*\1/g, '""')
-    .replace(/\/(?=[^\/\s])(?:\\\/|[^\/\r\n])+\/[gimsuy]*/g, '""');
-}
-
-function isCommentOnlyLine(trimmedLine: string): boolean {
-  return (
-    trimmedLine.startsWith("//") ||
-    trimmedLine.startsWith("/*") ||
-    trimmedLine.startsWith("*") ||
-    trimmedLine.startsWith("#")
-  );
+  return new SourceMasker("source.ts").mask(line, 1).code;
 }
 
 const PANIC_COMMIT_REGEX = /\b(?:fix|quickfix|revert|hotfix|retry|patch|undo|workaround)\b/i;
@@ -269,10 +291,14 @@ export class MetricsCollector {
 
   private includeAll: boolean;
   private ignorePaths?: string[];
+  private rules?: Record<string, "error" | "warn" | "off">;
+  private panicLoopWindowMinutes: number;
 
-  constructor(options: { all?: boolean; ignorePaths?: string[] } = {}) {
+  constructor(options: { all?: boolean; ignorePaths?: string[]; rules?: Record<string, "error" | "warn" | "off">; panicLoopWindowMinutes?: number } = {}) {
     this.includeAll = options.all ?? false;
     this.ignorePaths = options.ignorePaths;
+    this.rules = options.rules;
+    this.panicLoopWindowMinutes = options.panicLoopWindowMinutes ?? 15;
   }
 
   recordSkipped(stats: { skippedLongLines?: number; skippedUnknownFiles?: number }): void {
@@ -281,7 +307,7 @@ export class MetricsCollector {
   }
 
   private flushPanicChain(): void {
-    if (this.activePanicChain && this.activePanicChain.commitCount >= 2) {
+    if (this.rules?.["panic-loop"] !== "off" && this.activePanicChain && this.activePanicChain.commitCount >= 2) {
       const chain = this.activePanicChain;
       const durationMinutes = Math.max(
         1,
@@ -311,6 +337,7 @@ export class MetricsCollector {
     }
 
     if (!isTarget) {
+      this.flushPanicChain();
       return;
     }
 
@@ -334,7 +361,7 @@ export class MetricsCollector {
           currentActiveFiles.size > 0 &&
           [...currentActiveFiles].some((p) => this.activePanicChain!.activeFiles.has(p));
 
-        if (diffMinutes > 0 && diffMinutes <= 15 && touchedSameFiles) {
+        if (diffMinutes > 0 && diffMinutes <= this.panicLoopWindowMinutes && touchedSameFiles) {
           // Extend existing panic chain
           this.activePanicChain.commitCount++;
           this.activePanicChain.latestHash = commit.hash;
@@ -376,139 +403,24 @@ export class MetricsCollector {
       this.flushPanicChain();
     }
 
-    // 2. Scan added lines in each file
-    let commitSkips = 0;
-    let commitEscapes = 0;
-    let commitSwallowed = 0;
-    let commitTrivial = 0;
-    let commitStubs = 0;
-
-    for (const file of commit.files) {
-      if (!isCodeFile(file.path, this.ignorePaths)) {
-        continue;
-      }
-
-      for (const added of file.addedLines) {
-        const rawLine = added.line;
-        const cleanedLine = stripStringAndRegexLiterals(rawLine);
-        const trimmedCleaned = cleanedLine.trim();
-        const isComment = isCommentOnlyLine(trimmedCleaned);
-
-        // A. Test Skips (only on non-comment executable code)
-        if (!isComment && commitSkips < MAX_INFRACTIONS_PER_COMMIT) {
-          for (const rule of TEST_SKIP_PATTERNS) {
-            if (rule.regex.test(cleanedLine)) {
-              this.testSkips.push({
-                type: "test-skip",
-                file: file.path,
-                lineNumber: added.lineNumber,
-                lineSnippet: rawLine.trim(),
-                commitHash: commit.hash,
-                commitDate: commit.date,
-                reason: rule.name,
-              });
-              commitSkips++;
-              break;
-            }
-          }
-        }
-
-        // B. Type Escapes
-        if (commitEscapes < MAX_INFRACTIONS_PER_COMMIT) {
-          // B1: Comment directives (e.g. // @ts-ignore, // eslint-disable, # type: ignore)
-          for (const rule of COMMENT_DIRECTIVE_PATTERNS) {
-            if (rule.regex.test(cleanedLine)) {
-              this.typeEscapes.push({
-                type: "type-escape",
-                file: file.path,
-                lineNumber: added.lineNumber,
-                lineSnippet: rawLine.trim(),
-                commitHash: commit.hash,
-                commitDate: commit.date,
-                reason: rule.name,
-              });
-              commitEscapes++;
-              break;
-            }
-          }
-
-          // B2: Code type bypasses (e.g. as any) — ONLY when not inside a comment
-          if (!isComment && commitEscapes < MAX_INFRACTIONS_PER_COMMIT) {
-            for (const rule of CODE_TYPE_ESCAPE_PATTERNS) {
-              if (rule.regex.test(cleanedLine)) {
-                this.typeEscapes.push({
-                  type: "type-escape",
-                  file: file.path,
-                  lineNumber: added.lineNumber,
-                  lineSnippet: rawLine.trim(),
-                  commitHash: commit.hash,
-                  commitDate: commit.date,
-                  reason: rule.name,
-                });
-                commitEscapes++;
-                break;
-              }
-            }
-          }
-        }
-
-        // C. Swallowed Errors (only in executable code, not comments)
-        if (!isComment && commitSwallowed < MAX_INFRACTIONS_PER_COMMIT) {
-          for (const rule of SWALLOWED_ERROR_PATTERNS) {
-            if (rule.regex.test(cleanedLine)) {
-              this.swallowedErrors.push({
-                type: "swallowed-error",
-                file: file.path,
-                lineNumber: added.lineNumber,
-                lineSnippet: rawLine.trim(),
-                commitHash: commit.hash,
-                commitDate: commit.date,
-                reason: rule.name,
-              });
-              commitSwallowed++;
-              break;
-            }
-          }
-        }
-
-        // D. Trivial Assertions (only in test files)
-        if (!isComment && isTestFile(file.path) && commitTrivial < MAX_INFRACTIONS_PER_COMMIT) {
-          for (const rule of TRIVIAL_ASSERT_PATTERNS) {
-            if (rule.regex.test(cleanedLine)) {
-              this.trivialAsserts.push({
-                type: "trivial-assert",
-                file: file.path,
-                lineNumber: added.lineNumber,
-                lineSnippet: rawLine.trim(),
-                commitHash: commit.hash,
-                commitDate: commit.date,
-                reason: rule.name,
-              });
-              commitTrivial++;
-              break;
-            }
-          }
-        }
-
-        // E. Stub Abandonment (only in non-comment code)
-        if (!isComment && commitStubs < MAX_INFRACTIONS_PER_COMMIT) {
-          for (const rule of STUB_ABANDONMENT_PATTERNS) {
-            if (rule.regex.test(rawLine)) {
-              this.stubAbandonments.push({
-                type: "stub-abandonment",
-                file: file.path,
-                lineNumber: added.lineNumber,
-                lineSnippet: rawLine.trim(),
-                commitHash: commit.hash,
-                commitDate: commit.date,
-                reason: rule.name,
-              });
-              commitStubs++;
-              break;
-            }
-          }
-        }
-      }
+    // One detector implementation for history, PRs and staged changes.
+    const audit = auditFileDiffs(commit.files, commit.hash, commit.date, {
+      ignorePaths: this.ignorePaths,
+      rules: this.rules,
+    });
+    const buckets = {
+      "test-skip": this.testSkips,
+      "type-escape": this.typeEscapes,
+      "swallowed-error": this.swallowedErrors,
+      "trivial-assert": this.trivialAsserts,
+      "stub-abandonment": this.stubAbandonments,
+      "panic-loop": this.panicLoops,
+    };
+    const counts: Record<string, number> = {};
+    for (const infraction of audit.infractions) {
+      const count = counts[infraction.type] || 0;
+      if (count < MAX_INFRACTIONS_PER_COMMIT) buckets[infraction.type].push(infraction);
+      counts[infraction.type] = count + 1;
     }
   }
 

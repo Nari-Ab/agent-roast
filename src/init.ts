@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { DEFAULT_CONFIG } from "./config.js";
 
 export interface InitOptions {
   cwd?: string;
@@ -14,7 +15,6 @@ export interface InitResult {
 }
 
 export const DEFAULT_CONFIG_TEMPLATE = {
-  $schema: "https://raw.githubusercontent.com/Nari-Ab/agent-roast/main/schema.json",
   ignorePaths: [
     "**/*.min.js",
     "**/vendor/**",
@@ -22,13 +22,7 @@ export const DEFAULT_CONFIG_TEMPLATE = {
     "**/build/**",
     "**/fixtures/**",
   ],
-  rules: {
-    "hallucinated-package": "error",
-    "empty-catch": "warn",
-    "trivial-assert": "warn",
-    "stub-abandonment": "warn",
-    "mock-leak": "warn",
-  },
+  rules: { ...DEFAULT_CONFIG.rules },
   scoreThreshold: 70,
 };
 
@@ -36,8 +30,9 @@ export const GITHUB_WORKFLOW_TEMPLATE = `name: Agent Roast
 on:
   pull_request:
     branches: [main, master]
-  push:
-    branches: [main, master]
+
+permissions:
+  contents: read
 
 jobs:
   audit:
@@ -49,23 +44,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Run agent-roast PR check
         if: github.event_name == 'pull_request'
-        run: npx agent-roast --base \${{ github.event.pull_request.base.sha }} --head \${{ github.event.pull_request.head.sha }} --format github
-
-      - name: Run agent-roast repo audit
-        if: github.event_name != 'pull_request'
-        run: npx agent-roast --fail-under 70
+        uses: Nari-Ab/agent-roast@v1
+        with:
+          base: \${{ github.event.pull_request.base.sha }}
+          head: \${{ github.event.pull_request.head.sha }}
+          format: github
 `;
 
 export const PRE_COMMIT_HOOK_TEMPLATE = `#!/bin/sh
 # Run agent-roast pre-commit verification
-npx agent-roast --fail-under 70
+npx --no-install agent-roast --staged
 `;
 
 export async function initProject(options: InitOptions = {}): Promise<InitResult> {
@@ -77,7 +67,7 @@ export async function initProject(options: InitOptions = {}): Promise<InitResult
   const configPath = path.join(cwd, ".agentroastrc.json");
   const altConfigPath = path.join(cwd, "agent-roast.config.json");
 
-  if (fs.existsSync(configPath) || fs.existsSync(altConfigPath)) {
+  if (fs.existsSync(configPath) || fs.existsSync(altConfigPath) || fs.existsSync(path.join(cwd, ".agentroastrc"))) {
     skipped.push(".agentroastrc.json");
   } else {
     fs.writeFileSync(

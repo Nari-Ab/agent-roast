@@ -32,6 +32,9 @@ export * from "./renderer.js";
 export * from "./config.js";
 export * from "./init.js";
 export * from "./badge.js";
+export * from "./check.js";
+export * from "./baseline.js";
+export * from "./rules.js";
 
 export class InvalidDetectorError extends Error {
   constructor(message: string) {
@@ -47,7 +50,7 @@ export async function roastRepository(
   const since = options.since || "90 days ago";
   const repoName = path.basename(cwd);
 
-  const collector = new MetricsCollector({ all: options.all, ignorePaths: options.ignorePaths });
+  const collector = new MetricsCollector({ all: options.all, ignorePaths: options.ignorePaths, rules: options.rules, panicLoopWindowMinutes: options.panicLoopWindowMinutes });
   const gitStream = streamGitLog(cwd, since);
 
   await parseGitLogStream(gitStream, (commit, stats) => {
@@ -80,15 +83,22 @@ export async function auditPullRequest(
     }
   }
 
+  if (options.staged && options.base) {
+    throw new GitResolutionError("--staged cannot be combined with --base.");
+  }
+  if (!options.staged && !options.base) {
+    throw new GitResolutionError("A base ref is required for a pull request audit.");
+  }
+
   // 1. Resolve base and head refs to SHA safely
-  const baseSha = resolveCommitSha(cwd, options.base, "Base ref");
-  const headSha = resolveCommitSha(cwd, options.head, "Head ref");
+  const baseSha = options.staged ? "INDEX" : resolveCommitSha(cwd, options.base!, "Base ref");
+  const headSha = options.staged ? "INDEX" : resolveCommitSha(cwd, options.head || "HEAD", "Head ref");
 
   // 2. Find merge base
-  const mergeBaseSha = findMergeBase(cwd, baseSha, headSha);
+  const mergeBaseSha = options.staged ? "INDEX" : findMergeBase(cwd, baseSha, headSha);
 
   // 3. Diff from mergeBaseSha to headSha
-  const diffStream = streamGitDiff(cwd, mergeBaseSha, headSha);
+  const diffStream = streamGitDiff(cwd, mergeBaseSha, headSha, options.staged);
   let rawDiff = "";
   await new Promise<void>((resolve, reject) => {
     diffStream.on("data", (chunk) => {
@@ -102,7 +112,7 @@ export async function auditPullRequest(
   const { files, skippedLongLines, skippedUnknownFiles } = parseDiff(rawDiff);
 
   // 5. Audit files
-  const audit = auditFileDiffs(files, headSha, new Date().toISOString(), { ignorePaths: options.ignorePaths });
+  const audit = auditFileDiffs(files, headSha, new Date().toISOString(), { ignorePaths: options.ignorePaths, rules: options.rules });
   const infractions = audit.infractions;
 
   const defectDensityPer100Lines = audit.linesAdded > 0
@@ -120,6 +130,7 @@ export async function auditPullRequest(
 
   const result: PrAuditResult = {
     schemaVersion: "1.0.0",
+    mode: options.staged ? "staged" : "pr",
     baseSha,
     headSha,
     mergeBaseSha,

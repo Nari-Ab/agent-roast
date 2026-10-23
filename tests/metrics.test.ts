@@ -56,9 +56,9 @@ describe("Metrics Engine", () => {
             { line: "// @ts-nocheck", lineNumber: 25 },
             { line: "const parsed = obj as unknown as Target;", lineNumber: 30 },
             { line: "const empty = val as never;", lineNumber: 35 },
-            { line: "import foo  # noqa", lineNumber: 40 },
           ],
         },
+        { path: "src/utils.py", addedLines: [{ line: "import foo  # noqa", lineNumber: 40 }] },
       ],
     };
 
