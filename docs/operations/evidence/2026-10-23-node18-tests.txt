@@ -1,0 +1,23 @@
+
+ RUN  v3.2.7 /private/tmp/agent-roast-release-final
+
+ ✓ tests/detector.test.ts (5 tests) 4ms
+ ✓ tests/git.test.ts (14 tests) 11ms
+ ✓ tests/config.test.ts (5 tests) 7ms
+ ✓ tests/init.test.ts (5 tests) 10ms
+ ✓ tests/metrics.test.ts (14 tests) 7ms
+ ✓ tests/telemetry.test.ts (2 tests) 32ms
+ ✓ tests/source.test.ts (10 tests) 23ms
+ ✓ tests/baseline.test.ts (12 tests) 130ms
+ ✓ tests/badge.test.ts (5 tests) 2ms
+ ✓ tests/renderer.test.ts (4 tests) 2ms
+ ✓ tests/integration.test.ts (5 tests) 1114ms
+   ✓ Real Git Integration with Hostile Environment > handles hostile git environment with Cyrillic quotes, no-newline, renames, and PR audit  585ms
+ ✓ tests/regressions.test.ts (33 tests) 3104ms
+ ✓ tests/check.test.ts (29 tests) 3209ms
+   ✓ current-tree check > explains all supported rules locally and rejects a typo  339ms
+
+ Test Files  13 passed (13)
+      Tests  143 passed (143)
+   Start at  11:17:59
+   Duration  3.51s (transform 767ms, setup 0ms, collect 1.32s, tests 7.65s, environment 1ms, prepare 598ms)

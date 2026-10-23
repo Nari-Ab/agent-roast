@@ -53,7 +53,7 @@ async function readSource(root: string, file: string, signal?: AbortSignal): Pro
     while (true) {
       checkAborted(signal);
       const chunk = Buffer.alloc(Math.min(64 * 1024, MAX_FILE_BYTES + 1 - size));
-      const { bytesRead } = await handle.read(chunk);
+      const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
       if (!bytesRead) break;
       size += bytesRead;
       if (size > MAX_FILE_BYTES) throw new Error("File exceeds the 2 MiB scan limit.");
