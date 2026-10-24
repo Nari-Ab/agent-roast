@@ -1,0 +1,98 @@
+
+> agent-roast@0.6.0 pretest
+> npm run build
+
+
+> agent-roast@0.6.0 build
+> tsup
+
+CLI Building entry: src/cli.ts, src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /private/tmp/agent-roast-060-release/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/cli.js            13.47 KB
+ESM dist/index.js          2.30 KB
+ESM dist/chunk-RU5OYHLR.js 101.98 KB
+ESM ⚡️ Build success in 14ms
+DTS Build start
+DTS ⚡️ Build success in 780ms
+DTS dist/cli.d.ts   13.00 B
+DTS dist/index.d.ts 15.33 KB
+
+> agent-roast@0.6.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /private/tmp/agent-roast-060-release
+
+ ✓ tests/git.test.ts (14 tests) 14ms
+ ✓ tests/metrics.test.ts (14 tests) 11ms
+ ✓ tests/baseline.test.ts (12 tests) 134ms
+ ✓ tests/config.test.ts (5 tests) 9ms
+ ✓ tests/init.test.ts (5 tests) 12ms
+ ✓ tests/source.test.ts (10 tests) 15ms
+ ✓ tests/detector.test.ts (5 tests) 7ms
+ ✓ tests/telemetry.test.ts (2 tests) 41ms
+ ✓ tests/badge.test.ts (5 tests) 5ms
+ ✓ tests/renderer.test.ts (4 tests) 3ms
+ ✓ tests/sarif.test.ts (7 tests) 1562ms
+   ✓ portable SARIF reporting > emits only introduced review findings and records committed comparison scope  435ms
+ ✓ tests/action.test.ts (6 tests) 1929ms
+   ✓ composite action context-review integration > installs away from candidate npm config, runs review, and cleans the install directory  930ms
+   ✓ composite action context-review integration > keeps an explicit legacy audit mode and passes fail-on as one argument  448ms
+   ✓ composite action context-review integration > does not interpolate branch text as shell commands  528ms
+ ✓ tests/integration.test.ts (5 tests) 2192ms
+   ✓ Real Git Integration with Hostile Environment > handles hostile git environment with Cyrillic quotes, no-newline, renames, and PR audit  1019ms
+   ✓ Real Git Integration with Hostile Environment > detects trivial-assert and stub-abandonment in PR diff while respecting ignorePaths  389ms
+   ✓ Real Git Integration with Hostile Environment > executes 'agent-roast badge' with --json and --out flags via CLI  568ms
+ ✓ tests/snapshot.test.ts (9 tests) 3208ms
+   ✓ immutable, bounded Git source reads > reads blobs by fixed OID and rejects argument-like object identities  306ms
+   ✓ immutable, bounded Git source reads > rejects missing and unrelated refs rather than comparing arbitrary trees  442ms
+   ✓ immutable, bounded Git source reads > refuses ambiguous criss-cross merge ancestry  520ms
+   ✓ immutable, bounded Git source reads > does not execute configured external diff or fsmonitor programs  579ms
+   ✓ immutable, bounded Git source reads > does not silently truncate an over-limit changed-file inventory  512ms
+ ✓ tests/regressions.test.ts (33 tests) 4761ms
+   ✓ configuration as an executable policy > honors explicit failOn, including an empty array  473ms
+   ✓ staged checks protect the next commit > checks PRs using config and supports JSON history output  344ms
+ ✓ tests/check.test.ts (29 tests) 4936ms
+   ✓ current-tree check > does not create a misleading baseline when source is too large to scan  342ms
+   ✓ current-tree check > creates an explicit, reviewable baseline via CLI and preserves it on retry  328ms
+   ✓ current-tree check > exports machine-readable and markdown reports with policy severity  317ms
+   ✓ current-tree check > explains all supported rules locally and rejects a typo  343ms
+ ✓ tests/evaluation.test.ts (14 tests) 6100ms
+   ✓ labeled before/after regression corpus > delete only catch handler  632ms
+   ✓ labeled before/after regression corpus > add empty catch  515ms
+   ✓ labeled before/after regression corpus > add skipped test  687ms
+   ✓ labeled before/after regression corpus > add duplicate skip  781ms
+   ✓ labeled before/after regression corpus > add fake assertion  409ms
+   ✓ labeled before/after regression corpus > add type escape  393ms
+   ✓ labeled before/after regression corpus > add unfinished stub  335ms
+   ✓ labeled before/after regression corpus > example inside existing comment  366ms
+   ✓ labeled before/after regression corpus > example inside existing docstring  337ms
+   ✓ labeled before/after regression corpus > indent existing shortcut  333ms
+   ✓ labeled before/after regression corpus > real error handling  331ms
+   ✓ labeled before/after regression corpus > fix skipped test  340ms
+   ✓ labeled before/after regression corpus > fix type bypass  316ms
+   ✓ labeled before/after regression corpus > normal behavior assertion  322ms
+ ✓ tests/review.test.ts (33 tests) 10219ms
+   ✓ context review of committed code > detects deletion-only empty catches missed by added-line scanning  753ms
+   ✓ context review of committed code > does not flag examples added inside an existing block comment  669ms
+   ✓ context review of committed code > keeps existing findings after line shifts and flags only an additional duplicate  931ms
+   ✓ context review of committed code > reports patterns that disappear without equating deletion to a verified fix  442ms
+   ✓ context review of committed code > understands pure renames without claiming a fix or introducing debt  418ms
+   ✓ context review of committed code > does not claim renamed code moved into generated output was fixed  401ms
+   ✓ context review of committed code > uses immutable committed content despite different checkout/index content  328ms
+   ✓ context review of committed code > uses the common ancestor for source and supplied base tip for policy  373ms
+   ✓ context review of committed code > gates a candidate that tries disabling rules or ignoring all paths  350ms
+   ✓ context review of committed code > ignores invalid candidate config but rejects invalid trusted config  423ms
+   ✓ context review of committed code > honors trusted off rules and explicit advisory CLI overrides  457ms
+   ✓ context review of committed code > reports binary, invalid UTF-8 and oversized source as incomplete  308ms
+   ✓ context review of committed code > does not use Git replacement objects to change the inspected candidate  306ms
+
+ Test Files  18 passed (18)
+      Tests  212 passed (212)
+   Start at  20:50:10
+   Duration  10.60s (transform 425ms, setup 0ms, collect 1.50s, tests 35.16s, environment 2ms, prepare 1.13s)

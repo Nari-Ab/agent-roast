@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 — unreleased (2026-10-24)
+## 0.6.0 — 2026-10-24
 
 - Added `review --base <trusted-ref>`: compare full source at merge-base/head and
   report introduced, existing and disappeared findings. Deletion-only regressions
@@ -11,9 +11,9 @@
   encoded relative locations, occurrence fingerprints and incomplete-run status.
 - Added explicit coverage/size limits, cancellation, bounded Git subprocess reads,
   replacement-object isolation and refusal of partial clones/ambiguous merge bases.
-- Composite Action preparation defaults to `mode: review`; `mode: audit` retains
+- Composite Action defaults to `mode: review`; `mode: audit` retains
   the legacy added-line behavior. Installation runs outside candidate npm config.
-  `pull_request_target` is rejected. Release target is 0.6.0 after npm publication.
+  `pull_request_target` is rejected. The Action installs exactly 0.6.0.
 - Added a transparent 14-change labeled regression corpus and a pilot validation
   plan. Synthetic evaluation is not a claim about production accuracy or adoption.
 

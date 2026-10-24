@@ -48,7 +48,7 @@ A finding includes its file and line, the source snippet, and a concrete next st
 To see the complete machine-readable result, use `check --format json`; terminal
 output shows the first 20 findings. `check --format markdown` produces a review table.
 
-### Context review for pull requests (0.6.0, unreleased)
+### Context review for pull requests
 
 ```bash
 # Compare committed source at the common ancestor and candidate head
@@ -106,8 +106,8 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-For the new CLI in this checkout, run `npm run build` and use `node dist/cli.js`.
-Published npm `latest` remains 0.5.0 until the release is explicitly published.
+Install with `npx agent-roast@0.6.0 review --base origin/main`. For local development,
+run `npm run build` and use `node dist/cli.js`.
 
 ### Baseline adoption
 
