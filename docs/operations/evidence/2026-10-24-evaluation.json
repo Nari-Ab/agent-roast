@@ -1,0 +1,184 @@
+{
+  "date": "2026-10-24",
+  "corpus": "14 project-maintained labeled synthetic changes",
+  "limitations": "Regression controls selected by the project author; not independent accuracy, production effectiveness, customer validation or an economic result.",
+  "cases": [
+    {
+      "scenario": "delete only catch handler",
+      "expectedIntroduced": [
+        "swallowed-error"
+      ],
+      "addedLineFindings": [],
+      "contextFindings": [
+        "swallowed-error"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 342
+    },
+    {
+      "scenario": "add empty catch",
+      "expectedIntroduced": [
+        "swallowed-error"
+      ],
+      "addedLineFindings": [
+        "swallowed-error"
+      ],
+      "contextFindings": [
+        "swallowed-error"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 269
+    },
+    {
+      "scenario": "add skipped test",
+      "expectedIntroduced": [
+        "test-skip"
+      ],
+      "addedLineFindings": [
+        "test-skip"
+      ],
+      "contextFindings": [
+        "test-skip"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 255
+    },
+    {
+      "scenario": "add duplicate skip",
+      "expectedIntroduced": [
+        "test-skip"
+      ],
+      "addedLineFindings": [
+        "test-skip"
+      ],
+      "contextFindings": [
+        "test-skip"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 196
+    },
+    {
+      "scenario": "add fake assertion",
+      "expectedIntroduced": [
+        "trivial-assert"
+      ],
+      "addedLineFindings": [
+        "trivial-assert"
+      ],
+      "contextFindings": [
+        "trivial-assert"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 206
+    },
+    {
+      "scenario": "add type escape",
+      "expectedIntroduced": [
+        "type-escape"
+      ],
+      "addedLineFindings": [
+        "type-escape"
+      ],
+      "contextFindings": [
+        "type-escape"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 187
+    },
+    {
+      "scenario": "add unfinished stub",
+      "expectedIntroduced": [
+        "stub-abandonment"
+      ],
+      "addedLineFindings": [
+        "stub-abandonment"
+      ],
+      "contextFindings": [
+        "stub-abandonment"
+      ],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 180
+    },
+    {
+      "scenario": "example inside existing comment",
+      "expectedIntroduced": [],
+      "addedLineFindings": [
+        "test-skip"
+      ],
+      "contextFindings": [],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 181
+    },
+    {
+      "scenario": "example inside existing docstring",
+      "expectedIntroduced": [],
+      "addedLineFindings": [
+        "test-skip"
+      ],
+      "contextFindings": [],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 180
+    },
+    {
+      "scenario": "indent existing shortcut",
+      "expectedIntroduced": [],
+      "addedLineFindings": [
+        "test-skip"
+      ],
+      "contextFindings": [],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 178
+    },
+    {
+      "scenario": "real error handling",
+      "expectedIntroduced": [],
+      "addedLineFindings": [],
+      "contextFindings": [],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 185
+    },
+    {
+      "scenario": "fix skipped test",
+      "expectedIntroduced": [],
+      "addedLineFindings": [],
+      "contextFindings": [],
+      "removedFindings": 1,
+      "complete": true,
+      "elapsedMs": 179
+    },
+    {
+      "scenario": "fix type bypass",
+      "expectedIntroduced": [],
+      "addedLineFindings": [],
+      "contextFindings": [],
+      "removedFindings": 1,
+      "complete": true,
+      "elapsedMs": 186
+    },
+    {
+      "scenario": "normal behavior assertion",
+      "expectedIntroduced": [],
+      "addedLineFindings": [],
+      "contextFindings": [],
+      "removedFindings": 0,
+      "complete": true,
+      "elapsedMs": 188
+    }
+  ],
+  "exactMatchCases": {
+    "addedLines": 10,
+    "contextReview": 14,
+    "total": 14
+  }
+}

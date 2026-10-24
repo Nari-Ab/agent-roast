@@ -430,3 +430,40 @@ export function formatCheckMarkdown(result: import("./types.js").CheckResult): s
   for (const skipped of result.skippedFiles) lines.push("", `Not scanned: ${markdownCell(skipped.file)} — ${markdownCell(skipped.reason)}`);
   return lines.join("\n");
 }
+
+export function formatReviewTerminal(result: import("./types.js").ReviewResult): string {
+  const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
+  const lines = ["", pc.bold(`agent-roast — context review: ${status}`),
+    `  ${result.mergeBaseSha.slice(0, 7)} → ${result.headSha.slice(0, 7)} · policy from base ${result.policySha.slice(0, 7)}`,
+    `  ${result.filesInspected} changed files compared · ${result.linesInspected} source lines inspected across both versions`,
+    `  ${result.infractions.length} new · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected`];
+  if (result.policyChanges.length) lines.push("  Candidate policy changes were ignored; adopt them separately after review.");
+  if (result.excludedFiles || result.unsupportedFiles) lines.push(`  ${result.excludedFiles} excluded · ${result.unsupportedFiles} unsupported/non-source changes`);
+  for (const finding of result.infractions.slice(0, 20)) {
+    lines.push("", `  ${result.failedRules.includes(finding.type) ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`,
+      `    ${terminalText(finding.lineSnippet || finding.reason)}`, `    Next: ${finding.suggestion || "Review this occurrence."}`);
+  }
+  if (result.infractions.length > 20) lines.push(`  ${result.infractions.length - 20} more new findings; use --format json for all results.`);
+  for (const skipped of result.skippedFiles) lines.push(`  NOT COMPARED ${terminalText(skipped.file)}: ${terminalText(skipped.reason)}`);
+  lines.push("", !result.complete ? "  INCOMPLETE: some changed source was not compared (exit 2)." : result.passed ? "  PASSED: no new blocking findings." : `  BLOCKED: ${result.failedRules.join(", ")}.`, "");
+  if (!result.filesInspected) lines.push("  No supported changed source files compared.", "");
+  return lines.join("\n");
+}
+
+export function formatReviewMarkdown(result: import("./types.js").ReviewResult): string {
+  const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
+  const lines = [`## agent-roast context review: ${status}`, "",
+    `Compared ${result.filesInspected} changed files at \`${result.mergeBaseSha.slice(0, 7)}\` → \`${result.headSha.slice(0, 7)}\`. Policy: \`${result.policySha.slice(0, 7)}\`.`, "",
+    `**${result.infractions.length} new** · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected.`, ""];
+  if (result.policyChanges.length) lines.push("Candidate policy changes were ignored. This review uses the supplied base commit's policy.", "");
+  lines.push("| New finding | Head location | Evidence | Next step |", "| --- | --- | --- | --- |");
+  for (const finding of result.infractions) lines.push(`| ${finding.type} | ${markdownCell(`${finding.file}:${finding.lineNumber}`)} | ${markdownCell(finding.lineSnippet || finding.reason)} | ${markdownCell(finding.suggestion || "Review this occurrence.")} |`);
+  if (result.removedFindings.length) {
+    lines.push("", "### No longer detected", "", "These patterns disappeared from the compared source. Deleting code is not proof of a behavioral fix.", "",
+      "| Rule | Previous location | Previous evidence |", "| --- | --- | --- |");
+    for (const finding of result.removedFindings) lines.push(`| ${finding.type} | ${markdownCell(`${finding.file}:${finding.lineNumber}`)} | ${markdownCell(finding.lineSnippet || finding.reason)} |`);
+  }
+  for (const skipped of result.skippedFiles) lines.push("", `Not compared: ${markdownCell(skipped.file)} — ${markdownCell(skipped.reason)}`);
+  lines.push("", `Scope: changed supported files only; ${result.excludedFiles} excluded and ${result.unsupportedFiles} unsupported/non-source changes.`);
+  return lines.join("\n");
+}

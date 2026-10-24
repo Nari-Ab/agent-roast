@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 — unreleased (2026-10-24)
+
+- Added `review --base <trusted-ref>`: compare full source at merge-base/head and
+  report introduced, existing and disappeared findings. Deletion-only regressions
+  and examples inside pre-existing comments are analyzed with file context.
+- Reviews use policy from the supplied base commit, report candidate policy changes,
+  preserve worktree/index contents and account for Git-recognized renames/duplicates.
+- Added offline SARIF 2.1.0 output to `review` and `check`, including rule guidance,
+  encoded relative locations, occurrence fingerprints and incomplete-run status.
+- Added explicit coverage/size limits, cancellation, bounded Git subprocess reads,
+  replacement-object isolation and refusal of partial clones/ambiguous merge bases.
+- Composite Action preparation defaults to `mode: review`; `mode: audit` retains
+  the legacy added-line behavior. Installation runs outside candidate npm config.
+  `pull_request_target` is rejected. Release target is 0.6.0 after npm publication.
+- Added a transparent 14-change labeled regression corpus and a pilot validation
+  plan. Synthetic evaluation is not a claim about production accuracy or adoption.
+
 ## 0.5.0 — 2026-10-23
 
 Check the code you have today, adopt the tool without blocking on existing debt, and get concrete guidance for each finding.

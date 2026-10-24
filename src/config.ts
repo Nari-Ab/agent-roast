@@ -37,7 +37,7 @@ export const DEFAULT_CONFIG: AgentRoastConfig = {
   },
 };
 
-const CONFIG_FILENAMES = [
+export const CONFIG_FILENAMES = [
   ".agentroastrc.json",
   ".agentroastrc",
   "agent-roast.config.json",
@@ -84,35 +84,37 @@ function validateConfig(value: unknown): asserts value is AgentRoastConfig {
   }
 }
 
+/** Parse one explicit policy source; shared by worktree and trusted Git reviews. */
+export function configFromText(text: string, source: string): AgentRoastConfig {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    validateConfig(parsed);
+    const rules = { ...DEFAULT_CONFIG.rules, ...parsed.rules };
+    const failOn = parsed.failOn ?? Object.entries(rules)
+      .filter(([, level]) => level === "error").map(([rule]) => rule);
+    return {
+      ...DEFAULT_CONFIG, ...parsed, failOn,
+      ignorePaths: [...new Set([...(DEFAULT_CONFIG.ignorePaths || []), ...(parsed.ignorePaths || [])])],
+      rules,
+    };
+  } catch (error) {
+    throw new ConfigError(`Invalid ${source}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /** Invalid policy must stop the audit instead of silently changing CI behavior. */
 export function loadConfig(cwd: string = process.cwd()): AgentRoastConfig {
   for (const filename of CONFIG_FILENAMES) {
     const filePath = path.join(cwd, filename);
-    if (!fs.existsSync(filePath)) continue;
-    try {
-      const parsed: unknown = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      validateConfig(parsed);
-      const rules = { ...DEFAULT_CONFIG.rules, ...parsed.rules };
-      // An explicit failOn wins; otherwise error/warn/off determines blocking rules.
-      const failOn = parsed.failOn ?? Object.entries(rules)
-        .filter(([, level]) => level === "error").map(([rule]) => rule);
-      return {
-        ...DEFAULT_CONFIG,
-        ...parsed,
-        failOn,
-        ignorePaths: [...new Set([...(DEFAULT_CONFIG.ignorePaths || []), ...(parsed.ignorePaths || [])])],
-        rules,
-      };
-    } catch (err) {
-      throw new ConfigError(`Invalid ${filename}: ${err instanceof Error ? err.message : String(err)}`);
+    if (fs.existsSync(filePath)) {
+      try { return configFromText(fs.readFileSync(filePath, "utf8"), filename); }
+      catch (error) {
+        if (error instanceof ConfigError) throw error;
+        throw new ConfigError(`Cannot read ${filename}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
-  return {
-    ...DEFAULT_CONFIG,
-    failOn: [...(DEFAULT_CONFIG.failOn || [])],
-    ignorePaths: [...(DEFAULT_CONFIG.ignorePaths || [])],
-    rules: { ...DEFAULT_CONFIG.rules },
-  };
+  return configFromText("{}", "default configuration");
 }
 
 /**

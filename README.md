@@ -48,6 +48,67 @@ A finding includes its file and line, the source snippet, and a concrete next st
 To see the complete machine-readable result, use `check --format json`; terminal
 output shows the first 20 findings. `check --format markdown` produces a review table.
 
+### Context review for pull requests (0.6.0, unreleased)
+
+```bash
+# Compare committed source at the common ancestor and candidate head
+agent-roast review --base origin/main --head HEAD
+agent-roast review --base origin/main --format markdown
+
+# Export a report for tools that consume SARIF 2.1.0
+agent-roast review --base origin/main --format sarif > agentroast.sarif
+agent-roast check --format sarif > current-code.sarif
+```
+
+`review` compares **full contents of changed source files**, so deleting the only
+handler inside a `catch` is detectable even when no suspicious line was added.
+It reports new findings, existing findings, and patterns no longer detected. Only
+new blocking findings fail the check; no manually generated baseline is required.
+Deleting a file is reported as disappearance of a pattern, not proof of a correct fix.
+
+Source is read directly from immutable Git blobs at the merge-base and head. The
+worktree and index are left untouched, and project code, hooks, diff programs and
+package scripts are never executed. Use `check` for uncommitted working files, and
+`--staged` for the index. Source comparison and policy are pinned to the reported SHAs.
+
+Policy comes from the explicitly supplied **base ref tip**; source comparison starts
+at the merge-base. Candidate changes to `.agentroastrc.json`, `.agentroastrc` or
+`agent-roast.config.json` are reported and ignored for this review. Adopt policy
+changes through separate human review. An explicit `--fail-on` overrides blocking
+severity but does not enable rules disabled by base policy.
+
+```bash
+# Advisory pilot: inspect findings before deciding what should block the team
+agent-roast review --base origin/main --fail-on ''
+# Gate the shortcuts the team agrees matter
+agent-roast review --base origin/main --fail-on test-skip,trivial-assert,swallowed-error
+```
+
+Matching uses rule, source snippet and occurrence count within a file pair. Line
+shifts and Git-recognized pure renames do not turn old debt into new debt. A second
+identical occurrence is new. This is not semantic tracking: rewritten snippets or
+language changes can require fresh review, and Git's rename recognition is heuristic.
+
+Limits: 1,000 changed files, 2 MiB per source blob, 50 MiB across inspected versions,
+30 seconds per Git command. Symlinked/binary/oversized source and missing comparison
+objects yield exit 2, never a clean pass. Partial clones and ambiguous multiple
+merge-bases are unsupported; fetch complete local history (`fetch-depth: 0`). The
+report counts excluded and unsupported changes explicitly. Only changed supported
+files are compared; this is not a whole-repository safety certification.
+
+SARIF includes rule metadata, relative locations, stable occurrence fingerprints
+and whether the scan completed. Source snippets are omitted from SARIF. JSON and
+Markdown reports contain evidence snippets and should be handled as source code.
+SARIF output is generated offline; uploading it is a separate, optional operation.
+GitHub supports SARIF ingestion, but this release has not been tested with a live
+code-scanning upload. Some findings on unchanged lines (including deletion-only
+regressions) may appear in the report/summary rather than as an inline PR annotation.
+Use a separate SARIF category for introduced-findings review; it does not represent
+a full scan of all outstanding alerts.
+
+For the new CLI in this checkout, run `npm run build` and use `node dist/cli.js`.
+Published npm `latest` remains 0.5.0 until the release is explicitly published.
+
 ### Baseline adoption
 
 A baseline explicitly accepts the findings present at adoption time. It does not fix
@@ -238,7 +299,7 @@ Only **added lines** (`+`) in source code files are scanned — deleted lines, f
 - **Requirements:** Git 2.30+ (for `--end-of-options` argument isolation), Node.js 18+.
 - **100% Local:** Instant streaming parser runs directly on your machine.
 - **Zero Telemetry:** No cloud dependencies, no LLM API calls, no network traffic. Verified by static bundle inspection.
-- **Hermetic:** Enforces `-c core.quotepath=false -c diff.noprefix=false` to guarantee identical behavior across all environments.
+- **Git isolation:** Forces stable diff paths, disables fsmonitor/external diff execution, and reads review content by object identity.
 
 ---
 

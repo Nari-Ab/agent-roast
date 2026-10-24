@@ -5,6 +5,8 @@ import * as path from "path";
 import {
   roastRepository,
   checkProject,
+  reviewChanges,
+  formatReviewMarkdown,
   writeBaseline,
   RULE_GUIDES,
   VALID_DETECTORS,
@@ -40,7 +42,7 @@ program
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
   .option("--fail-under <score>", "Fail CI if agent score is below threshold (0-100)")
-  .option("--format <format>", "Output format: terminal, json, github, markdown", "terminal")
+  .option("--format <format>", "Output format: terminal, json, github, markdown (check/review also support sarif)", "terminal")
   .option("--authors", "Display author names and emails in report", false)
   .action(async (repoPath: string, options: any) => {
     try {
@@ -166,12 +168,48 @@ program
   });
 
 program
+  .command("review")
+  .description("Compare full changed source at merge-base and head; gate only new findings")
+  .argument("[path]", "Path to the Git repository", ".")
+  .addHelpText("after", "\nRequired: --base <trusted-ref>  Optional: --head <ref> (default HEAD)\nOutput: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExample: agent-roast review --base origin/main --format markdown")
+  .action(async (repoPath: string) => {
+    try {
+      const options = program.opts();
+      if (!options.base) throw new ConfigError("review requires --base <trusted-ref>.");
+      if (options.staged || options.all || options.failUnder !== undefined || program.getOptionValueSource("since") === "cli") {
+        throw new ConfigError("review compares committed refs; --staged, --all, --since and --fail-under do not apply.");
+      }
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      process.once("SIGINT", abort);
+      process.once("SIGTERM", abort);
+      try {
+        const result = await reviewChanges({ cwd: repoPath, base: options.base, head: options.head,
+          failOn: options.failOn !== undefined ? options.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+          format: options.json ? "json" : options.format, signal: controller.signal,
+        });
+        if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatReviewMarkdown(result) + "\n");
+        if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,
+          `passed=${result.passed}\ninfractions-count=${result.infractions.length}\nhas-supported-changes=${result.filesInspected > 0}\ncomplete=${result.complete}\nexisting-count=${result.unchangedCount}\nremoved-count=${result.removedFindings.length}\n`);
+        console.log(result.output);
+        process.exitCode = result.exitCode;
+      } finally {
+        process.removeListener("SIGINT", abort);
+        process.removeListener("SIGTERM", abort);
+      }
+    } catch (error) {
+      console.error(`agent-roast review error: ${error instanceof Error ? error.message : String(error)}`);
+      process.exitCode = 2;
+    }
+  });
+
+program
   .command("check")
   .description("Check current tracked and non-ignored untracked source files")
   .argument("[path]", "Path to a git repository", ".")
   .option("--baseline <file>", "Report only findings not accepted in this baseline")
   .option("--write-baseline <file>", "Save current findings for adoption (refuses to overwrite)")
-  .addHelpText("after", "\nOutput options: --format terminal|json|github|markdown, --json, --fail-on <rules>\nExamples:\n  agent-roast check\n  agent-roast check --write-baseline .agentroast-baseline.json\n  agent-roast check --baseline .agentroast-baseline.json --format json")
+  .addHelpText("after", "\nOutput options: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExamples:\n  agent-roast check\n  agent-roast check --write-baseline .agentroast-baseline.json\n  agent-roast check --baseline .agentroast-baseline.json --format json")
   .action(async (repoPath: string, opts: { baseline?: string; writeBaseline?: string }) => {
     try {
       const global = program.opts();

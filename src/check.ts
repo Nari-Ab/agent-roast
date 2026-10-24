@@ -1,3 +1,4 @@
+import { formatSarif } from "./sarif.js";
 import { spawnSync } from "child_process";
 import * as fs from "fs/promises";
 import { constants } from "fs";
@@ -74,7 +75,7 @@ export async function checkProject(options: CheckOptions = {}): Promise<CheckRes
   const failOn = options.failOn ?? config.failOn ?? ["test-skip", "trivial-assert"];
   for (const rule of failOn) if (!VALID_DETECTORS.includes(rule as DetectorType)) throw new ConfigError(`Unknown rule '${rule}'.`);
   const format = options.format || "terminal";
-  if (!["terminal", "json", "github", "markdown"].includes(format)) throw new ConfigError("Unsupported check output format.");
+  if (!["terminal", "json", "github", "markdown", "sarif"].includes(format)) throw new ConfigError("Unsupported check output format.");
   const baseline = options.baseline ? loadBaseline(path.resolve(cwd, options.baseline)) : undefined;
   const filenames = [...new Set(git(root, ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean))].sort();
   const infractions: Infraction[] = [];
@@ -117,6 +118,7 @@ export async function checkProject(options: CheckOptions = {}): Promise<CheckRes
     skippedFiles, complete, failedRules, passed, exitCode: complete ? (passed ? 0 : 1) : 2, output: "",
   };
   if (format === "json") result.output = JSON.stringify(result, null, 2);
+  else if (format === "sarif") result.output = formatSarif(result);
   else if (format === "markdown") result.output = formatCheckMarkdown(result);
   else if (format === "github") {
     result.output = formatGithubAnnotations(result) + (complete ? "" : "\n::error::Project scan incomplete. See the JSON or terminal report for skipped files.");

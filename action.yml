@@ -6,6 +6,10 @@ branding:
   color: "black"
 
 inputs:
+  mode:
+    description: "review (full before/after context) or audit (legacy added lines)"
+    required: false
+    default: "review"
   base:
     description: "Base branch or commit SHA for diff analysis"
     required: false
@@ -19,11 +23,20 @@ inputs:
     required: false
     default: ""
   format:
-    description: "Output format: github, terminal, json"
+    description: "Output format: github, terminal, json, markdown (review also supports sarif)"
     required: false
     default: "github"
 
 outputs:
+  complete:
+    description: "Whether every in-scope changed source pair was compared (review mode)"
+    value: ${{ steps.run-audit.outputs.complete }}
+  existing-count:
+    description: "Pre-existing findings in compared changed files (review mode)"
+    value: ${{ steps.run-audit.outputs.existing-count }}
+  removed-count:
+    description: "Findings no longer detected in compared source (review mode)"
+    value: ${{ steps.run-audit.outputs.removed-count }}
   passed:
     description: "Whether the audit passed with zero blocking infractions"
     value: ${{ steps.run-audit.outputs.passed }}
@@ -41,6 +54,7 @@ runs:
       id: run-audit
       shell: bash
       env:
+        ROAST_MODE: ${{ inputs.mode }}
         INPUT_BASE: ${{ inputs.base }}
         INPUT_HEAD: ${{ inputs.head }}
         ROAST_FAIL_ON: ${{ inputs.fail-on }}
@@ -50,6 +64,14 @@ runs:
         EVENT_BEFORE_SHA: ${{ github.event.before }}
         HEAD_SHA: ${{ github.sha }}
       run: |
+        if [ "${GITHUB_EVENT_NAME:-}" = "pull_request_target" ]; then
+          echo "::error::Use pull_request with read-only permissions; pull_request_target is unsupported."
+          exit 2
+        fi
+        case "$ROAST_MODE" in
+          review|audit) ;;
+          *) echo "::error::mode must be review or audit"; exit 2 ;;
+        esac
         ROAST_BASE="${INPUT_BASE:-${PR_BASE_SHA:-${EVENT_BEFORE_SHA}}}"
         ROAST_HEAD="${INPUT_HEAD:-${PR_HEAD_SHA:-${HEAD_SHA}}}"
 
@@ -58,16 +80,22 @@ runs:
           exit 2
         fi
 
-        INSTALL_DIR="${RUNNER_TEMP:-/tmp}/agent-roast-bin"
-        mkdir -p "$INSTALL_DIR"
-        npm install --prefix "$INSTALL_DIR" agent-roast@0.5.0 --ignore-scripts --no-audit --no-fund > /dev/null 2>&1
+        REPO_DIR="$PWD"
+        INSTALL_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/agent-roast.XXXXXX")"
+        trap 'rm -rf "$INSTALL_DIR"' EXIT
+        (cd "$INSTALL_DIR" && npm install --prefix "$INSTALL_DIR" agent-roast@0.6.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org) > /dev/null
+
+        COMMAND_ARGS=()
+        if [ "$ROAST_MODE" = "review" ]; then
+          COMMAND_ARGS+=(review)
+        fi
 
         EXTRA_ARGS=()
         if [ -n "$ROAST_FAIL_ON" ]; then
           EXTRA_ARGS+=(--fail-on "$ROAST_FAIL_ON")
         fi
 
-        "$INSTALL_DIR/node_modules/.bin/agent-roast" \
+        "$INSTALL_DIR/node_modules/.bin/agent-roast" "${COMMAND_ARGS[@]}" "$REPO_DIR" \
           --base "$ROAST_BASE" \
           --head "$ROAST_HEAD" \
           "${EXTRA_ARGS[@]}" \

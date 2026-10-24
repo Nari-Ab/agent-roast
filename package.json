@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Offline code checks for skipped tests, swallowed errors, unfinished stubs and AI coding shortcuts",
   "type": "module",
   "main": "./dist/index.js",

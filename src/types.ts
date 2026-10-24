@@ -107,7 +107,7 @@ export interface PrAuditResult {
 export interface CheckOptions {
   cwd?: string;
   failOn?: string[];
-  format?: "terminal" | "json" | "github" | "markdown";
+  format?: ReviewFormat;
   baseline?: string;
   signal?: AbortSignal;
 }
@@ -121,6 +121,45 @@ export interface CheckResult {
   infractions: Infraction[];
   baselineCount: number;
   staleBaselineCount: number;
+  skippedFiles: { file: string; reason: string }[];
+  complete: boolean;
+  failedRules: string[];
+  passed: boolean;
+  exitCode: number;
+  output: string;
+}
+
+export type ReviewFormat = "terminal" | "json" | "github" | "markdown" | "sarif";
+
+export interface ReviewOptions {
+  cwd?: string;
+  base: string;
+  head?: string;
+  failOn?: string[];
+  format?: ReviewFormat;
+  signal?: AbortSignal;
+}
+
+export interface ReviewResult {
+  schemaVersion: string;
+  mode: "review";
+  baseSha: string;
+  headSha: string;
+  mergeBaseSha: string;
+  policySha: string;
+  policyFile: string | null;
+  policyChanges: string[];
+  filesChanged: number;
+  filesInspected: number;
+  unsupportedFiles: number;
+  excludedFiles: number;
+  renamedFiles: number;
+  linesInspected: number;
+  beforeFindings: number;
+  afterFindings: number;
+  unchangedCount: number;
+  infractions: Infraction[];
+  removedFindings: Infraction[];
   skippedFiles: { file: string; reason: string }[];
   complete: boolean;
   failedRules: string[];

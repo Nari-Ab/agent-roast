@@ -51,6 +51,7 @@ jobs:
           base: \${{ github.event.pull_request.base.sha }}
           head: \${{ github.event.pull_request.head.sha }}
           format: github
+          mode: review
 `;
 
 export const PRE_COMMIT_HOOK_TEMPLATE = `#!/bin/sh

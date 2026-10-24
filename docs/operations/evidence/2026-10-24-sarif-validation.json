@@ -1,0 +1,26 @@
+{
+  "schemaUrl": "https://json.schemastore.org/sarif-2.1.0.json",
+  "schemaSha256": "c96eb2d311c37b0a38cbd18c52d79a68f778bbd2d831abed7412d9850740f785",
+  "validator": "ajv 8 (draft-07, formats checked separately by URI tests)",
+  "toolVersion": "0.6.0",
+  "results": [
+    {
+      "name": "complete clean check",
+      "schemaValid": true,
+      "complete": true,
+      "findings": 0
+    },
+    {
+      "name": "introduced finding review",
+      "schemaValid": true,
+      "complete": true,
+      "findings": 1
+    },
+    {
+      "name": "incomplete check",
+      "schemaValid": true,
+      "complete": false,
+      "findings": 1
+    }
+  ]
+}
