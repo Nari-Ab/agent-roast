@@ -1,0 +1,36 @@
+
+> agent-roast@0.8.0 pretest
+> npm run build
+
+
+> agent-roast@0.8.0 build
+> tsup
+
+CLI Building entry: src/cli.ts, src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /private/tmp/agent-roast-080-release/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js          2.53 KB
+ESM dist/cli.js            16.11 KB
+ESM dist/chunk-C423TSZF.js 132.57 KB
+ESM ⚡️ Build success in 13ms
+DTS Build start
+DTS ⚡️ Build success in 910ms
+DTS dist/cli.d.ts   13.00 B
+DTS dist/index.d.ts 17.42 KB
+
+> agent-roast@0.8.0 test
+> vitest run
+
+
+ RUN  v4.1.12 /private/tmp/agent-roast-080-release
+
+
+ Test Files  27 passed (27)
+      Tests  447 passed (447)
+   Start at  10:11:14
+   Duration  12.26s (transform 1.10s, setup 0ms, import 2.09s, tests 71.22s, environment 2ms)
+

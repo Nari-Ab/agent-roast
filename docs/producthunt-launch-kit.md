@@ -46,7 +46,7 @@ test, a leftover .only, an empty catch after deleting its handler, or an obvious
 These patterns can be legitimate, so the tool shows evidence for human review and
 lets teams decide what blocks.
 
-The latest published release is 0.7.0. Current-code checks need no AI commit tags;
+The latest published release is 0.8.0. Current-code checks need no AI commit tags;
 context PR/staged checks compare full source, keep old findings separate, and use
 trusted policy. The CLI is free and runs offline once installed.
 

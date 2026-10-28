@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 — Unreleased
+## 0.8.0 — 2026-10-28
 
 - Reviewed, expiring exceptions for exact finding fingerprints and total occurrence
   counts. Mandatory reasons, visible accepted records, `--ignore-exceptions`, and
@@ -24,8 +24,8 @@
   no-false-positive and AI-intent claims. Historical demos are labeled illustrations.
   No new runtime dependencies. Updated development-only Vitest/Vite/esbuild to patched
   versions; development requires Node 20.19+ while the CLI retains Node 18+ support.
-  CI uses a Node22 test runner with explicit CLI runtimes18/20/22. The published
-  Action remains pinned to 0.7.0 until release.
+  CI uses a Node22 test runner with explicit CLI runtimes18/20/22. The composite
+  Action installs exactly 0.8.0.
 
 ## 0.7.0 — 2026-10-28
 
