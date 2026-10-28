@@ -5,8 +5,24 @@ export interface ShieldsEndpointResponse {
   color: string;
 }
 
+/** SVG attributes and text share the same XML escaping boundary. */
+function displayText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+    char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+function xmlText(value: string): string {
+  return displayText(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function badgeScore(score: number | null): number | null {
+  return score !== null && Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
+}
+
 export function getScoreColor(score: number | null): { name: string; hex: string } {
-  if (score === null || isNaN(score)) {
+  score = badgeScore(score);
+  if (score === null) {
     return { name: "lightgrey", hex: "#9f9f9f" };
   }
   if (score >= 90) return { name: "brightgreen", hex: "#4c1" };
@@ -17,8 +33,10 @@ export function getScoreColor(score: number | null): { name: string; hex: string
 }
 
 export function generateSvgBadge(score: number | null, label: string = "AI Discipline"): string {
-  const value = score !== null && !isNaN(score) ? `${score}/100` : "N/A";
+  score = badgeScore(score);
+  const value = score !== null ? `${score}/100` : "N/A";
   const color = getScoreColor(score);
+  const safeLabel = xmlText(label);
 
   // Approximate character widths for Verdana 11px
   const labelWidth = Math.round(label.length * 6.8 + 14);
@@ -28,7 +46,7 @@ export function generateSvgBadge(score: number | null, label: string = "AI Disci
   const labelX = Math.round(labelWidth / 2);
   const valueX = Math.round(labelWidth + valueWidth / 2);
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" role="img" aria-label="${label}: ${value}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20" role="img" aria-label="${safeLabel}: ${value}">
   <linearGradient id="s" x2="0" y2="100%">
     <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
     <stop offset="1" stop-opacity=".1"/>
@@ -42,8 +60,8 @@ export function generateSvgBadge(score: number | null, label: string = "AI Disci
     <rect width="${totalWidth}" height="20" fill="url(#s)"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
-    <text aria-hidden="true" x="${labelX * 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${(labelWidth - 14) * 10}">${label}</text>
-    <text x="${labelX * 10}" y="140" transform="scale(.1)" fill="#fff" textLength="${(labelWidth - 14) * 10}">${label}</text>
+    <text aria-hidden="true" x="${labelX * 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${(labelWidth - 14) * 10}">${safeLabel}</text>
+    <text x="${labelX * 10}" y="140" transform="scale(.1)" fill="#fff" textLength="${(labelWidth - 14) * 10}">${safeLabel}</text>
     <text aria-hidden="true" x="${valueX * 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="${(valueWidth - 14) * 10}">${value}</text>
     <text x="${valueX * 10}" y="140" transform="scale(.1)" fill="#fff" textLength="${(valueWidth - 14) * 10}">${value}</text>
   </g>
@@ -55,19 +73,29 @@ export function generateShieldsMarkdown(
   label: string = "AI Discipline",
   repoUrl: string = "https://github.com/Nari-Ab/agent-roast"
 ): string {
-  const value = score !== null && !isNaN(score) ? `${score}%2F100` : "N%2FA";
+  score = badgeScore(score);
+  const value = score !== null ? `${score}%2F100` : "N%2FA";
   const color = getScoreColor(score);
-  const encodedLabel = encodeURIComponent(label);
+  const shownLabel = displayText(label);
+  // Shields uses doubled dashes/underscores for literal label punctuation.
+  const encodedLabel = encodeURIComponent(shownLabel.replace(/-/g, "--").replace(/_/g, "__"));
+  const alt = shownLabel.replace(/[\\[\]*_!`]/g, "\\$&").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const destination = new URL(repoUrl);
+  if (!["https:", "http:"].includes(destination.protocol) || destination.username || destination.password) {
+    throw new Error("Badge destination must be an HTTP(S) URL without credentials.");
+  }
+  const safeDestination = destination.href.replace(/[()\\]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
   const badgeUrl = `https://img.shields.io/badge/${encodedLabel}-${value}-${color.name}?style=flat-square`;
 
-  return `[![${label}](${badgeUrl})](${repoUrl})`;
+  return `[![${alt}](${badgeUrl})](${safeDestination})`;
 }
 
 export function generateShieldsJson(
   score: number | null,
   label: string = "AI Discipline"
 ): ShieldsEndpointResponse {
-  const value = score !== null && !isNaN(score) ? `${score}/100` : "N/A";
+  score = badgeScore(score);
+  const value = score !== null ? `${score}/100` : "N/A";
   const color = getScoreColor(score);
 
   return {

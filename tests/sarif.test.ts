@@ -63,7 +63,7 @@ describe("portable SARIF reporting", () => {
   });
   it("emits valid JSON via the compiled check CLI", () => {
     fs.writeFileSync(path.join(dir, "auth.test.ts"), "it.skip('auth');\n");
-    const result = spawnSync(process.execPath, [path.resolve("dist/cli.js"), "check", dir, "--format", "sarif"], { encoding: "utf8" });
+    const result = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [path.resolve("dist/cli.js"), "check", dir, "--format", "sarif"], { encoding: "utf8" });
     expect(result.status).toBe(1); expect(JSON.parse(result.stdout).version).toBe("2.1.0");
   });
 });

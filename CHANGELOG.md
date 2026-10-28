@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.0 — Unreleased
+
+- Reviewed, expiring exceptions for exact finding fingerprints and total occurrence
+  counts. Mandatory reasons, visible accepted records, `--ignore-exceptions`, and
+  SARIF suppressions let teams handle intentional cases without disabling rules.
+  Baseline/exception budgets cannot stack to hide duplicates; trusted base/HEAD policy
+  remains authoritative for context reviews. Packaged an offline configuration schema.
+- Fixed real pre-commit candidate selection for `git commit -a` and `--only` temporary
+  indexes. Refuse outside index redirects. Isolated all explicit-repository Git reads,
+  bounded policy/source/subprocess reads, prevented symlink/special-file configuration
+  reads and no-overwrite initialization writes, and supported linked-worktree hooks.
+- Replaced backtracking ignore-glob expansion with a bounded wildcard matcher;
+  reject unknown policy fields and non-string severities. Legacy/history CLI audits
+  now fail incomplete scans with exit 2 instead of reporting a clean result.
+- Improved language-aware skip/focus/assertion/error/stub patterns and literal masking;
+  avoid `recatch`, Python imports/real handlers, ordinary variable references and
+  human author names becoming false findings/AI attribution.
+- Escape untrusted evidence in legacy terminal/Markdown reports and XML badge labels.
+  Preserve accepted-finding identities through exception toggles and baseline filters.
+- Added explicit Action advisory input for pilots (incomplete scans still fail).
+  Updated site/workflow/article examples and removed unsupported speed, zero-dependency,
+  no-false-positive and AI-intent claims. Historical demos are labeled illustrations.
+  No new runtime dependencies. Updated development-only Vitest/Vite/esbuild to patched
+  versions; development requires Node 20.19+ while the CLI retains Node 18+ support.
+  CI uses a Node22 test runner with explicit CLI runtimes18/20/22. The published
+  Action remains pinned to 0.7.0 until release.
+
 ## 0.7.0 — 2026-10-28
 
 - Upgraded CLI `--staged` and added `review --staged`: compare complete HEAD/index

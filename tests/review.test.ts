@@ -13,7 +13,7 @@ const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTE
 const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 const write = (file: string, text: string) => { const dest = path.join(dir, file); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, text); };
 const commit = (message = "change") => { git("add", "."); git("commit", "-m", message); return git("rev-parse", "HEAD"); };
-const run = (...args: string[]) => spawnSync(process.execPath, [cli, "review", dir, ...args], { encoding: "utf8", env });
+const run = (...args: string[]) => spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "review", dir, ...args], { encoding: "utf8", env });
 const policy = (value: unknown) => write(".agentroastrc.json", JSON.stringify(value));
 
 beforeEach(() => {
@@ -183,7 +183,7 @@ describe("context review of committed code", () => {
   it("writes GitHub summary and machine outputs based on complete result", () => {
     write("auth.test.ts", "it.skip('auth');\n"); commit();
     const summary = path.join(dir, "summary.md"); const outputs = path.join(dir, "outputs.txt");
-    const result = spawnSync(process.execPath, [cli, "review", dir, "--base", base, "--format", "github"], {
+    const result = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "review", dir, "--base", base, "--format", "github"], {
       encoding: "utf8", env: { ...env, GITHUB_STEP_SUMMARY: summary, GITHUB_OUTPUT: outputs },
     });
     expect(result.status).toBe(1); expect(result.stdout).toContain("::error file=auth.test.ts");

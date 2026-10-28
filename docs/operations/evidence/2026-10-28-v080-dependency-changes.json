@@ -1,0 +1,27 @@
+{
+  "before": {
+    "info": 0,
+    "low": 1,
+    "moderate": 1,
+    "high": 1,
+    "critical": 2,
+    "total": 5
+  },
+  "after": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "developmentChanges": {
+    "vitest": "^4.1.12",
+    "esbuildOverride": "^0.28.1",
+    "viteOverride": "^7.3.7"
+  },
+  "runtimeDependenciesAdded": false,
+  "developmentNode": "20.19+ or22.12+",
+  "cliNode": ">=18",
+  "scope": "npm advisories at audit time; not a proof of absence of unknown vulnerabilities"
+}

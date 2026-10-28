@@ -1,0 +1,9 @@
+
+ RUN  v4.1.12 /private/tmp/agent-roast-v080
+
+
+ Test Files  27 passed (27)
+      Tests  447 passed (447)
+   Start at  10:04:52
+   Duration  12.53s (transform 1.68s, setup 0ms, import 2.91s, tests 76.60s, environment 2ms)
+

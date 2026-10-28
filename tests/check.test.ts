@@ -10,7 +10,7 @@ let dir: string;
 const cli = path.resolve("dist/cli.js");
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env, encoding: "utf8" });
-const run = (...args: string[]) => spawnSync(process.execPath, [cli, "check", dir, ...args], { env, encoding: "utf8" });
+const run = (...args: string[]) => spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "check", dir, ...args], { env, encoding: "utf8" });
 const write = (file: string, text: string) => { const dest = path.join(dir, file); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, text); };
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(tmpdir(), "roast-current-"));
@@ -159,9 +159,9 @@ describe("current-tree check", () => {
   });
   it("explains all supported rules locally and rejects a typo", () => {
     for (const rule of ["test-skip", "type-escape", "swallowed-error", "trivial-assert", "stub-abandonment", "panic-loop", "test-focus"]) {
-      const result = spawnSync(process.execPath, [cli, "explain", rule], { encoding: "utf8", env });
+      const result = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "explain", rule], { encoding: "utf8", env });
       expect(result.status).toBe(0); expect(result.stdout).toContain("Next:");
     }
-    expect(spawnSync(process.execPath, [cli, "explain", "typo"], { env }).status).toBe(2);
+    expect(spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "explain", "typo"], { env }).status).toBe(2);
   });
 });

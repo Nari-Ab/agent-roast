@@ -18,6 +18,10 @@ inputs:
     description: "Head commit SHA for pull request analysis"
     required: false
     default: ""
+  advisory:
+    description: "Report findings without blocking on rules; incomplete or invalid scans still fail"
+    required: false
+    default: "false"
   fail-on:
     description: "Comma-separated detectors that trigger pipeline failure (test-skip, test-focus, type-escape, swallowed-error, trivial-assert, stub-abandonment)"
     required: false
@@ -58,6 +62,7 @@ runs:
         INPUT_BASE: ${{ inputs.base }}
         INPUT_HEAD: ${{ inputs.head }}
         ROAST_FAIL_ON: ${{ inputs.fail-on }}
+        ROAST_ADVISORY: ${{ inputs.advisory }}
         ROAST_FORMAT: ${{ inputs.format }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -71,6 +76,10 @@ runs:
         case "$ROAST_MODE" in
           review|audit) ;;
           *) echo "::error::mode must be review or audit"; exit 2 ;;
+        esac
+        case "${ROAST_ADVISORY:-false}" in
+          true|false) ;;
+          *) echo "::error::advisory must be true or false"; exit 2 ;;
         esac
         ROAST_BASE="${INPUT_BASE:-${PR_BASE_SHA:-${EVENT_BEFORE_SHA}}}"
         ROAST_HEAD="${INPUT_HEAD:-${PR_HEAD_SHA:-${HEAD_SHA}}}"
@@ -91,7 +100,9 @@ runs:
         fi
 
         EXTRA_ARGS=()
-        if [ -n "$ROAST_FAIL_ON" ]; then
+        if [ "${ROAST_ADVISORY:-false}" = "true" ]; then
+          EXTRA_ARGS+=(--fail-on "")
+        elif [ -n "$ROAST_FAIL_ON" ]; then
           EXTRA_ARGS+=(--fail-on "$ROAST_FAIL_ON")
         fi
 

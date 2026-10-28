@@ -86,9 +86,9 @@ describe("Metrics Engine", () => {
           addedLines: [
             { line: "try { doSomething(); } catch (e) {}", lineNumber: 12 },
             { line: "try { fetch(); } catch {}", lineNumber: 18 },
-            { line: "except: pass", lineNumber: 24 },
           ],
         },
+        { path: "src/api.py", addedLines: [{ line: "except: pass", lineNumber: 24 }] },
       ],
     };
 
@@ -467,3 +467,10 @@ describe("Metrics Engine", () => {
   });
 });
 
+
+it("does not issue an apparently clean API score when historical source coverage is incomplete", () => {
+  const collector = new MetricsCollector({ all: true });
+  collector.processCommit({ hash: "c1", date: "2026-10-28T00:00:00Z", authorName: "Dev", authorEmail: "dev@example.invalid", message: "add", isAiAttributed: false, aiSignatures: [], totalAddedCount: 300, files: [] });
+  collector.recordSkipped({ skippedLongLines: 1 });
+  expect(collector.getSummary()).toMatchObject({ complete: false, score: null, isSufficientData: false, archetype: "Incomplete audit" });
+});

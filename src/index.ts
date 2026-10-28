@@ -8,7 +8,7 @@ import {
   findMergeBase,
   GitResolutionError,
 } from "./git.js";
-import { MetricsCollector, auditFileDiffs } from "./metrics.js";
+import { MetricsCollector, auditFileDiffs, isCodeFile } from "./metrics.js";
 import {
   formatTerminalCard,
   formatPrTerminalCard,
@@ -37,6 +37,7 @@ export * from "./review.js";
 export * from "./sarif.js";
 export * from "./baseline.js";
 export * from "./rules.js";
+export * from "./exceptions.js";
 
 export class InvalidDetectorError extends Error {
   constructor(message: string) {
@@ -100,15 +101,23 @@ export async function auditPullRequest(
   const mergeBaseSha = options.staged ? "INDEX" : findMergeBase(cwd, baseSha, headSha);
 
   // 3. Diff from mergeBaseSha to headSha
+  if (!["terminal", "json", "github", "markdown"].includes(format)) throw new InvalidDetectorError("Unsupported legacy audit output format.");
   const diffStream = streamGitDiff(cwd, mergeBaseSha, headSha, options.staged);
-  let rawDiff = "";
+  const chunks: Buffer[] = [];
+  let bytes = 0;
   await new Promise<void>((resolve, reject) => {
-    diffStream.on("data", (chunk) => {
-      rawDiff += chunk.toString();
+    diffStream.on("data", (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 50 * 1024 * 1024) {
+        diffStream.destroy(new GitResolutionError("Legacy diff exceeds the 50 MiB limit; use a smaller context review."));
+      } else chunks.push(chunk);
     });
-    diffStream.on("end", () => resolve());
+    diffStream.on("end", resolve);
     diffStream.on("error", reject);
   });
+  let rawDiff: string;
+  try { rawDiff = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)); }
+  catch { throw new GitResolutionError("Legacy diff contains invalid UTF-8; no complete result was produced."); }
 
   // 4. Parse diff
   const { files, skippedLongLines, skippedUnknownFiles } = parseDiff(rawDiff);
@@ -127,8 +136,10 @@ export async function auditPullRequest(
       .map((inf) => inf.type)
   )];
 
-  const passed = failedRules.length === 0;
-  const exitCode = passed ? 0 : 1;
+  const skippedBinaryFiles = files.filter(file => file.binary && isCodeFile(file.path, options.ignorePaths)).length;
+  const complete = skippedLongLines === 0 && skippedUnknownFiles === 0 && skippedBinaryFiles === 0;
+  const passed = complete && failedRules.length === 0;
+  const exitCode = !complete ? 2 : passed ? 0 : 1;
 
   const result: PrAuditResult = {
     schemaVersion: "1.0.0",
@@ -143,8 +154,10 @@ export async function auditPullRequest(
     infractions,
     failedRules,
     passed,
+    complete,
     skippedLongLines,
     skippedUnknownFiles,
+    skippedBinaryFiles,
     output: "",
     exitCode,
   };
@@ -152,7 +165,7 @@ export async function auditPullRequest(
   if (format === "json") {
     result.output = JSON.stringify(result, null, 2);
   } else if (format === "github") {
-    result.output = formatGithubAnnotations(result);
+    result.output = formatGithubAnnotations(result) + (complete ? "" : "\n::error::Legacy audit incomplete: long lines, binary-marked or unparsed source were skipped. Use context review.");
   } else if (format === "markdown") {
     result.output = formatPrMarkdownComment(result);
   } else {

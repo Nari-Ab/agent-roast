@@ -25,7 +25,7 @@ describe("Streaming Git Log Parser", () => {
       "bob@example.com\x1f" +
       "chore: update readme\x1f" +
       "diff --git a/README.md b/README.md\n" +
-      "@@ -1,1 +1,2 @@\n" +
+      "@@ -0,0 +1,1 @@\n" +
       "+# My Cool Project\n";
 
     const stream = Readable.from([raw]);

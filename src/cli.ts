@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { readGit } from "./snapshot.js";
 import { createRequire } from "module";
 import * as fs from "fs";
 import * as path from "path";
@@ -21,11 +22,14 @@ import {
   InvalidDetectorError,
   GitError,
   ConfigError,
+  gitOutputPath,
   formatGithubStepSummary,
+  terminalText,
 } from "./index.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
+const errorMessage = (error: unknown): string => terminalText(error instanceof Error ? error.message : String(error));
 
 /** Shared CLI execution for committed and staged source comparison. */
 async function runContextReview(repoPath: string, options: any, staged: boolean): Promise<void> {
@@ -36,14 +40,20 @@ async function runContextReview(repoPath: string, options: any, staged: boolean)
   try {
     const common = { cwd: repoPath,
       failOn: options.failOn !== undefined ? options.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+      ignoreExceptions: options.ignoreExceptions,
       format: options.json ? "json" : options.format, signal: controller.signal,
     };
     const result = staged ? await reviewStagedChanges(common) : await reviewChanges({ ...common, base: options.base, head: options.head });
-    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatReviewMarkdown(result) + "\n");
-    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,
-      `passed=${result.passed}\ninfractions-count=${result.infractions.length}\nhas-supported-changes=${result.filesInspected > 0}\ncomplete=${result.complete}\nexisting-count=${result.unchangedCount}\nremoved-count=${result.removedFindings.length}\n`);
     console.log(result.output);
     process.exitCode = result.exitCode;
+    for (const [filename, content] of [
+      [process.env.GITHUB_STEP_SUMMARY, formatReviewMarkdown(result) + "\n"],
+      [process.env.GITHUB_OUTPUT, `passed=${result.passed}\ninfractions-count=${result.infractions.length}\nhas-supported-changes=${result.filesInspected > 0}\ncomplete=${result.complete}\nexisting-count=${result.unchangedCount}\nremoved-count=${result.removedFindings.length}\n`],
+    ]) {
+      if (!filename) continue;
+      try { fs.appendFileSync(filename, content!); }
+      catch (error) { console.error(`Warning: could not write an optional GitHub report artifact: ${errorMessage(error)}`); }
+    }
   } finally {
     process.removeListener("SIGINT", abort);
     process.removeListener("SIGTERM", abort);
@@ -54,7 +64,7 @@ const program = new Command();
 
 program
   .name("agent-roast")
-  .description("Audit your git history or PR diffs for AI coding shortcuts and panic loops")
+  .description("Check current code, review changes and audit Git history for coding shortcuts")
   .version(pkg.version || "0.4.0")
   .argument("[path]", "Path to git repository (default: current directory)", ".")
   .option("-a, --all", "Audit ALL commits regardless of AI attribution tags", false)
@@ -64,6 +74,7 @@ program
   .option("--staged", "Compare full HEAD/index source and gate new staged findings (including the first commit)", false)
   .option("--base <ref>", "Base git ref/branch for PR mode audit (e.g. origin/main)")
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
+  .option("--ignore-exceptions", "Report findings even when accepted by reviewed, unexpired exceptions", false)
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
   .option("--fail-under <score>", "Fail CI if agent score is below threshold (0-100)")
   .option("--format <format>", "Output format: terminal, json, github, markdown (check/review also support sarif)", "terminal")
@@ -84,6 +95,7 @@ program
         await runContextReview(repoPath, options, true);
         return;
       }
+      if (options.ignoreExceptions) throw new ConfigError("--ignore-exceptions applies to check, review and --staged context checks.");
       if (!["terminal", "json", "github", "markdown"].includes(options.format)) {
         throw new ConfigError("--format must be terminal, json, github, or markdown.");
       }
@@ -99,7 +111,8 @@ program
       }
 
       // Load repository config (.agentroastrc.json / agent-roast.config.json)
-      const config = await loadConfig(repoPath);
+      const configRoot = gitOutputPath((await readGit(path.resolve(repoPath), ["rev-parse", "--show-toplevel"])).toString("utf8"));
+      const config = loadConfig(configRoot);
 
       if (options.base || options.staged) {
         const failOnRules = options.failOn !== undefined
@@ -129,7 +142,7 @@ program
               formatGithubStepSummary(prResult) + "\n"
             );
           } catch (err: any) {
-            console.error(`Warning: Failed to write to GITHUB_STEP_SUMMARY: ${err.message}`);
+            console.error(`Warning: Failed to write to GITHUB_STEP_SUMMARY: ${errorMessage(err)}`);
           }
         }
 
@@ -141,7 +154,7 @@ program
               `passed=${prResult.passed}\ninfractions-count=${prResult.infractions.length}\nhas-supported-changes=${prResult.hasSupportedChanges}\n`
             );
           } catch (err: any) {
-            console.error(`Warning: Failed to write to GITHUB_OUTPUT: ${err.message}`);
+            console.error(`Warning: Failed to write to GITHUB_OUTPUT: ${errorMessage(err)}`);
           }
         }
 
@@ -170,7 +183,9 @@ program
           ? Number(options.failUnder)
           : config.scoreThreshold;
 
-        if (
+        if (result.summary.skippedLongLines || result.summary.skippedUnknownFiles || result.summary.skippedBinaryFiles) {
+          process.exitCode = 2;
+        } else if (
           scoreThreshold !== undefined &&
           !isNaN(scoreThreshold) &&
           result.summary.score !== null &&
@@ -189,10 +204,10 @@ program
         err instanceof GitError ||
         err.name === "GitError"
       ) {
-        console.error(`agent-roast error: ${err.message}`);
+        console.error(`agent-roast error: ${errorMessage(err)}`);
         process.exitCode = 2;
       } else {
-        console.error(`Error auditing repository: ${err.message}`);
+        console.error(`Error auditing repository: ${errorMessage(err)}`);
         process.exitCode = 1;
       }
     }
@@ -214,7 +229,7 @@ program
       }
       await runContextReview(repoPath, options, options.staged);
     } catch (error) {
-      console.error(`agent-roast review error: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`agent-roast review error: ${errorMessage(error)}`);
       process.exitCode = 2;
     }
   });
@@ -237,6 +252,7 @@ program
       const result = await checkProject({
         cwd: repoPath,
         baseline: opts.baseline,
+        ignoreExceptions: global.ignoreExceptions,
         failOn: global.failOn !== undefined ? global.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
         format: global.json ? "json" : global.format,
       });
@@ -244,15 +260,15 @@ program
         if (!result.complete) throw new ConfigError("Cannot create a baseline from an incomplete scan. Resolve skipped files first.");
         const basePath = path.resolve(repoPath, opts.writeBaseline);
         writeBaseline(basePath, result.infractions);
-        const message = `Baseline created: ${basePath}\nAccepted ${result.totalFindings} existing findings. The code has not been fixed.\nReview and commit the baseline, then run check --baseline <file> to catch new findings.`;
-        console.log(global.json || global.format === "json" ? JSON.stringify({ operation: "write-baseline", baseline: basePath, acceptedFindings: result.totalFindings }, null, 2) : message);
+        const message = `Baseline created: ${basePath}\nAccepted ${result.infractions.length} existing findings. The code has not been fixed.\nReview and commit the baseline, then run check --baseline <file> to catch new findings.`;
+        console.log(global.json || global.format === "json" ? JSON.stringify({ operation: "write-baseline", baseline: basePath, acceptedFindings: result.infractions.length }, null, 2) : message);
         process.exitCode = 0;
         return;
       }
       console.log(result.output);
       process.exitCode = result.exitCode;
     } catch (err: unknown) {
-      console.error(`agent-roast check error: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`agent-roast check error: ${errorMessage(err)}`);
       process.exitCode = 2;
     }
   });
@@ -261,8 +277,11 @@ program
   .command("explain <rule>")
   .description("Explain a detector, its limits, and how to address a finding")
   .action((rule: string) => {
+    if (program.opts().ignoreExceptions) {
+      console.error("--ignore-exceptions applies to check, review and --staged context checks."); process.exitCode = 2; return;
+    }
     if (!VALID_DETECTORS.includes(rule as import("./types.js").DetectorType)) {
-      console.error(`Unknown rule '${rule}'. Valid rules: ${VALID_DETECTORS.join(", ")}`);
+      console.error(`Unknown rule '${terminalText(rule)}'. Valid rules: ${VALID_DETECTORS.join(", ")}`);
       process.exitCode = 2;
       return;
     }
@@ -279,6 +298,7 @@ program
   .option("--hook", "Install Git pre-commit hook", false)
   .action(async (targetDir: string, opts: any) => {
     try {
+      if (program.opts().ignoreExceptions) throw new ConfigError("--ignore-exceptions applies to check, review and --staged context checks.");
       const res = await initProject({
         cwd: targetDir,
         yes: opts.yes,
@@ -287,15 +307,15 @@ program
       });
 
       if (res.created.length > 0) {
-        console.log(`Initialized agent-roast in ${targetDir}:`);
+        console.log(`Initialized agent-roast in ${terminalText(targetDir)}:`);
         for (const file of res.created) {
-          console.log(`  + Created ${file}`);
+          console.log(`  + Created ${terminalText(file)}`);
         }
       }
 
       if (res.skipped.length > 0) {
         for (const file of res.skipped) {
-          console.log(`  - Skipped ${file} (already exists or not applicable)`);
+          console.log(`  - Skipped ${terminalText(file)} (already exists or not applicable)`);
         }
       }
 
@@ -303,7 +323,7 @@ program
         console.log("No files were created.");
       }
     } catch (err: any) {
-      console.error(`Failed to initialize agent-roast: ${err.message}`);
+      console.error(`Failed to initialize agent-roast: ${errorMessage(err)}`);
       process.exitCode = 1;
     }
   });
@@ -316,14 +336,16 @@ program
   .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
   .option("--label <text>", "Badge label text", "AI Discipline")
   .option("--out <file>", "Output SVG file path (e.g. ./badge.svg)")
-  .action(async (repoPath: string, opts: any) => {
+  .action(async (repoPath: string, opts: any, command: Command) => {
     try {
       const rootOpts = program.opts();
       const isJson = Boolean(opts.json || rootOpts.json);
       const isAll = Boolean(opts.all || rootOpts.all);
-      const since = opts.since || rootOpts.since || "90 days ago";
+      if (rootOpts.ignoreExceptions) throw new ConfigError("--ignore-exceptions applies to check, review and --staged context checks.");
+      const since = command.getOptionValueSource("since") === "cli" ? opts.since : rootOpts.since || "90 days ago";
 
-      const config = await loadConfig(repoPath);
+      const configRoot = gitOutputPath((await readGit(path.resolve(repoPath), ["rev-parse", "--show-toplevel"])).toString("utf8"));
+      const config = loadConfig(configRoot);
       const result = await roastRepository({
         cwd: repoPath,
         since,
@@ -333,6 +355,7 @@ program
         panicLoopWindowMinutes: config.panicLoopWindowMinutes,
       });
 
+      if (result.summary.skippedLongLines || result.summary.skippedUnknownFiles || result.summary.skippedBinaryFiles) throw new ConfigError("Cannot generate a badge from an incomplete historical audit; resolve skipped source first.");
       const score = result.summary.score;
       const label = opts.label || "AI Discipline";
 
@@ -348,7 +371,7 @@ program
         const outPath = path.resolve(opts.out);
         fs.mkdirSync(path.dirname(outPath), { recursive: true });
         fs.writeFileSync(outPath, svg, "utf-8");
-        console.log(`Generated SVG badge at: ${opts.out}`);
+        console.log(`Generated SVG badge at: ${terminalText(opts.out)}`);
         process.exitCode = 0;
         return;
       }
@@ -358,8 +381,8 @@ program
       console.log(`\nBadge for README.md:\n\n${markdown}\n`);
       process.exitCode = 0;
     } catch (err: any) {
-      console.error(`Error generating badge: ${err.message}`);
-      process.exitCode = 1;
+      console.error(`Error generating badge: ${errorMessage(err)}`);
+      process.exitCode = err instanceof ConfigError || err instanceof GitError || err instanceof GitResolutionError ? 2 : 1;
     }
   });
 

@@ -12,13 +12,18 @@ const version: string = require("../package.json").version;
  * Snippets are omitted to avoid embedding source code in integration artifacts. */
 export function formatSarif(report: CheckResult | ReviewResult): string {
   const occurrences = new Map<string, number>();
-  const results = report.infractions.map(finding => {
+  const allFindings = [
+    ...report.infractions.map(finding => ({ finding, suppression: undefined as { reason: string; expires: string } | undefined })),
+    ...(report.suppressedFindings ?? []).map(finding => ({ finding, suppression: finding.suppression })),
+  ];
+  allFindings.sort((a, b) => (a.finding.file ?? "").localeCompare(b.finding.file ?? "") || (a.finding.lineNumber ?? 1) - (b.finding.lineNumber ?? 1) || a.finding.type.localeCompare(b.finding.type));
+  const results = allFindings.map(({ finding, suppression }) => {
     const filename = finding.file;
     if (!filename || filename.startsWith("/") || filename.split("/").includes("..") || /^[a-z]:/i.test(filename)) {
       throw new ConfigError("SARIF needs repository-relative finding paths.");
     }
     const fingerprint = findingFingerprint(finding);
-    const occurrence = (occurrences.get(fingerprint) || 0) + 1;
+    const occurrence = finding.occurrence ?? (occurrences.get(fingerprint) || 0) + 1;
     occurrences.set(fingerprint, occurrence);
     return {
       ruleId: finding.type,
@@ -30,6 +35,8 @@ export function formatSarif(report: CheckResult | ReviewResult): string {
         region: { startLine: Math.max(1, finding.lineNumber || 1) },
       } }],
       partialFingerprints: { "agentRoastFinding/v1": `${fingerprint}:${occurrence}` },
+      ...(suppression ? { suppressions: [{ kind: "external", status: "accepted",
+        justification: `${suppression.reason} (expires ${suppression.expires}, UTC)` }] } : {}),
       ...(report.mode === "review" ? { baselineState: "new" } : {}),
     };
   });
@@ -61,7 +68,8 @@ export function formatSarif(report: CheckResult | ReviewResult): string {
         scope: "introduced findings in changed files", source: report.source ?? "commits", baseSha: report.baseSha, headSha: report.headSha,
         mergeBaseSha: report.mergeBaseSha, policySha: report.policySha,
         unchangedFindings: report.unchangedCount, removedFindings: report.removedFindings.length,
-      } : { scope: "current source", acceptedBaselineFindings: report.baselineCount },
+        acceptedExceptions: report.suppressedFindings?.length ?? 0, expiredExceptions: report.expiredExceptionCount ?? 0,
+      } : { scope: "current source", acceptedBaselineFindings: report.baselineCount, acceptedExceptions: report.suppressedFindings?.length ?? 0, expiredExceptions: report.expiredExceptionCount ?? 0 },
     }],
   }, null, 2);
 }

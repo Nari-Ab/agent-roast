@@ -1,0 +1,93 @@
+{
+  "scope": "14 curated synthetic cases; no production accuracy/adoption claim",
+  "previousVersion": "0.7.0",
+  "currentVersion": "0.8.0-unreleased",
+  "previousMatched": 0,
+  "currentMatched": 14,
+  "results": [
+    {
+      "name": "recatch function is not an empty handler",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "Python import alias is not a TS cast",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "Python pass plus real handler",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "spaced skipped test",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "concurrent skipped test",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "multiline skipped test",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "method reference registers no skipped test",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "Rust placeholder with diagnostic arguments",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "Rust raw string is documentation",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "ordinary stubborn error is not a stub",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "multiline vacuous assertion",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "unknown policy typo fails explicitly",
+      "expectedExit": 2,
+      "previousExit": 0,
+      "currentExit": 2
+    },
+    {
+      "name": "coerced rule severity fails explicitly",
+      "expectedExit": 2,
+      "previousExit": 1,
+      "currentExit": 2
+    },
+    {
+      "name": "real git commit -a hook checks its candidate",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    }
+  ]
+}

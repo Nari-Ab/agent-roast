@@ -1,6 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
-import { DEFAULT_CONFIG } from "./config.js";
+import { DEFAULT_CONFIG, ConfigError } from "./config.js";
+import { randomUUID } from "crypto";
+import { spawnSync } from "child_process";
+import { getHermeticGitEnv, HERMETIC_GIT_FLAGS, gitOutputPath } from "./git.js";
 
 export interface InitOptions {
   cwd?: string;
@@ -59,61 +62,83 @@ export const PRE_COMMIT_HOOK_TEMPLATE = `#!/bin/sh
 npx --no-install agent-roast --staged
 `;
 
+/** Reject symlinked ancestors and publish complete files without replacing any
+ * existing directory entry (including dangling links and concurrent writers). */
+function createNewFile(root: string, relative: string, content: string, mode = 0o644): boolean {
+  const destination = path.resolve(root, relative);
+  const inside = path.relative(root, destination);
+  if (!inside || inside === ".." || inside.startsWith(".." + path.sep) || path.isAbsolute(inside)) throw new ConfigError("Initialization target escapes its allowed directory.");
+  let directory = root;
+  for (const segment of path.dirname(inside).split(path.sep).filter(part => part !== ".")) {
+    directory = path.join(directory, segment);
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(directory); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      try { fs.mkdirSync(directory); }
+      catch (mkdirError) { if ((mkdirError as NodeJS.ErrnoException).code !== "EEXIST") throw mkdirError; }
+      stat = fs.lstatSync(directory);
+    }
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new ConfigError("Initialization refuses symlinked or non-directory parent paths.");
+  }
+  const temporary = path.join(directory, `.agent-roast-init-${randomUUID()}.tmp`);
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(temporary, "wx", mode);
+    fs.writeFileSync(fd, content);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd); fd = undefined;
+    try { fs.linkSync(temporary, destination); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "EEXIST") return false; throw error; }
+    return true;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
+const hasEntry = (filename: string): boolean => {
+  try { fs.lstatSync(filename); return true; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+};
+
 export async function initProject(options: InitOptions = {}): Promise<InitResult> {
-  const cwd = path.resolve(options.cwd || process.cwd());
+  const cwd = fs.realpathSync(path.resolve(options.cwd || process.cwd()));
   const created: string[] = [];
   const skipped: string[] = [];
-
-  // 1. Create .agentroastrc.json
-  const configPath = path.join(cwd, ".agentroastrc.json");
-  const altConfigPath = path.join(cwd, "agent-roast.config.json");
-
-  if (fs.existsSync(configPath) || fs.existsSync(altConfigPath) || fs.existsSync(path.join(cwd, ".agentroastrc"))) {
+  const publish = (root: string, relative: string, label: string, content: string, mode?: number) => {
+    (createNewFile(root, relative, content, mode) ? created : skipped).push(label);
+  };
+  if ([".agentroastrc.json", "agent-roast.config.json", ".agentroastrc"].some(name => hasEntry(path.join(cwd, name)))) {
     skipped.push(".agentroastrc.json");
-  } else {
-    fs.writeFileSync(
-      configPath,
-      JSON.stringify(DEFAULT_CONFIG_TEMPLATE, null, 2) + "\n",
-      "utf-8"
-    );
-    created.push(".agentroastrc.json");
-  }
+  } else publish(cwd, ".agentroastrc.json", ".agentroastrc.json", JSON.stringify(DEFAULT_CONFIG_TEMPLATE, null, 2) + "\n");
 
-  // 2. Optional CI Workflow
-  if (options.ci) {
-    const workflowDir = path.join(cwd, ".github", "workflows");
-    const workflowPath = path.join(workflowDir, "agent-roast.yml");
+  if (options.ci) publish(cwd, ".github/workflows/agent-roast.yml", ".github/workflows/agent-roast.yml", GITHUB_WORKFLOW_TEMPLATE);
 
-    if (fs.existsSync(workflowPath)) {
-      skipped.push(".github/workflows/agent-roast.yml");
-    } else {
-      fs.mkdirSync(workflowDir, { recursive: true });
-      fs.writeFileSync(workflowPath, GITHUB_WORKFLOW_TEMPLATE, "utf-8");
-      created.push(".github/workflows/agent-roast.yml");
-    }
-  }
-
-  // 3. Optional Git pre-commit hook
   if (options.hook) {
-    const gitDir = path.join(cwd, ".git");
-    if (!fs.existsSync(gitDir) || !fs.statSync(gitDir).isDirectory()) {
-      skipped.push(".git/hooks/pre-commit (no .git directory found)");
+    // rev-parse supports ordinary clones, subdirectories and linked worktrees.
+    // Never run a configured hook or overwrite an existing installation.
+    const run = (...args: string[]) => spawnSync("git", [...HERMETIC_GIT_FLAGS, ...args], {
+      cwd, env: getHermeticGitEnv(), encoding: "utf8", timeout: 30_000, maxBuffer: 8192, windowsHide: true,
+    });
+    const common = run("rev-parse", "--git-common-dir");
+    if (common.error || common.status !== 0) {
+      // Preserve compatibility with initializing an empty .git directory before
+      // git init; there is no repository metadata to follow outside this root.
+      const plainGit = path.join(cwd, ".git");
+      if (hasEntry(plainGit) && fs.lstatSync(plainGit).isDirectory() && !fs.lstatSync(plainGit).isSymbolicLink()) {
+        publish(plainGit, "hooks/pre-commit", ".git/hooks/pre-commit", PRE_COMMIT_HOOK_TEMPLATE, 0o755);
+      } else skipped.push(".git/hooks/pre-commit (no .git directory found)");
     } else {
-      const hooksDir = path.join(gitDir, "hooks");
-      const hookPath = path.join(hooksDir, "pre-commit");
-
-      if (fs.existsSync(hookPath)) {
-        skipped.push(".git/hooks/pre-commit");
-      } else {
-        fs.mkdirSync(hooksDir, { recursive: true });
-        fs.writeFileSync(hookPath, PRE_COMMIT_HOOK_TEMPLATE, {
-          encoding: "utf-8",
-          mode: 0o755,
-        });
-        created.push(".git/hooks/pre-commit");
-      }
+      const commonDir = fs.realpathSync(path.resolve(cwd, gitOutputPath(common.stdout)));
+      const hooks = run("rev-parse", "--git-path", "hooks");
+      if (hooks.error || hooks.status !== 0) throw new ConfigError("Cannot resolve this repository's hooks directory.");
+      const hookDir = path.resolve(cwd, gitOutputPath(hooks.stdout));
+      const relative = path.relative(commonDir, path.join(hookDir, "pre-commit"));
+      if (!relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+        skipped.push(".git/hooks/pre-commit (custom hooks path outside repository metadata; install manually)");
+      } else publish(commonDir, relative, ".git/hooks/pre-commit", PRE_COMMIT_HOOK_TEMPLATE, 0o755);
     }
   }
-
   return { created, skipped };
 }

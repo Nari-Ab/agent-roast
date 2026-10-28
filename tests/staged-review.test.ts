@@ -14,7 +14,7 @@ const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env, en
 const write = (file: string, text: string | Buffer) => { const dest = path.join(dir, file); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, text); };
 const commit = () => { git("add", "."); git("commit", "-m", "base"); return git("rev-parse", "HEAD"); };
 const review = () => reviewStagedChanges({ cwd: dir });
-const run = (...args: string[]) => spawnSync(process.execPath, [cli, dir, "--staged", ...args], { env, encoding: "utf8" });
+const run = (...args: string[]) => spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, dir, "--staged", ...args], { env, encoding: "utf8" });
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(tmpdir(), "roast-staged-context-"));
   git("init", "-b", "main"); git("config", "user.name", "Dev"); git("config", "user.email", "dev@example.invalid"); git("config", "commit.gpgsign", "false");
@@ -179,7 +179,7 @@ describe("full-source review of the next commit", () => {
   it("exports staged JSON, SARIF and markdown through both CLI spellings", () => {
     write("auth.test.ts", "test.only('new', () => {});\n"); git("add", ".");
     const root = run("--json"); expect(root.status).toBe(1); expect(JSON.parse(root.stdout).source).toBe("index");
-    const cmd = spawnSync(process.execPath, [cli, "review", dir, "--staged", "--format", "sarif"], { env, encoding: "utf8" });
+    const cmd = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "review", dir, "--staged", "--format", "sarif"], { env, encoding: "utf8" });
     expect(cmd.status).toBe(1); const report = JSON.parse(cmd.stdout).runs[0];
     expect(report.results[0].ruleId).toBe("test-focus"); expect(report.properties.source).toBe("index");
     expect(run("--format", "markdown").stdout).toContain("staged context review");

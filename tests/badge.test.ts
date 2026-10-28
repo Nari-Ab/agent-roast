@@ -48,3 +48,36 @@ describe("Badge Generator", () => {
     });
   });
 });
+
+describe("badge output treats labels as text", () => {
+  it("escapes XML attribute and element injection including controls", () => {
+    const svg = generateSvgBadge(92, '\"><script>alert(1)</script>&\u001b\u202e');
+    expect(svg).not.toContain("<script>");
+    expect(svg).not.toContain('\u001b'); expect(svg).not.toContain('\u202e');
+    expect(svg).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;&amp;\\u001b\\u202e');
+    expect((svg.match(/<svg\b/g) || []).length).toBe(1);
+  });
+  it("keeps markdown labels inert and encodes destination delimiters", () => {
+    const markdown = generateShieldsMarkdown(88, 'x](![image](https://evil.invalid))\n<a> &', 'https://example.invalid/repo(a)');
+    expect(markdown).not.toContain('![image]'); expect(markdown).not.toContain('<a>');
+    expect(markdown.split('\n')).toHaveLength(1);
+    expect(markdown).toContain('https://example.invalid/repo%28a%29');
+    expect(generateShieldsMarkdown(88, 'my-label_name')).toContain('/my--label__name-88');
+  });
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'https://user:secret@example.invalid'])('refuses unsafe badge destinations %s', destination => {
+    expect(() => generateShieldsMarkdown(88, 'label', destination)).toThrow(/HTTP/);
+  });
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 101])('does not label an invalid score %s as a valid rating', score => {
+    expect(generateSvgBadge(score)).toContain('N/A');
+    expect(generateShieldsJson(score).message).toBe('N/A');
+    expect(getScoreColor(score).name).toBe('lightgrey');
+  });
+});
+
+
+it("normalizes Unicode line separators in SVG and Markdown badge labels", () => {
+  for (const rendered of [generateSvgBadge(90, "a\u2028b\u2029c"), generateShieldsMarkdown(90, "a\u2028b\u2029c")]) {
+    expect(rendered).not.toContain("\u2028"); expect(rendered).not.toContain("\u2029");
+    expect(rendered).toContain("u2028"); expect(rendered).toContain("u2029");
+  }
+});

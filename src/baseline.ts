@@ -3,6 +3,7 @@ import * as fs from "fs";
 import path from "path";
 import type { Infraction } from "./types.js";
 import { ConfigError } from "./config.js";
+import { readRegularFile } from "./file-read.js";
 
 export interface FindingBaseline {
   schemaVersion: "1.0.0";
@@ -32,24 +33,7 @@ export function createBaseline(findings: Infraction[]): FindingBaseline {
 
 export function loadBaseline(filename: string): FindingBaseline {
   try {
-    const stat = fs.lstatSync(filename);
-    if (!stat.isFile() || stat.size > 5 * 1024 * 1024) throw new Error("Expected a regular baseline file under 5 MiB.");
-    const fd = fs.openSync(filename, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    let content: string;
-    try {
-      const opened = fs.fstatSync(fd);
-      if (opened.ino !== stat.ino || opened.dev !== stat.dev) throw new Error("Baseline changed while opening.");
-      const buffer = Buffer.alloc(5 * 1024 * 1024 + 1);
-      let size = 0;
-      while (size < buffer.length) {
-        const read = fs.readSync(fd, buffer, size, buffer.length - size, null);
-        if (!read) break;
-        size += read;
-      }
-      const after = fs.fstatSync(fd);
-      if (size > 5 * 1024 * 1024 || size !== after.size || opened.mtimeMs !== after.mtimeMs) throw new Error("Baseline changed or exceeded the size limit.");
-      content = buffer.subarray(0, size).toString("utf8");
-    } finally { fs.closeSync(fd); }
+    const content = new TextDecoder("utf-8", { fatal: true }).decode(readRegularFile(filename, 5 * 1024 * 1024));
     const parsed = JSON.parse(content);
     if (!parsed || parsed.schemaVersion !== "1.0.0" || parsed.fingerprintVersion !== 1 ||
         !Array.isArray(parsed.entries) || parsed.entries.length > 100_000) {
@@ -94,8 +78,13 @@ export function writeBaseline(filename: string, findings: Infraction[]): void {
   const temporary = path.join(path.dirname(destination), `.agent-roast-${randomUUID()}.tmp`);
   let fd: number | undefined;
   try {
+    const baseline = createBaseline(findings);
+    const serialized = JSON.stringify(baseline, null, 2) + "\n";
+    if (Buffer.byteLength(serialized, "utf8") > 5 * 1024 * 1024 || baseline.entries.length > 100_000 || baseline.entries.some(entry => entry.count > 1_000_000)) {
+      throw new Error("Baseline exceeds the supported read limits; narrow the adopted scope.");
+    }
     fd = fs.openSync(temporary, "wx", 0o600);
-    fs.writeFileSync(fd, JSON.stringify(createBaseline(findings), null, 2) + "\n");
+    fs.writeFileSync(fd, serialized);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;

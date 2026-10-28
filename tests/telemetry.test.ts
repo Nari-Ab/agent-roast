@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
+import { tmpdir } from "os";
 import { streamGitLog, parseGitLogStream } from "../src/git.js";
 
 describe("Zero-Telemetry and Security Verification", () => {
@@ -34,9 +35,7 @@ describe("Zero-Telemetry and Security Verification", () => {
   });
 
   it("fails gracefully with descriptive error when executed outside a git repository", async () => {
-    const nonGitDir = path.join(process.cwd(), ".tmp-non-git-dir");
-    fs.rmSync(nonGitDir, { recursive: true, force: true });
-    fs.mkdirSync(nonGitDir, { recursive: true });
+    const nonGitDir = fs.mkdtempSync(path.join(tmpdir(), "roast-non-git-"));
 
     const prevCeiling = process.env.GIT_CEILING_DIRECTORIES;
     process.env.GIT_CEILING_DIRECTORIES = process.cwd();

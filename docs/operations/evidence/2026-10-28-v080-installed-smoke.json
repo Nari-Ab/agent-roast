@@ -1,0 +1,38 @@
+[
+  {
+    "version": "0.8.0",
+    "node": "v18.20.8",
+    "archiveInstalled": true,
+    "schemaIncluded": true,
+    "initialExit": 1,
+    "acceptedExit": 0,
+    "acceptedRecords": 1,
+    "duplicateExit": 1,
+    "installedApi": true,
+    "sarifAccepted": true
+  },
+  {
+    "version": "0.8.0",
+    "node": "v20.19.5",
+    "archiveInstalled": true,
+    "schemaIncluded": true,
+    "initialExit": 1,
+    "acceptedExit": 0,
+    "acceptedRecords": 1,
+    "duplicateExit": 1,
+    "installedApi": true,
+    "sarifAccepted": true
+  },
+  {
+    "version": "0.8.0",
+    "node": "v22.20.0",
+    "archiveInstalled": true,
+    "schemaIncluded": true,
+    "initialExit": 1,
+    "acceptedExit": 0,
+    "acceptedRecords": 1,
+    "duplicateExit": 1,
+    "installedApi": true,
+    "sarifAccepted": true
+  }
+]

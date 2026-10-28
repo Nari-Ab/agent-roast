@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import * as fs from "fs";
+import { tmpdir } from "os";
 import * as path from "path";
 import { streamGitLog, parseGitLogStream } from "../src/git.js";
 import { MetricsCollector } from "../src/metrics.js";
@@ -10,9 +11,14 @@ import {
   InvalidDetectorError,
 } from "../src/index.js";
 
+const integrationRoot = fs.mkdtempSync(path.join(tmpdir(), "roast-integration-"));
+const cliNode = process.env.AGENT_ROAST_TEST_NODE || process.execPath;
+const cli = path.resolve("dist/cli.js");
+afterAll(() => fs.rmSync(integrationRoot, { recursive: true, force: true }));
+
 describe("Real Git Integration with Hostile Environment", () => {
-  const tempDir = path.join(process.cwd(), ".tmp-test-repo");
-  const hostileConfigPath = path.join(process.cwd(), ".tmp-hostile.gitconfig");
+  const tempDir = path.join(integrationRoot, ".tmp-test-repo");
+  const hostileConfigPath = path.join(integrationRoot, ".tmp-hostile.gitconfig");
 
   beforeAll(() => {
     // Create hostile gitconfig
@@ -179,7 +185,7 @@ describe("Real Git Integration with Hostile Environment", () => {
   });
 
   it("terminates with exit code 2 promptly when git exits with code 128", () => {
-    const emptyDir = path.join(process.cwd(), ".tmp-integration-empty");
+    const emptyDir = path.join(integrationRoot, ".tmp-integration-empty");
     fs.rmSync(emptyDir, { recursive: true, force: true });
     fs.mkdirSync(emptyDir, { recursive: true });
 
@@ -188,7 +194,7 @@ describe("Real Git Integration with Hostile Environment", () => {
       let exitCode = 0;
       let output = "";
       try {
-        output = execSync(`node ./dist/cli.js "${emptyDir}"`, {
+        output = execFileSync(cliNode, [cli, emptyDir], {
           cwd: process.cwd(),
           env: {
             ...process.env,
@@ -213,7 +219,7 @@ describe("Real Git Integration with Hostile Environment", () => {
   });
 
   it("detects trivial-assert and stub-abandonment in PR diff while respecting ignorePaths", async () => {
-    const testRepoDir = path.join(process.cwd(), ".tmp-v03-repo");
+    const testRepoDir = path.join(integrationRoot, ".tmp-v03-repo");
     fs.rmSync(testRepoDir, { recursive: true, force: true });
     fs.mkdirSync(testRepoDir, { recursive: true });
 
@@ -285,7 +291,7 @@ describe("Real Git Integration with Hostile Environment", () => {
   });
 
   it("executes 'agent-roast init --ci --hook' successfully via CLI binary", () => {
-    const initTestDir = path.join(process.cwd(), ".tmp-v03-init");
+    const initTestDir = path.join(integrationRoot, ".tmp-v03-init");
     fs.rmSync(initTestDir, { recursive: true, force: true });
     fs.mkdirSync(initTestDir, { recursive: true });
 
@@ -297,8 +303,8 @@ describe("Real Git Integration with Hostile Environment", () => {
     try {
       execSync("git init -b main", { cwd: initTestDir, env, stdio: "ignore" });
 
-      const output = execSync(
-        `node ./dist/cli.js init "${initTestDir}" --yes --ci --hook`,
+      const output = execFileSync(
+        cliNode, [cli, "init", initTestDir, "--yes", "--ci", "--hook"],
         {
           cwd: process.cwd(),
           encoding: "utf8",
@@ -319,7 +325,7 @@ describe("Real Git Integration with Hostile Environment", () => {
   });
 
   it("executes 'agent-roast badge' with --json and --out flags via CLI", () => {
-    const badgeRepoDir = path.join(process.cwd(), ".tmp-v04-badge");
+    const badgeRepoDir = path.join(integrationRoot, ".tmp-v04-badge");
     fs.rmSync(badgeRepoDir, { recursive: true, force: true });
     fs.mkdirSync(badgeRepoDir, { recursive: true });
 
@@ -337,8 +343,8 @@ describe("Real Git Integration with Hostile Environment", () => {
       execSync("git add . && git commit -m 'feat: initial'", { cwd: badgeRepoDir, env, stdio: "ignore" });
 
       // 1. Test badge --json
-      const jsonOutput = execSync(
-        `node ./dist/cli.js badge "${badgeRepoDir}" --all --json`,
+      const jsonOutput = execFileSync(
+        cliNode, [cli, "badge", badgeRepoDir, "--all", "--json"],
         { cwd: process.cwd(), encoding: "utf8", env }
       );
       const parsed = JSON.parse(jsonOutput.trim());
@@ -348,8 +354,8 @@ describe("Real Git Integration with Hostile Environment", () => {
 
       // 2. Test badge --out
       const svgPath = path.join(badgeRepoDir, "badge.svg");
-      const outOutput = execSync(
-        `node ./dist/cli.js badge "${badgeRepoDir}" --all --out "${svgPath}"`,
+      const outOutput = execFileSync(
+        cliNode, [cli, "badge", badgeRepoDir, "--all", "--out", svgPath],
         { cwd: process.cwd(), encoding: "utf8", env }
       );
       expect(outOutput).toContain("Generated SVG badge at");

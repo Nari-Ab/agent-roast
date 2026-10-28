@@ -1,3 +1,4 @@
+export type { SuppressedFinding } from "./exceptions.js";
 export interface CommitInfo {
   hash: string;
   date: string;
@@ -28,6 +29,8 @@ export const VALID_DETECTORS: readonly DetectorType[] = [
 ] as const;
 
 export interface Infraction {
+  fingerprint?: string;
+  occurrence?: number;
   type: DetectorType;
   file?: string;
   lineNumber?: number;
@@ -39,6 +42,7 @@ export interface Infraction {
 }
 
 export interface MetricSummary {
+  complete?: boolean;
   schemaVersion: string;
   totalLinesAdded: number;
   aiLinesAdded: number;
@@ -58,6 +62,7 @@ export interface MetricSummary {
   archetypeDescription: string;
   skippedLongLines?: number;
   skippedUnknownFiles?: number;
+  skippedBinaryFiles?: number;
 }
 
 export interface RoastOptions {
@@ -99,8 +104,10 @@ export interface PrAuditResult {
   infractions: Infraction[];
   failedRules: string[];
   passed: boolean;
+  complete?: boolean;
   skippedLongLines: number;
   skippedUnknownFiles: number;
+  skippedBinaryFiles?: number;
   output: string;
   exitCode: number;
 }
@@ -112,6 +119,7 @@ export interface CheckOptions {
   failOn?: string[];
   format?: ReviewFormat;
   baseline?: string;
+  ignoreExceptions?: boolean;
   signal?: AbortSignal;
 }
 
@@ -125,6 +133,8 @@ export interface CheckResult {
   baselineCount: number;
   staleBaselineCount: number;
   skippedFiles: { file: string; reason: string }[];
+  suppressedFindings?: import("./exceptions.js").SuppressedFinding[];
+  expiredExceptionCount?: number;
   complete: boolean;
   failedRules: string[];
   passed: boolean;
@@ -140,6 +150,7 @@ export interface ReviewOptions {
   head?: string;
   failOn?: string[];
   format?: ReviewFormat;
+  ignoreExceptions?: boolean;
   signal?: AbortSignal;
 }
 
@@ -167,6 +178,8 @@ export interface ReviewResult {
   infractions: Infraction[];
   removedFindings: Infraction[];
   skippedFiles: { file: string; reason: string }[];
+  suppressedFindings?: import("./exceptions.js").SuppressedFinding[];
+  expiredExceptionCount?: number;
   complete: boolean;
   failedRules: string[];
   passed: boolean;

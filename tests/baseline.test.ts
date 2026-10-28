@@ -42,12 +42,18 @@ describe("baseline adoption without hiding newly added problems", () => {
     const filename = path.join(dir, "baseline.json"); writeFileSync(filename, JSON.stringify(value));
     expect(() => loadBaseline(filename)).toThrow(/baseline/);
   });
+  it("refuses to create a baseline that its bounded loader cannot read", () => {
+    const filename = path.join(dir, "too-large.json");
+    const manyFindings = Array.from({ length: 50_000 }, (_, index) => finding(index + 1, `it.skip('case-${index}');`));
+    expect(() => writeBaseline(filename, manyFindings)).toThrow(/read limits/);
+    expect(readdirSync(dir)).toEqual([]);
+  });
   it("allows exactly one concurrent publication", async () => {
     const filename = path.join(dir, "baseline.json");
     const moduleUrl = pathToFileURL(path.resolve("dist/index.js")).href;
     const script = `import { writeBaseline } from ${JSON.stringify(moduleUrl)}; try { writeBaseline(process.argv[1], ${JSON.stringify([finding()])}); } catch { process.exitCode = 2; }`;
     const attempt = () => new Promise<number | null>((resolve, reject) => {
-      const child = spawn(process.execPath, ["--input-type=module", "-e", script, filename], { stdio: "ignore" });
+      const child = spawn((process.env.AGENT_ROAST_TEST_NODE || process.execPath), ["--input-type=module", "-e", script, filename], { stdio: "ignore" });
       child.on("error", reject); child.on("close", resolve);
     });
     const results = await Promise.all([attempt(), attempt(), attempt(), attempt()]);

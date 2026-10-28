@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Offline code checks for skipped tests, swallowed errors, unfinished stubs and AI coding shortcuts",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "schema.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -51,9 +52,13 @@
     "gifenc": "^1.0.3",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=18"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "vite": "^7.3.7"
   }
 }

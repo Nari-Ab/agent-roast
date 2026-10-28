@@ -1,0 +1,9 @@
+{
+  "validator": "Ajv8 with ajv-formats3",
+  "policySchemaValid": true,
+  "validPolicyAccepted": true,
+  "negativeControls": 4,
+  "installedSarifValid": true,
+  "sarifVersion": "2.1.0",
+  "liveGitHubUpload": false
+}

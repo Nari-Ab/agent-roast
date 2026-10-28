@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -18,8 +18,8 @@ const scenes = [
   },
   {
     id: 'scene3',
-    en: 'Meet agent-roast. An offline git discipline auditor that runs in under two hundred milliseconds.',
-    ru: 'Это agent-roast. Оффлайн-аудитор дисциплины в git, который работает быстрее двухсот миллисекунд.'
+    en: 'Meet agent-roast. An offline review aid for skipped tests, hidden errors and coding shortcuts.',
+    ru: 'Это agent-roast. Оффлайн-проверка пропущенных тестов, скрытых ошибок и незавершённого кода.'
   },
   {
     id: 'scene4',
@@ -28,8 +28,8 @@ const scenes = [
   },
   {
     id: 'scene5',
-    en: 'Audit your repository now with npx agent-roast. Open source on GitHub.',
-    ru: 'Проверь свой репозиторий прямо сейчас через npx agent-roast. Опенсорс на GitHub.'
+    en: 'Audit your repository now with npx agent-roast check. Open source on GitHub.',
+    ru: 'Проверь свой репозиторий прямо сейчас через npx agent-roast check. Опенсорс на GitHub.'
   }
 ];
 
@@ -41,9 +41,9 @@ function generate(lang, voice, rate) {
     const m4aPath = path.join(audioDir, `${scene.id}_${lang}.m4a`);
     
     console.log(`Generating ${scene.id} [${lang}]...`);
-    execSync(`say -v "${voice}" -r ${rate} "${text.replace(/"/g, '\\"')}" -o "${aiffPath}"`);
-    execSync(`afconvert -f WAVE -d LEI16 "${aiffPath}" "${wavPath}"`);
-    execSync(`afconvert -f m4af -d aac "${aiffPath}" "${m4aPath}"`);
+    execFileSync('say', ['-v', voice, '-r', String(rate), text, '-o', aiffPath]);
+    execFileSync('afconvert', ['-f', 'WAVE', '-d', 'LEI16', aiffPath, wavPath]);
+    execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac', aiffPath, m4aPath]);
     fs.unlinkSync(aiffPath);
   }
 }

@@ -14,7 +14,7 @@ let dir: string;
 const cli = path.resolve("dist/cli.js");
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env, encoding: "utf8" }).trim();
-const run = (...args: string[]) => spawnSync(process.execPath, [cli, dir, ...args], { env, encoding: "utf8" });
+const run = (...args: string[]) => spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, dir, ...args], { env, encoding: "utf8" });
 const config = (value: unknown) => writeFileSync(path.join(dir, ".agentroastrc.json"), JSON.stringify(value));
 const code = (lines: string[], file = "test.ts") => [{ path: file, addedLines: lines.map((line, i) => ({ line, lineNumber: i + 1 })) }];
 

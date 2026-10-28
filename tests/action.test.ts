@@ -54,6 +54,11 @@ describe("composite action context-review integration", () => {
     expect(run({ ROAST_MODE: "audit", ROAST_FAIL_ON: "test-skip,swallowed-error" }).status).toBe(0);
     expect(args()).toEqual([repo, "--base", "abc123", "--head", "def456", "--fail-on", "test-skip,swallowed-error", "--format", "github"]);
   });
+  it("supports explicit advisory pilots without treating incomplete scans as clean", () => {
+    expect(run({ ROAST_ADVISORY: "true", ROAST_FAIL_ON: "test-skip" }).status).toBe(0);
+    expect(args()).toEqual(["review", repo, "--base", "abc123", "--head", "def456", "--fail-on", "", "--format", "github"]);
+    expect(run({ ROAST_ADVISORY: "maybe" }).status).toBe(2);
+  });
   it("does not interpolate branch text as shell commands", () => {
     expect(run({ INPUT_BASE: "HEAD; touch OWNED" }).status).toBe(0);
     expect(args()).toContain("HEAD; touch OWNED"); expect(fs.existsSync(path.join(repo, "OWNED"))).toBe(false);

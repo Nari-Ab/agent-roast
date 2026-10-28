@@ -1,7 +1,9 @@
 import { createHash } from "crypto";
+import * as fs from "fs/promises";
+import path from "path";
 import { spawn } from "child_process";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
-import { getHermeticGitEnv, HERMETIC_GIT_FLAGS, GitError } from "./git.js";
+import { getHermeticGitEnv, HERMETIC_GIT_FLAGS, GitError, gitOutputPath } from "./git.js";
 import type { AgentRoastConfig } from "./config.js";
 
 export interface TreeChange {
@@ -19,10 +21,10 @@ export function assertNotAborted(signal?: AbortSignal): void {
 }
 
 /** Bounded async Git reads. Never check out code, run project hooks or lazily fetch objects. */
-export async function readGit(cwd: string, args: string[], signal?: AbortSignal, limit = 8 * 1024 * 1024): Promise<Buffer> {
+export async function readGit(cwd: string, args: string[], signal?: AbortSignal, limit = 8 * 1024 * 1024, indexFile?: string): Promise<Buffer> {
   assertNotAborted(signal);
   const env = getHermeticGitEnv({ GIT_NO_REPLACE_OBJECTS: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" });
-  for (const key of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES"]) delete env[key];
+  if (indexFile) env.GIT_INDEX_FILE = indexFile;
   return new Promise((resolve, reject) => {
     const child = spawn("git", [...HERMETIC_GIT_FLAGS, ...args], {
       cwd, env,
@@ -146,6 +148,22 @@ export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise
   verify: () => Promise<void>;
 }> {
   await requireLocalObjects(cwd, signal);
+  let indexFile: string | undefined;
+  if (process.env.GIT_INDEX_FILE) {
+    // Git commit -a/--only creates an index.lock/next-index candidate for hooks.
+    // Reading the ordinary index would approve a different commit. Confine an
+    // explicit candidate to this checkout's real Git directory; never follow it
+    // to another repository or an arbitrary outside file.
+    const gitDirectory = await fs.realpath(gitOutputPath((await readGit(cwd, ["rev-parse", "--absolute-git-dir"], signal, 8192)).toString()));
+    const requested = path.resolve(cwd, process.env.GIT_INDEX_FILE);
+    const stat = await fs.lstat(requested);
+    const resolved = await fs.realpath(requested);
+    const relative = path.relative(gitDirectory, resolved);
+    if (!stat.isFile() || stat.isSymbolicLink() || !relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+      throw new ConfigError("GIT_INDEX_FILE must be a regular candidate index inside this repository's Git directory; refusing to review another index.");
+    }
+    indexFile = resolved;
+  }
   const head = async (): Promise<string> => {
     try {
       return (await readGit(cwd, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], signal, 1024)).toString().trim();
@@ -161,9 +179,9 @@ export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise
   const baseSha = await head();
   const inventory = () => readGit(cwd, ["diff", "--cached", "--raw", "-z", "--no-relative", "--no-abbrev", "--no-ext-diff", "--no-textconv",
     "--ignore-submodules=none", "--ita-invisible-in-index", "--find-renames=50%", "-l1000", "--end-of-options",
-    ...(baseSha === "EMPTY" ? [] : [baseSha]), "--"], signal);
+    ...(baseSha === "EMPTY" ? [] : [baseSha]), "--"], signal, 8 * 1024 * 1024, indexFile);
   // Detect conflicts explicitly, including paths that are not supported source.
-  const conflicts = await readGit(cwd, ["ls-files", "--unmerged", "-z", "--full-name"], signal);
+  const conflicts = await readGit(cwd, ["ls-files", "--unmerged", "-z", "--full-name"], signal, 8 * 1024 * 1024, indexFile);
   if (conflicts.length) throw new ConfigError("Resolve unmerged index entries before reviewing staged changes.");
   const pinned = await inventory();
   const changes = parseTreeChanges(pinned);

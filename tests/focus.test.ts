@@ -58,3 +58,40 @@ describe("exclusive tests that narrow a successful run", () => {
     expect(formatTerminalCard(summary, { repoName: "sample", verbose: true })).toContain("test-focus");
   });
 });
+
+describe("source-context skipped and focused registrations", () => {
+  it.each([
+    "test . skip('auth', () => {});", "test.concurrent.skip('auth', () => {});",
+    "test\n .describe\n .skip('auth', () => {});", "suite.skip('auth', () => {});",
+    "test.skip.each([1])('auth', () => {});", "test.skip.each`a | b\n1 | 2`('auth', () => {});",
+    "xdescribe('auth', () => {});", "xit ('auth', () => {});", "test.todo ('auth');",
+  ])("finds the skipped registration %s", text => {
+    expect(scan(text)).toEqual([expect.objectContaining({ type: "test-skip", lineNumber: 1 })]);
+  });
+  it.each([
+    "const skipped = test.skip;", "const focused = test.only;", "const selected = test.only.each;",
+    "const skipped = test.skip.each;", "client . test.skip('ordinary API');",
+    "const docs = `test.skip('example');`;", "/* test\n.skip('example'); */",
+    "test.skipIf(condition)('conditional', () => {});", "function xit(value) { return value; }",
+  ])("does not register a test merely by referencing it: %s", text => expect(scan(text)).toEqual([]));
+  it.each([
+    "test.only.each`a | b\n1 | 2`('auth', () => {});",
+    "fit.each`a | b\n1 | 2`('auth', () => {});",
+    "test.sequential.only('auth', () => {});",
+  ])("retains exclusive tagged-table and modifier support: %s", text => {
+    expect(scan(text)).toEqual([expect.objectContaining({ type: "test-focus" })]);
+  });
+  it("does not infer a tagged call from a reference followed by a comment", () => {
+    expect(scan("const focused = test.only.each; /* `documentation` */")).toEqual([]);
+  });
+  it("keeps skipped calls on the following line separate from a literal example", () => {
+    expect(scan("const docs = `test.skip('example');`;\ntest.skip('real', () => {});")).toEqual([
+      expect.objectContaining({ type: "test-skip", lineNumber: 2 }),
+    ]);
+  });
+  it("does not join skipped chains across missing diff context", () => {
+    expect(auditFileDiffs([{ path: "auth.test.ts", addedLines: [
+      { line: "test", lineNumber: 1 }, { line: ".skip('auth', () => {});", lineNumber: 20 },
+    ] }]).infractions).toEqual([]);
+  });
+});

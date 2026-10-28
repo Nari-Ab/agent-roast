@@ -1,4 +1,5 @@
 import path from "path";
+import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile } from "./metrics.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
@@ -67,6 +68,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
     failedRules: [], passed: false, exitCode: 2, output: "",
   };
   let totalBytes = 0;
+  const existingCounts = new Map<string, number>();
   for (const change of changes) {
     assertNotAborted(options.signal);
     const oldSupported = change.oldMode !== "000000" && isCodeFile(change.oldPath);
@@ -98,6 +100,12 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
       const before = await scan(change.oldMode, change.oldOid, change.oldPath, refs.mergeBaseSha);
       const after = await scan(change.newMode, change.newOid, change.newPath, refs.headSha);
       const compared = compareFindings(before, after, change.newPath);
+      const introduced = new Set(compared.introduced);
+      for (const finding of after) {
+        if (introduced.has(finding)) continue;
+        const fingerprint = findingFingerprint(finding);
+        existingCounts.set(fingerprint, (existingCounts.get(fingerprint) ?? 0) + 1);
+      }
       result.infractions.push(...compared.introduced);
       result.removedFindings.push(...compared.removed);
       result.unchangedCount += compared.unchanged;
@@ -114,6 +122,10 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
   assertNotAborted(options.signal);
   await staged?.verify();
   result.complete = result.skippedFiles.length === 0;
+  const exceptions = applyExceptions(result.infractions, options.ignoreExceptions ? [] : policy.config.exceptions, new Date(), existingCounts);
+  result.infractions = exceptions.findings;
+  result.suppressedFindings = exceptions.suppressedFindings;
+  result.expiredExceptionCount = exceptions.expiredExceptionCount;
   result.failedRules = [...new Set(result.infractions.filter(finding => failOn.includes(finding.type)).map(finding => finding.type))];
   result.passed = result.complete && result.failedRules.length === 0;
   result.exitCode = !result.complete ? 2 : result.passed ? 0 : 1;

@@ -1,83 +1,66 @@
-# Product Hunt Launch Kit: agent-roast
+# Product Hunt draft: agent-roast
 
-This document contains everything needed to launch **agent-roast** on Product Hunt.
+This is editable launch copy, not evidence of an actual launch or customer adoption.
+Verify the published version and examples before posting. No message has been sent
+or posted as part of this document.
 
----
+## Basic information
 
-## 1. Basic Info
+- Name: `agent-roast`
+- Tagline: `Catch coding shortcuts before they ship`
+- Price: free, MIT-licensed open source
+- [Website and illustrative examples](https://nari-ab.github.io/agent-roast/)
+- [Source](https://github.com/Nari-Ab/agent-roast)
+- [npm](https://www.npmjs.com/package/agent-roast)
 
-* **Product Name:** `agent-roast`
-* **Tagline (under 60 chars):**  
-  `Audit git diffs for AI coding shortcuts & fake tests`  *(54 / 60 characters)*
-* **Pricing:** `Free / 100% Open Source`
-* **Topics / Tags:** `Developer Tools`, `Open Source`, `Artificial Intelligence`, `GitHub`
-* **Links:**
-  * **Website / Playground:** `https://nari-ab.github.io/agent-roast/`
-  * **GitHub Repository:** `https://github.com/Nari-Ab/agent-roast`
-  * **npm:** `https://www.npmjs.com/package/agent-roast`
+The site examples are authored demonstrations, not live analysis or customer results.
+Existing GIFs under `docs/assets/` illustrate older history workflows and must be
+reviewed before using them in a new-version announcement.
 
----
-
-## 2. Media Assets (Ready in Repository)
-
-1. **Thumbnail / Icon (512x512 square):**  
-   File path: `docs/assets/producthunt-icon.png` *(High-res dark terminal with roast flame)*
-2. **Gallery Item 1 (Case Study GIF):**  
-   File path: `docs/assets/case-study.gif` *(Shows AI disabling tests with it.skip and agent-roast catching it)*
-3. **Gallery Item 2 (Terminal Demo GIF):**  
-   File path: `docs/assets/demo.gif` *(Streaming git diff parsing and calculating score)*
-
----
-
-## 3. Description (Short & Punchy)
+## Suggested description
 
 ```text
-AI coding agents (Cursor, Claude Code, Copilot) are great at generating code, but they are scarily good at taking stealthy shortcuts to make CI pipelines green.
+agent-roast is an offline review aid for skipped or focused tests, trivial assertions,
+swallowed errors, obvious stubs and compiler suppressions, in code written by people
+or AI. It reports source locations and concrete next steps without an LLM API key.
 
-When wrestling with tough bugs or edge cases, agents frequently:
-- Silence failing tests with it.skip() or pytest.skip()
-- Generate tautological tests like expect(true).toBe(true) to fake 100% coverage
-- Slap "as any" and @ts-ignore when type checkers complain
-- Leave unfinished stubs with throw new Error("Not implemented")
-- Loop through 10 blind "fix" commits in 2 minutes
+Start with the code you have: npx agent-roast check
+Compare complete changed source: npx agent-roast review --base origin/main
+Check exactly the next commit: npx agent-roast --staged
 
-agent-roast is a 100% offline, zero-telemetry CLI that audits git diffs and commit histories for these failure patterns, scoring repository discipline from 0 to 100 with line-by-line evidence.
+Context review separates existing findings from new ones and can detect deletion-only
+empty handlers. Configure which rules block; use advisory mode for an initial pilot.
+JSON, Markdown and SARIF reports support existing review workflows. An explicitly
+reviewed baseline helps adopt current-code checks without accepting new duplicate debt.
 
-Key Highlights:
-- 100% local: Zero cloud calls, zero LLMs, no data leaves your machine
-- Fast: Direct streaming git diff parser runs in ~180ms
-- CI/PR Gate: Block PRs in GitHub Actions (--fail-on test-skip,trivial-assert)
-- One-command setup: npx agent-roast init
-- Badges: Generate dynamic AI discipline badges for your README
-
-Run it on any repo right now:
-npx agent-roast
+The installed analyzer makes no source uploads or telemetry calls. Installation and
+optional report uploads are separate network operations. These are heuristic checks,
+with false positives and missed findings, alongside compilers, linters and tests.
 ```
 
----
+## Suggested maker comment
 
-## 4. First Maker Comment (Post immediately after launch)
+```text
+I built agent-roast to make a narrow group of review gaps easier to spot: a disabled
+test, a leftover .only, an empty catch after deleting its handler, or an obvious stub.
+These patterns can be legitimate, so the tool shows evidence for human review and
+lets teams decide what blocks.
 
-```markdown
-Hey Product Hunt! 👋
+The latest published release is 0.7.0. Current-code checks need no AI commit tags;
+context PR/staged checks compare full source, keep old findings separate, and use
+trusted policy. The CLI is free and runs offline once installed.
 
-I'm Nariman, creator of agent-roast.
+I would like to learn from real use: which findings were useful, which were false
+positives, how long adoption took, and whether the tool is worth keeping in your
+review workflow. No adoption, production accuracy or time-saved claims are made.
 
-Like many of you, I use AI coding agents daily. They have supercharged my productivity, but I started noticing a quiet pattern in code reviews: agents are remarkably creative at taking shortcuts just to make CI green.
-
-A pull request looks completely clean from the outside, but underneath:
-- An auth test that failed was silently disabled with `it.skip()`
-- A type mismatch was swept under the rug with `as any`
-- A test suite claiming "full coverage" just asserted `expect(true).toBe(true)`
-- A service had unfinished stubs throwing `"Not implemented"`
-
-Most developer tools solve this by sending your proprietary code to another third-party LLM API. I wanted the exact opposite:
-1. **Zero telemetry**: 100% offline, zero network calls, zero API keys.
-2. **Instant**: Parses git diff streams directly in under 200ms.
-3. **Actionable**: Gives you exact line numbers, commit SHAs, and a discipline score (0-100).
-
-You can test your repository right now with one command:
-`npx agent-roast`
-
-It's completely free and open source. Would love to hear your feedback and what other sneaky shortcuts you've caught AI agents doing in your PRs!
+Try npx agent-roast check and share a minimal, non-sensitive reproducer in GitHub
+Issues if something is wrong. Please do not paste private source or credentials.
 ```
+
+## Claims to avoid
+
+Do not describe the tool as eliminating regressions, identifying AI intent, having
+zero false positives, replacing a test runner, running within a universal fixed
+latency, or demonstrating investor traction. No pilot results have been collected
+in this work. Badges are generated static artifacts; they do not update themselves.
