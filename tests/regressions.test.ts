@@ -33,13 +33,15 @@ describe("configuration as an executable policy", () => {
     { scoreThreshold: 101 }, { scoreThreshold: "70" }, { panicLoopWindowMinutes: 0 }])("rejects invalid policy %j", value => {
     config(value);
     expect(() => loadConfig(dir)).toThrow();
+    git("add", "."); git("commit", "-m", "invalid trusted policy");
     expect(run("--staged").status).toBe(2);
   });
 
   it("honors explicit failOn, including an empty array", () => {
+    config({ failOn: [] });
+    git("add", "."); git("commit", "-m", "trusted advisory policy");
     writeFileSync(path.join(dir, "auth.test.ts"), 'it.skip("auth", () => {});\n');
     git("add", ".");
-    config({ failOn: [] });
     const result = run("--staged", "--json");
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).infractions).toHaveLength(1);
@@ -47,9 +49,10 @@ describe("configuration as an executable policy", () => {
   });
 
   it("honors warn/off levels without accidentally adding the default blocker", () => {
+    config({ rules: { "test-skip": "warn", "trivial-assert": "off", "type-escape": "off" } });
+    git("add", "."); git("commit", "-m", "trusted warning policy");
     writeFileSync(path.join(dir, "auth.test.ts"), 'it.skip("auth", () => {});\nconst x = foo as any;\n');
     git("add", ".");
-    config({ rules: { "test-skip": "warn", "trivial-assert": "off", "type-escape": "off" } });
     const result = run("--staged", "--format", "github");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("::warning");

@@ -72,7 +72,7 @@ export async function checkProject(options: CheckOptions = {}): Promise<CheckRes
   const cwd = path.resolve(options.cwd || process.cwd());
   const root = await fs.realpath(git(cwd, ["rev-parse", "--show-toplevel"]).trim());
   const config = loadConfig(root);
-  const failOn = options.failOn ?? config.failOn ?? ["test-skip", "trivial-assert"];
+  const failOn = options.failOn ?? config.failOn ?? ["test-skip", "trivial-assert", "test-focus"];
   for (const rule of failOn) if (!VALID_DETECTORS.includes(rule as DetectorType)) throw new ConfigError(`Unknown rule '${rule}'.`);
   const format = options.format || "terminal";
   if (!["terminal", "json", "github", "markdown", "sarif"].includes(format)) throw new ConfigError("Unsupported check output format.");

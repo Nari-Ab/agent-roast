@@ -1,12 +1,12 @@
 import path from "path";
 import { auditFileDiffs, isCodeFile } from "./metrics.js";
 import { findingFingerprint } from "./baseline.js";
-import { ConfigError, CONFIG_FILENAMES } from "./config.js";
-import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs } from "./snapshot.js";
+import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
+import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot } from "./snapshot.js";
 import { formatReviewMarkdown, formatReviewTerminal, formatGithubAnnotations } from "./renderer.js";
 import { formatSarif } from "./sarif.js";
 import { VALID_DETECTORS } from "./types.js";
-import type { DetectorType, Infraction, ReviewOptions, ReviewResult } from "./types.js";
+import type { DetectorType, Infraction, ReviewOptions, StagedReviewOptions, ReviewResult } from "./types.js";
 
 const GENERATED_PATHS = ["**/node_modules/**", "**/dist/**", "**/build/**", "**/vendor/**", "**/*.min.js", "**/*.map"];
 const MAX_SCAN_BYTES = 50 * 1024 * 1024;
@@ -34,20 +34,31 @@ export function compareFindings(before: Infraction[], after: Infraction[], newPa
 }
 
 /** Compare full source blobs in changed files without executing or checking out the candidate. */
-export async function reviewChanges(options: ReviewOptions): Promise<ReviewResult> {
+export function reviewChanges(options: ReviewOptions): Promise<ReviewResult> {
+  return compareSourceChanges({ ...options, staged: false });
+}
+
+export function reviewStagedChanges(options: StagedReviewOptions = {}): Promise<ReviewResult> {
+  return compareSourceChanges({ ...options, staged: true });
+}
+
+async function compareSourceChanges(options: (ReviewOptions & { staged: false }) | (StagedReviewOptions & { staged: true })): Promise<ReviewResult> {
   assertNotAborted(options.signal);
   const cwd = path.resolve(options.cwd || process.cwd());
-  const refs = await reviewRefs(cwd, options.base, options.head ?? "HEAD", options.signal);
-  const policy = await reviewPolicy(cwd, refs.baseSha, options.signal);
+  const staged = options.staged ? await stagedSnapshot(cwd, options.signal) : undefined;
+  const refs = options.staged ? { baseSha: staged!.baseSha, headSha: staged!.headSha, mergeBaseSha: staged!.mergeBaseSha }
+    : await reviewRefs(cwd, options.base, options.head ?? "HEAD", options.signal);
+  const policy = refs.baseSha === "EMPTY" ? { config: configFromText("{}", "default first-commit policy"), filename: null }
+    : await reviewPolicy(cwd, refs.baseSha, options.signal);
   const format = options.format ?? "terminal";
   if (!["terminal", "json", "github", "markdown", "sarif"].includes(format)) throw new ConfigError("Unsupported review format.");
-  const failOn = options.failOn ?? policy.config.failOn ?? ["test-skip", "trivial-assert"];
+  const failOn = options.failOn ?? policy.config.failOn ?? ["test-skip", "trivial-assert", "test-focus"];
   for (const rule of failOn) if (!VALID_DETECTORS.includes(rule as DetectorType)) throw new ConfigError(`Unknown review rule '${rule}'.`);
-  const changes = await changedTreeFiles(cwd, refs.mergeBaseSha, refs.headSha, options.signal);
+  const changes = staged?.changes ?? await changedTreeFiles(cwd, refs.mergeBaseSha, refs.headSha, options.signal);
   const policyChanges = changes.filter(change => CONFIG_FILENAMES.includes(change.oldPath) || CONFIG_FILENAMES.includes(change.newPath)).map(change => change.newPath);
   const ignores = [...GENERATED_PATHS, ...(policy.config.ignorePaths || [])];
   const result: ReviewResult = {
-    schemaVersion: "1.0.0", mode: "review", ...refs,
+    schemaVersion: "1.1.0", mode: "review", source: staged ? "index" : "commits", ...refs,
     policySha: refs.baseSha, policyFile: policy.filename, policyChanges,
     filesChanged: changes.length, filesInspected: 0, unsupportedFiles: 0, excludedFiles: 0,
     renamedFiles: changes.filter(change => change.status.startsWith("R")).length,
@@ -101,6 +112,7 @@ export async function reviewChanges(options: ReviewOptions): Promise<ReviewResul
     }
   }
   assertNotAborted(options.signal);
+  await staged?.verify();
   result.complete = result.skippedFiles.length === 0;
   result.failedRules = [...new Set(result.infractions.filter(finding => failOn.includes(finding.type)).map(finding => finding.type))];
   result.passed = result.complete && result.failedRules.length === 0;

@@ -38,7 +38,7 @@ npx agent-roast check --baseline .agentroast-baseline.json
 npx agent-roast --staged
 
 # Audit pull request diffs (CI gate)
-npx agent-roast --base origin/main --head HEAD --format github
+npx agent-roast review --base origin/main --head HEAD --format github
 
 # Optional historical audit
 npx agent-roast --all --verbose
@@ -106,7 +106,8 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-Install with `npx agent-roast@0.6.0 review --base origin/main`. For local development,
+The current published version is 0.6.0: `npx agent-roast@0.6.0 review --base origin/main`.
+Changes marked upcoming 0.7.0 are available in this working tree until publication. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Baseline adoption
@@ -175,7 +176,6 @@ Configure custom ignore paths, rule severities, and CI thresholds with a `.agent
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/Nari-Ab/agent-roast/main/schema.json",
   "ignorePaths": [
     "**/*.min.js",
     "**/vendor/**",
@@ -183,11 +183,10 @@ Configure custom ignore paths, rule severities, and CI thresholds with a `.agent
     "**/fixtures/**"
   ],
   "rules": {
-    "hallucinated-package": "error",
-    "empty-catch": "warn",
+    "test-focus": "error",
+    "swallowed-error": "warn",
     "trivial-assert": "warn",
-    "stub-abandonment": "warn",
-    "mock-leak": "warn"
+    "stub-abandonment": "warn"
   },
   "scoreThreshold": 70
 }
@@ -203,9 +202,22 @@ npx agent-roast --staged
 npx agent-roast init --hook
 ```
 
-`--staged` audits exactly the Git index, including an initial commit without HEAD.
-Unstaged edits and untracked files are excluded. The generated hook uses the locally
-installed CLI (`--no-install`) and blocks on configured error rules instead of scoring
+In the upcoming 0.7.0, `--staged` (also `review --staged`) compares the **full source**
+of changed files in HEAD and the Git index. It detects deletion-only empty handlers
+and retains comment context. Existing findings do not block; additional occurrences
+do. Unstaged edits, untracked files and `git add -N` intent-to-add entries are excluded.
+The previous released 0.6.0 `--staged` command checks only added index lines.
+
+Policy comes from HEAD. Staged/unstaged config edits cannot weaken this check and
+are reported; adopt policy changes in a separately reviewed commit. With no HEAD,
+the first commit uses built-in defaults; use `--fail-on` for an explicit override.
+For example: `node dist/cli.js review --staged --fail-on test-skip,test-focus,swallowed-error`.
+Source is pinned by Git blob IDs. If HEAD or the staged inventory changes before the
+scan finishes, it exits 2 and asks for a rerun. The report's `source` is `index`;
+`headSha` is an `INDEX:` snapshot digest, not a commit SHA, and an unborn base is `EMPTY`.
+The JSON schema version for context reviews is now `1.1.0`.
+
+The generated hook uses the locally installed CLI (`--no-install`) and blocks on configured error rules instead of scoring
 old commits. It preserves an existing pre-commit hook.
 
 ### Configure what blocks a change
@@ -216,6 +228,7 @@ Create `.agentroastrc.json` (or run `npx agent-roast init`):
 {
   "rules": {
     "test-skip": "error",
+    "test-focus": "error",
     "trivial-assert": "error",
     "swallowed-error": "warn",
     "type-escape": "off"
@@ -227,7 +240,7 @@ Create `.agentroastrc.json` (or run `npx agent-roast init`):
 ```
 
 `off` removes findings and score penalties; `warn` reports without blocking a diff;
-`error` blocks PR/staged checks. An explicit `failOn` array overrides which enabled
+`error` blocks PR/staged checks, including `test-focus` by default in 0.7.0. An explicit `failOn` array overrides which enabled
 rules block (`[]` makes the audit advisory). CLI `--fail-on` takes precedence over
 that array. History and badge audits honor disabled rules and the panic-loop window.
 History exit status is controlled by `scoreThreshold` or `--fail-under`.
@@ -264,7 +277,6 @@ jobs:
       - name: Run agent-roast audit
         uses: Nari-Ab/agent-roast@v1
         with:
-          fail-on: test-skip,trivial-assert,stub-abandonment
           format: github
 ```
 
@@ -274,8 +286,12 @@ jobs:
 
 ### What it checks
 
-Only **added lines** (`+`) in source code files are scanned — deleted lines, file moves, and comments never trigger false alarms.
+`check` scans current source. `review` scans both full versions of changed source;
+the upcoming 0.7.0 `--staged` command does the same for HEAD and index. Legacy
+`--base` and history audits inspect added lines. Comment/literal masking reduces
+noise; these are heuristic checks and can have false positives and missed findings.
 
+- **Focused tests (`test-focus`, upcoming 0.7.0):** Exclusive `test.only`, `it.only`, `describe.only`, `suite.only`, Playwright `test.describe.only` and common modifier chains in JS/TS-family sources. `fit` / `fdescribe` aliases are recognized in conventional test paths. Supports contiguous multiline chains and ignores literal/comment examples. Default blocking rule; an existing explicit `failOn` list must include it to block. This does not resolve imports or custom aliases; configure your runner's native forbid-only option too when available ([Playwright](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only), [Jest API](https://jestjs.io/docs/api#testonlyname-fn-timeout)).
 - **Skipped tests (`test-skip`):** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests. (Default blocking gate).
 - **Trivial assertions (`trivial-assert`):** Tautological or dummy assertions added to fabricate test green checks (`expect(true).toBe(true)`, `expect(1).toBe(1)`, `assert True`, `self.assertTrue(True)`).
 - **Stub abandonment (`stub-abandonment`):** Dummy stubs left unimplemented in committed code (`throw new Error("Not implemented")`, `raise NotImplementedError`, Rust `todo!()` / `unimplemented!()`).
@@ -310,7 +326,8 @@ stubs, alongside a compiler, test runner and language-aware linter. Findings ide
 patterns, not proof of AI authorship or developer intent. Deliberate skips and abstract
 methods can be legitimate. Contiguous block comments, Python docstrings and multi-line empty handlers are
 recognized. Template interpolation, complex language syntax and context outside
-the added diff are not fully parsed. Panic loops are an observational history heuristic.
+the added diff in legacy audit modes are not fully parsed. Custom test API aliases,
+computed property calls and type/import resolution are not handled. Panic loops are an observational history heuristic.
 The discipline score summarizes added history; it does not certify current code quality.
 `check` reports actionable findings without assigning a personality or quality score.
 
@@ -323,7 +340,11 @@ npm test
 ```
 
 `npm test` builds the distribution first so CLI integration and bundle checks run
-against current code. Regression tests use disposable Git repositories.
+against current code. Regression tests use disposable Git repositories. The programmatic
+`auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
+use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
+The composite Action still installs the published 0.6.0 until the 0.7.0 release;
+new local behavior can be tested with `node dist/cli.js --staged`.
 
 ### Author & Support
 

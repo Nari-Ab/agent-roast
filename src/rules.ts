@@ -9,6 +9,12 @@ export interface RuleGuide {
 
 /** Review guidance, not automatic edits: legitimate exceptions need context. */
 export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
+  "test-focus": {
+    title: "Focused test narrows the test run",
+    why: "An exclusive test or suite can leave other tests unexecuted while the selected tests pass.",
+    suggestion: "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
+    example: 'test.only("auth", ...) → test("auth", ...), then run the full suite',
+  },
   "test-skip": {
     title: "Skipped or disabled test",
     why: "The test runner may report success without executing this behavior check.",

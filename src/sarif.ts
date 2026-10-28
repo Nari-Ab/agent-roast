@@ -58,7 +58,7 @@ export function formatSarif(report: CheckResult | ReviewResult): string {
       }],
       results,
       properties: report.mode === "review" ? {
-        scope: "introduced findings in changed files", baseSha: report.baseSha, headSha: report.headSha,
+        scope: "introduced findings in changed files", source: report.source ?? "commits", baseSha: report.baseSha, headSha: report.headSha,
         mergeBaseSha: report.mergeBaseSha, policySha: report.policySha,
         unchangedFindings: report.unchangedCount, removedFindings: report.removedFindings.length,
       } : { scope: "current source", acceptedBaselineFindings: report.baselineCount },

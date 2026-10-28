@@ -44,6 +44,7 @@ export function formatTerminalCard(
 
   const totalInfractions =
     (summary.testSkips?.length || 0) +
+    (summary.focusedTests?.length || 0) +
     (summary.typeEscapes?.length || 0) +
     (summary.swallowedErrors?.length || 0) +
     (summary.panicLoops?.length || 0) +
@@ -69,6 +70,12 @@ export function formatTerminalCard(
     if (sample.file) {
       lines.push(`      ${pc.dim(`${sample.file}: ${sample.lineSnippet || ""}`)}`);
     }
+  }
+
+  if (summary.focusedTests?.length) {
+    lines.push(`  ${pc.red("●")} ${pc.bold("test-focus")} (${summary.focusedTests.length})  ${pc.dim("exclusive tests narrow the test run")}`);
+    const sample = summary.focusedTests[0];
+    if (sample.file) lines.push(`      ${pc.dim(`${terminalText(sample.file)}: ${terminalText(sample.lineSnippet || "")}`)}`);
   }
 
   if (summary.testSkips && summary.testSkips.length > 0) {
@@ -133,6 +140,7 @@ export function formatTerminalCard(
 
     const allInfractions = [
       ...(summary.testSkips || []),
+      ...(summary.focusedTests || []),
       ...(summary.trivialAsserts || []),
       ...(summary.swallowedErrors || []),
       ...(summary.stubAbandonments || []),
@@ -433,8 +441,8 @@ export function formatCheckMarkdown(result: import("./types.js").CheckResult): s
 
 export function formatReviewTerminal(result: import("./types.js").ReviewResult): string {
   const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
-  const lines = ["", pc.bold(`agent-roast — context review: ${status}`),
-    `  ${result.mergeBaseSha.slice(0, 7)} → ${result.headSha.slice(0, 7)} · policy from base ${result.policySha.slice(0, 7)}`,
+  const lines = ["", pc.bold(`agent-roast — ${result.source === "index" ? "staged context review" : "context review"}: ${status}`),
+    `  ${result.mergeBaseSha.slice(0, 7)} → ${result.headSha.slice(0, result.source === "index" ? 18 : 7)} · policy: ${result.policySha === "EMPTY" ? "built-in first-commit defaults" : "base " + result.policySha.slice(0, 7)}`,
     `  ${result.filesInspected} changed files compared · ${result.linesInspected} source lines inspected across both versions`,
     `  ${result.infractions.length} new · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected`];
   if (result.policyChanges.length) lines.push("  Candidate policy changes were ignored; adopt them separately after review.");
@@ -452,8 +460,8 @@ export function formatReviewTerminal(result: import("./types.js").ReviewResult):
 
 export function formatReviewMarkdown(result: import("./types.js").ReviewResult): string {
   const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
-  const lines = [`## agent-roast context review: ${status}`, "",
-    `Compared ${result.filesInspected} changed files at \`${result.mergeBaseSha.slice(0, 7)}\` → \`${result.headSha.slice(0, 7)}\`. Policy: \`${result.policySha.slice(0, 7)}\`.`, "",
+  const lines = [`## agent-roast ${result.source === "index" ? "staged context review" : "context review"}: ${status}`, "",
+    `Compared ${result.filesInspected} changed files at \`${result.mergeBaseSha.slice(0, 7)}\` → \`${result.headSha.slice(0, result.source === "index" ? 18 : 7)}\`. Policy: \`${result.policySha === "EMPTY" ? "built-in first-commit defaults" : result.policySha.slice(0, 7)}\`.`, "",
     `**${result.infractions.length} new** · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected.`, ""];
   if (result.policyChanges.length) lines.push("Candidate policy changes were ignored. This review uses the supplied base commit's policy.", "");
   lines.push("| New finding | Head location | Evidence | Next step |", "| --- | --- | --- | --- |");

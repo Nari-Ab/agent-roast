@@ -11,6 +11,10 @@ const TEST_SKIP_PATTERNS = [
   { regex: /\btest\.todo\(/, name: "todo placeholder test" },
 ];
 
+// Deliberately limited to familiar JS test APIs. This is a syntax heuristic,
+// not import/name resolution. The NUL separator prevents joining diff hunk gaps.
+const FOCUSED_TEST = /(?<![\w$.])(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe))*\s*\.\s*only\b(?=\s*(?:\(|\.\s*(?:each|failing|concurrent|serial|parallel)\b))|(?<![\w$.])(?:fit|fdescribe)\b(?=\s*(?:\(|\.\s*each\b))/g;
+
 const COMMENT_DIRECTIVE_PATTERNS = [
   { regex: /^\s*\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
   { regex: /^\s*\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
@@ -51,7 +55,7 @@ const STUB_ABANDONMENT_PATTERNS = [
 import { matchIgnorePath } from "./config.js";
 
 const CODE_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
   ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c"
 ]);
 
@@ -218,6 +222,31 @@ export function auditFileDiffs(
       }
     }
 
+    if (/\.(?:[cm]?[jt]sx?|vue|svelte)$/i.test(file.path)) {
+      let source = "";
+      const offsets: number[] = [];
+      for (let i = 0; i < maskedLines.length; i++) {
+        if (i) source += maskedLines[i].number === maskedLines[i - 1].number + 1 ? "\n" : "\0";
+        offsets.push(source.length);
+        source += maskedLines[i].code;
+      }
+      let row = 0;
+      for (const match of source.matchAll(FOCUSED_TEST)) {
+        let previous = match.index - 1;
+        while (previous >= 0 && /\s/.test(source[previous])) previous--;
+        if (source[previous] === ".") continue; // e.g. client.test.only
+        if (/^(?:fit|fdescribe)$/.test(match[0]) && !isTestFile(file.path)) continue;
+        if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;
+        while (row + 1 < offsets.length && offsets[row + 1] <= match.index) row++;
+        let end = row;
+        while (end + 1 < offsets.length && offsets[end + 1] < match.index + match[0].length) end++;
+        infractions.push({ type: "test-focus", file: file.path, lineNumber: maskedLines[row].number,
+          lineSnippet: maskedLines.slice(row, end + 1).map(line => line.raw.trim()).join(" "),
+          commitHash, commitDate, reason: "focused test or suite excludes other tests from the run",
+        });
+      }
+    }
+
     // Empty handlers frequently span several lines. Only contiguous added code
     // can prove emptiness; hunk gaps must not be joined into a fabricated block.
     for (let index = 0; index < maskedLines.length; index++) {
@@ -269,6 +298,7 @@ export class MetricsCollector {
   private aiCommits = 0;
 
   private testSkips: Infraction[] = [];
+  private focusedTests: Infraction[] = [];
   private typeEscapes: Infraction[] = [];
   private swallowedErrors: Infraction[] = [];
   private panicLoops: Infraction[] = [];
@@ -410,6 +440,7 @@ export class MetricsCollector {
     });
     const buckets = {
       "test-skip": this.testSkips,
+      "test-focus": this.focusedTests,
       "type-escape": this.typeEscapes,
       "swallowed-error": this.swallowedErrors,
       "trivial-assert": this.trivialAsserts,
@@ -433,6 +464,7 @@ export class MetricsCollector {
     // Code infractions penalty
     const codeInfractionPoints =
       this.testSkips.length * 15 +
+      this.focusedTests.length * 15 +
       this.trivialAsserts.length * 15 +
       this.swallowedErrors.length * 10 +
       this.stubAbandonments.length * 8 +
@@ -523,6 +555,7 @@ export class MetricsCollector {
       totalCommits: this.totalCommits,
       aiCommits: this.aiCommits,
       testSkips: this.testSkips,
+      focusedTests: this.focusedTests,
       typeEscapes: this.typeEscapes,
       swallowedErrors: this.swallowedErrors,
       panicLoops: this.panicLoops,

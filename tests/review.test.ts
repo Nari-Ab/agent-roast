@@ -39,6 +39,14 @@ describe("context review of committed code", () => {
     expect((await auditPullRequest({ cwd: dir, base })).infractions).toHaveLength(1);
     expect((await reviewChanges({ cwd: dir, base })).infractions).toEqual([]);
   });
+  it("blocks only newly focused tests in committed review and supports explicit advisory", async () => {
+    write("auth.test.ts", "test.only('old', () => {});\n"); base = commit();
+    write("auth.test.ts", "test.only('old', () => {});\nit.only('new', () => {});\n"); commit();
+    const result = await reviewChanges({ cwd: dir, base });
+    expect(result.exitCode).toBe(1); expect(result.unchangedCount).toBe(1);
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "test-focus", lineNumber: 2 })]);
+    expect((await reviewChanges({ cwd: dir, base, failOn: [] })).exitCode).toBe(0);
+  });
   it("keeps existing findings after line shifts and flags only an additional duplicate", async () => {
     write("auth.test.ts", "it.skip('auth');\n"); base = commit();
     write("auth.test.ts", "// clean shift\nit.skip('auth');\nit.skip('auth');\n"); commit();

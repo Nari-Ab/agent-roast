@@ -14,7 +14,8 @@ export type DetectorType =
   | "swallowed-error"
   | "panic-loop"
   | "trivial-assert"
-  | "stub-abandonment";
+  | "stub-abandonment"
+  | "test-focus";
 
 export const VALID_DETECTORS: readonly DetectorType[] = [
   "test-skip",
@@ -23,6 +24,7 @@ export const VALID_DETECTORS: readonly DetectorType[] = [
   "panic-loop",
   "trivial-assert",
   "stub-abandonment",
+  "test-focus",
 ] as const;
 
 export interface Infraction {
@@ -43,6 +45,7 @@ export interface MetricSummary {
   totalCommits: number;
   aiCommits: number;
   testSkips: Infraction[];
+  focusedTests?: Infraction[];
   typeEscapes: Infraction[];
   swallowedErrors: Infraction[];
   panicLoops: Infraction[];
@@ -140,9 +143,12 @@ export interface ReviewOptions {
   signal?: AbortSignal;
 }
 
+export type StagedReviewOptions = Omit<ReviewOptions, "base" | "head">;
+
 export interface ReviewResult {
   schemaVersion: string;
   mode: "review";
+  source?: "commits" | "index";
   baseSha: string;
   headSha: string;
   mergeBaseSha: string;

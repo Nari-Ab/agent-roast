@@ -1,0 +1,63 @@
+{
+  "scope": "9 curated synthetic staged changes; not independent accuracy evaluation or user adoption",
+  "previousVersion": "0.6.0",
+  "currentVersion": "0.7.0-unreleased",
+  "previousMatched": 4,
+  "currentMatched": 9,
+  "results": [
+    {
+      "name": "deletion-only empty handler",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "new exclusive test",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "focused test alias",
+      "expectedExit": 1,
+      "previousExit": 0,
+      "currentExit": 1
+    },
+    {
+      "name": "example in pre-existing block comment",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "example in pre-existing docstring",
+      "expectedExit": 0,
+      "previousExit": 1,
+      "currentExit": 0
+    },
+    {
+      "name": "old debt plus a clean line",
+      "expectedExit": 0,
+      "previousExit": 0,
+      "currentExit": 0
+    },
+    {
+      "name": "partial staging cannot use an unstaged repair",
+      "expectedExit": 1,
+      "previousExit": 1,
+      "currentExit": 1
+    },
+    {
+      "name": "additional identical shortcut",
+      "expectedExit": 1,
+      "previousExit": 1,
+      "currentExit": 1
+    },
+    {
+      "name": "ordinary behavior assertion",
+      "expectedExit": 0,
+      "previousExit": 0,
+      "currentExit": 0
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { spawn } from "child_process";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
 import { getHermeticGitEnv, HERMETIC_GIT_FLAGS, GitError } from "./git.js";
@@ -55,16 +56,7 @@ export async function readGit(cwd: string, args: string[], signal?: AbortSignal,
   });
 }
 
-export async function reviewRefs(cwd: string, base: string, head: string, signal?: AbortSignal): Promise<{ baseSha: string; headSha: string; mergeBaseSha: string }> {
-  const resolve = async (ref: string) => {
-    if (!ref.trim()) throw new ConfigError("Review refs must not be empty.");
-    try {
-      return (await readGit(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], signal, 1024)).toString().trim();
-    } catch (error) {
-      assertNotAborted(signal);
-      throw new ConfigError(`Cannot resolve review ref '${ref}'. Use valid commits and fetch complete history (actions/checkout fetch-depth: 0). ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
+async function requireLocalObjects(cwd: string, signal?: AbortSignal): Promise<void> {
   // Old Git versions may not honor GIT_NO_LAZY_FETCH. Refuse promisor repos
   // rather than risk a network request from a supposedly offline review.
   try {
@@ -75,6 +67,19 @@ export async function reviewRefs(cwd: string, base: string, head: string, signal
   } catch (error) {
     if (!(error instanceof GitError && error.code === 1)) throw error;
   }
+}
+
+export async function reviewRefs(cwd: string, base: string, head: string, signal?: AbortSignal): Promise<{ baseSha: string; headSha: string; mergeBaseSha: string }> {
+  const resolve = async (ref: string) => {
+    if (!ref.trim()) throw new ConfigError("Review refs must not be empty.");
+    try {
+      return (await readGit(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], signal, 1024)).toString().trim();
+    } catch (error) {
+      assertNotAborted(signal);
+      throw new ConfigError(`Cannot resolve review ref '${ref}'. Use valid commits and fetch complete history (actions/checkout fetch-depth: 0). ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+  await requireLocalObjects(cwd, signal);
   const baseSha = await resolve(base);
   const headSha = await resolve(head);
   let ancestors: string[];
@@ -90,6 +95,10 @@ export async function reviewRefs(cwd: string, base: string, head: string, signal
 
 export async function changedTreeFiles(cwd: string, before: string, after: string, signal?: AbortSignal): Promise<TreeChange[]> {
   const buffer = await readGit(cwd, ["diff", "--raw", "-z", "--no-relative", "--no-abbrev", "--no-ext-diff", "--no-textconv", "--find-renames=50%", "-l1000", "--end-of-options", before, after, "--"], signal);
+  return parseTreeChanges(buffer);
+}
+
+function parseTreeChanges(buffer: Buffer): TreeChange[] {
   const tokens = new TextDecoder("utf-8", { fatal: true }).decode(buffer).split("\0");
   if (tokens.pop() !== "") throw new ConfigError("Truncated Git change inventory.");
   const changes: TreeChange[] = [];
@@ -128,4 +137,43 @@ export async function reviewPolicy(cwd: string, baseSha: string, signal?: AbortS
     return { config: configFromText(new TextDecoder("utf-8", { fatal: true }).decode(content), `${filename} in base ${baseSha.slice(0, 7)}`), filename };
   }
   return { config: configFromText("{}", "default review policy"), filename: null };
+}
+
+/** Pin cached diff blob IDs. Git loads one index snapshot per invocation; no
+ * checkout, write-tree, index refresh, filter or project hook is needed. */
+export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise<{
+  baseSha: string; headSha: string; mergeBaseSha: string; changes: TreeChange[];
+  verify: () => Promise<void>;
+}> {
+  await requireLocalObjects(cwd, signal);
+  const head = async (): Promise<string> => {
+    try {
+      return (await readGit(cwd, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], signal, 1024)).toString().trim();
+    } catch (error) {
+      if (!(error instanceof GitError && error.code === 1)) throw error;
+      // Only a genuine unborn branch can use an empty baseline.
+      const ref = (await readGit(cwd, ["symbolic-ref", "--quiet", "HEAD"], signal, 1024)).toString().trim();
+      try { await readGit(cwd, ["show-ref", "--verify", "--quiet", ref], signal, 1024); }
+      catch (missing) { if (missing instanceof GitError && missing.code === 1) return "EMPTY"; throw missing; }
+      throw new ConfigError("HEAD exists but cannot be resolved to a commit.");
+    }
+  };
+  const baseSha = await head();
+  const inventory = () => readGit(cwd, ["diff", "--cached", "--raw", "-z", "--no-relative", "--no-abbrev", "--no-ext-diff", "--no-textconv",
+    "--ignore-submodules=none", "--ita-invisible-in-index", "--find-renames=50%", "-l1000", "--end-of-options",
+    ...(baseSha === "EMPTY" ? [] : [baseSha]), "--"], signal);
+  // Detect conflicts explicitly, including paths that are not supported source.
+  const conflicts = await readGit(cwd, ["ls-files", "--unmerged", "-z", "--full-name"], signal);
+  if (conflicts.length) throw new ConfigError("Resolve unmerged index entries before reviewing staged changes.");
+  const pinned = await inventory();
+  const changes = parseTreeChanges(pinned);
+  const headSha = "INDEX:" + createHash("sha256").update(baseSha).update(pinned).digest("hex");
+  return { baseSha, headSha, mergeBaseSha: baseSha, changes,
+    verify: async () => {
+      assertNotAborted(signal);
+      if (await head() !== baseSha || !(await inventory()).equals(pinned)) {
+        throw new ConfigError("HEAD or staged changes changed during review; rerun before committing. No complete result was produced.");
+      }
+    },
+  };
 }

@@ -21,7 +21,7 @@ describe("portable SARIF reporting", () => {
     const result = await checkProject({ cwd: dir, format: "sarif" });
     const sarif = JSON.parse(result.output); const run = sarif.runs[0];
     expect(sarif.version).toBe("2.1.0"); expect(run.tool.driver.name).toBe("agent-roast");
-    expect(run.tool.driver.rules.length).toBe(6);
+    expect(run.tool.driver.rules.length).toBe(7);
     expect(run.results[0]).toMatchObject({ ruleId: "test-skip", level: "error", ruleIndex: 0 });
     expect(run.results[0].locations[0].physicalLocation).toMatchObject({ artifactLocation: { uri: "auth%20%231.test.ts" }, region: { startLine: 1 } });
     expect(run.results[0].message.text).toContain("Re-enable");

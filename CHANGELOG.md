@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.0 — Unreleased
+
+- Upgraded CLI `--staged` and added `review --staged`: compare complete HEAD/index
+  blobs and gate only introduced findings. Detect deletion-only error swallowing,
+  preserve comment context and tolerate old debt, line shifts and pure renames.
+- Pin cached diff object IDs without writing index/worktree. Reject unmerged entries,
+  concurrent HEAD/index changes, partial clones, invalid source and incomplete scans.
+  Ignore unstaged/untracked/intent-to-add content. Support initial commits and linked worktrees.
+- Staged policy comes from HEAD, with built-in defaults on initial commits. Candidate
+  policy edits cannot weaken the gate. Explicit `--fail-on` remains available.
+- Added `test-focus` for exclusive JS/TS test APIs and common multiline modifier chains,
+  including actionable guidance, severity policy, baselines, history and SARIF.
+  Added `.mts` and `.cts` to supported source extensions.
+- CLI staged JSON now uses `ReviewResult`, `mode: review`, `source: index`, schema
+  `1.1.0`. `headSha` is an `INDEX:` digest, not a commit; `EMPTY` is the unborn base.
+  The programmatic `auditPullRequest({staged:true})` API retains legacy behavior;
+  use the exported `reviewStagedChanges()` API for context comparisons.
+- Fixed rejected config examples and removed a nonexistent schema URL from README.
+  Clarified heuristic limitations and the distinction between current source,
+  context reviews, and legacy added-lines audits. No new runtime dependencies.
+
 ## 0.6.0 — 2026-10-24
 
 - Added `review --base <trusted-ref>`: compare full source at merge-base/head and

@@ -149,8 +149,16 @@ describe("current-tree check", () => {
     const result = await checkProject({ cwd: dir });
     expect(result.filesInspected).toBe(0); expect(result.output).toContain("No supported source files inspected");
   });
+  it("accepts focused-test debt explicitly and still gates an additional occurrence", () => {
+    write("auth.test.ts", "test.only('auth', () => {});\n");
+    expect(run("--write-baseline", "baseline.json").status).toBe(0);
+    expect(run("--baseline", "baseline.json").status).toBe(0);
+    write("auth.test.ts", "test.only('auth', () => {});\ntest.only('auth', () => {});\n");
+    const result = run("--baseline", "baseline.json", "--json");
+    expect(result.status).toBe(1); expect(JSON.parse(result.stdout).infractions[0].type).toBe("test-focus");
+  });
   it("explains all supported rules locally and rejects a typo", () => {
-    for (const rule of ["test-skip", "type-escape", "swallowed-error", "trivial-assert", "stub-abandonment", "panic-loop"]) {
+    for (const rule of ["test-skip", "type-escape", "swallowed-error", "trivial-assert", "stub-abandonment", "panic-loop", "test-focus"]) {
       const result = spawnSync(process.execPath, [cli, "explain", rule], { encoding: "utf8", env });
       expect(result.status).toBe(0); expect(result.stdout).toContain("Next:");
     }

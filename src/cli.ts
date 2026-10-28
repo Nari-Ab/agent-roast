@@ -6,6 +6,7 @@ import {
   roastRepository,
   checkProject,
   reviewChanges,
+  reviewStagedChanges,
   formatReviewMarkdown,
   writeBaseline,
   RULE_GUIDES,
@@ -26,6 +27,29 @@ import {
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 
+/** Shared CLI execution for committed and staged source comparison. */
+async function runContextReview(repoPath: string, options: any, staged: boolean): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  process.once("SIGINT", abort);
+  process.once("SIGTERM", abort);
+  try {
+    const common = { cwd: repoPath,
+      failOn: options.failOn !== undefined ? options.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+      format: options.json ? "json" : options.format, signal: controller.signal,
+    };
+    const result = staged ? await reviewStagedChanges(common) : await reviewChanges({ ...common, base: options.base, head: options.head });
+    if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatReviewMarkdown(result) + "\n");
+    if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,
+      `passed=${result.passed}\ninfractions-count=${result.infractions.length}\nhas-supported-changes=${result.filesInspected > 0}\ncomplete=${result.complete}\nexisting-count=${result.unchangedCount}\nremoved-count=${result.removedFindings.length}\n`);
+    console.log(result.output);
+    process.exitCode = result.exitCode;
+  } finally {
+    process.removeListener("SIGINT", abort);
+    process.removeListener("SIGTERM", abort);
+  }
+}
+
 const program = new Command();
 
 program
@@ -37,7 +61,7 @@ program
   .option("-s, --since <time>", "Time window for git analysis", "90 days ago")
   .option("-v, --verbose", "Show commit SHAs and line snippets for all infractions", false)
   .option("--json", "Output results as raw JSON", false)
-  .option("--staged", "Audit staged changes before committing (including the first commit)", false)
+  .option("--staged", "Compare full HEAD/index source and gate new staged findings (including the first commit)", false)
   .option("--base <ref>", "Base git ref/branch for PR mode audit (e.g. origin/main)")
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
@@ -53,6 +77,13 @@ program
       }
 
       if (options.staged && options.base) throw new ConfigError("--staged cannot be combined with --base.");
+      if (options.staged) {
+        if (options.all || options.failUnder !== undefined || program.getOptionValueSource("since") === "cli" || program.getOptionValueSource("head") === "cli") {
+          throw new ConfigError("--staged compares HEAD and index; --all, --since, --head and --fail-under do not apply.");
+        }
+        await runContextReview(repoPath, options, true);
+        return;
+      }
       if (!["terminal", "json", "github", "markdown"].includes(options.format)) {
         throw new ConfigError("--format must be terminal, json, github, or markdown.");
       }
@@ -171,32 +202,17 @@ program
   .command("review")
   .description("Compare full changed source at merge-base and head; gate only new findings")
   .argument("[path]", "Path to the Git repository", ".")
-  .addHelpText("after", "\nRequired: --base <trusted-ref>  Optional: --head <ref> (default HEAD)\nOutput: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExample: agent-roast review --base origin/main --format markdown")
+  .addHelpText("after", "\nRequired: --base <trusted-ref>  Optional: --head <ref> (default HEAD), or use --staged for HEAD/index\nOutput: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExample: agent-roast review --base origin/main --format markdown")
   .action(async (repoPath: string) => {
     try {
       const options = program.opts();
-      if (!options.base) throw new ConfigError("review requires --base <trusted-ref>.");
-      if (options.staged || options.all || options.failUnder !== undefined || program.getOptionValueSource("since") === "cli") {
-        throw new ConfigError("review compares committed refs; --staged, --all, --since and --fail-under do not apply.");
+      if (options.staged ? options.base || program.getOptionValueSource("head") === "cli" : !options.base) {
+        throw new ConfigError("Use review --base <trusted-ref> or review --staged; --base/--head cannot be combined with --staged.");
       }
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      process.once("SIGINT", abort);
-      process.once("SIGTERM", abort);
-      try {
-        const result = await reviewChanges({ cwd: repoPath, base: options.base, head: options.head,
-          failOn: options.failOn !== undefined ? options.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
-          format: options.json ? "json" : options.format, signal: controller.signal,
-        });
-        if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, formatReviewMarkdown(result) + "\n");
-        if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT,
-          `passed=${result.passed}\ninfractions-count=${result.infractions.length}\nhas-supported-changes=${result.filesInspected > 0}\ncomplete=${result.complete}\nexisting-count=${result.unchangedCount}\nremoved-count=${result.removedFindings.length}\n`);
-        console.log(result.output);
-        process.exitCode = result.exitCode;
-      } finally {
-        process.removeListener("SIGINT", abort);
-        process.removeListener("SIGTERM", abort);
+      if (options.all || options.failUnder !== undefined || program.getOptionValueSource("since") === "cli") {
+        throw new ConfigError("review compares source snapshots; --all, --since and --fail-under do not apply.");
       }
+      await runContextReview(repoPath, options, options.staged);
     } catch (error) {
       console.error(`agent-roast review error: ${error instanceof Error ? error.message : String(error)}`);
       process.exitCode = 2;
