@@ -45,7 +45,7 @@ describe("composite action context-review integration", () => {
   it("installs away from candidate npm config, runs review, and cleans the install directory", () => {
     expect(run().status).toBe(0);
     expect(args()).toEqual(["review", repo, "--base", "abc123", "--head", "def456", "--format", "github"]);
-    expect(fs.readFileSync(path.join(dir, "install-args"), "utf8")).toContain("agent-roast@0.6.0");
+    expect(fs.readFileSync(path.join(dir, "install-args"), "utf8")).toContain("agent-roast@0.7.0");
     expect(fs.readFileSync(path.join(dir, "install-cwd"), "utf8").trim()).not.toBe(repo);
     expect(fs.readdirSync(path.join(dir, "runner"))).toEqual([]);
     expect(fs.existsSync(path.join(repo, ".npmrc"))).toBe(true);

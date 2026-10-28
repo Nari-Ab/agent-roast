@@ -1,0 +1,123 @@
+
+> agent-roast@0.7.0 pretest
+> npm run build
+
+
+> agent-roast@0.7.0 build
+> tsup
+
+CLI Building entry: src/cli.ts, src/index.ts
+CLI Using tsconfig: tsconfig.json
+CLI tsup v8.5.1
+CLI Using tsup config: /private/tmp/agent-roast-070-release/tsup.config.ts
+CLI Target: es2022
+CLI Cleaning output folder
+ESM Build start
+ESM dist/index.js          2.34 KB
+ESM dist/cli.js            14.20 KB
+ESM dist/chunk-YGHNTWHX.js 107.68 KB
+ESM ⚡️ Build success in 14ms
+DTS Build start
+DTS ⚡️ Build success in 814ms
+DTS dist/cli.d.ts   13.00 B
+DTS dist/index.d.ts 15.63 KB
+
+> agent-roast@0.7.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /private/tmp/agent-roast-070-release
+
+ ✓ tests/git.test.ts (14 tests) 18ms
+ ✓ tests/metrics.test.ts (14 tests) 11ms
+ ✓ tests/baseline.test.ts (12 tests) 157ms
+ ✓ tests/renderer.test.ts (4 tests) 16ms
+ ✓ tests/focus.test.ts (32 tests) 40ms
+ ✓ tests/config.test.ts (5 tests) 15ms
+ ✓ tests/telemetry.test.ts (2 tests) 39ms
+ ✓ tests/init.test.ts (5 tests) 11ms
+ ✓ tests/source.test.ts (10 tests) 17ms
+ ✓ tests/badge.test.ts (5 tests) 4ms
+ ✓ tests/detector.test.ts (5 tests) 7ms
+ ✓ tests/docs.test.ts (3 tests) 3ms
+ ✓ tests/sarif.test.ts (7 tests) 1638ms
+   ✓ portable SARIF reporting > emits only introduced review findings and records committed comparison scope  544ms
+ ✓ tests/integration.test.ts (5 tests) 1931ms
+   ✓ Real Git Integration with Hostile Environment > handles hostile git environment with Cyrillic quotes, no-newline, renames, and PR audit  1056ms
+   ✓ Real Git Integration with Hostile Environment > detects trivial-assert and stub-abandonment in PR diff while respecting ignorePaths  338ms
+   ✓ Real Git Integration with Hostile Environment > executes 'agent-roast badge' with --json and --out flags via CLI  324ms
+ ✓ tests/action.test.ts (6 tests) 1793ms
+   ✓ composite action context-review integration > installs away from candidate npm config, runs review, and cleans the install directory  818ms
+   ✓ composite action context-review integration > keeps an explicit legacy audit mode and passes fail-on as one argument  455ms
+   ✓ composite action context-review integration > does not interpolate branch text as shell commands  499ms
+ ✓ tests/snapshot.test.ts (9 tests) 2903ms
+   ✓ immutable, bounded Git source reads > rejects missing and unrelated refs rather than comparing arbitrary trees  467ms
+   ✓ immutable, bounded Git source reads > refuses ambiguous criss-cross merge ancestry  372ms
+   ✓ immutable, bounded Git source reads > does not silently truncate an over-limit changed-file inventory  525ms
+ ✓ tests/check.test.ts (30 tests) 5034ms
+   ✓ current-tree check > creates an explicit, reviewable baseline via CLI and preserves it on retry  364ms
+   ✓ current-tree check > exports machine-readable and markdown reports with policy severity  338ms
+   ✓ current-tree check > explains all supported rules locally and rejects a typo  400ms
+ ✓ tests/evaluation.test.ts (14 tests) 5921ms
+   ✓ labeled before/after regression corpus > delete only catch handler  654ms
+   ✓ labeled before/after regression corpus > add empty catch  630ms
+   ✓ labeled before/after regression corpus > add skipped test  559ms
+   ✓ labeled before/after regression corpus > add duplicate skip  470ms
+   ✓ labeled before/after regression corpus > add fake assertion  413ms
+   ✓ labeled before/after regression corpus > add type escape  389ms
+   ✓ labeled before/after regression corpus > add unfinished stub  357ms
+   ✓ labeled before/after regression corpus > example inside existing comment  369ms
+   ✓ labeled before/after regression corpus > example inside existing docstring  358ms
+   ✓ labeled before/after regression corpus > indent existing shortcut  352ms
+   ✓ labeled before/after regression corpus > real error handling  343ms
+   ✓ labeled before/after regression corpus > fix skipped test  337ms
+   ✓ labeled before/after regression corpus > fix type bypass  341ms
+   ✓ labeled before/after regression corpus > normal behavior assertion  344ms
+ ✓ tests/regressions.test.ts (33 tests) 6511ms
+   ✓ configuration as an executable policy > rejects invalid policy null  449ms
+   ✓ configuration as an executable policy > rejects invalid policy %j  413ms
+   ✓ configuration as an executable policy > rejects invalid policy {"rules":[]}  419ms
+   ✓ configuration as an executable policy > rejects invalid policy {"rules":{"typo":"off"}}  424ms
+   ✓ configuration as an executable policy > rejects invalid policy {"rules":{"test-skip":"oops"}}  333ms
+   ✓ configuration as an executable policy > rejects invalid policy {"failOn":[42]}  313ms
+   ✓ configuration as an executable policy > honors explicit failOn, including an empty array  524ms
+   ✓ configuration as an executable policy > honors warn/off levels without accidentally adding the default blocker  322ms
+   ✓ staged checks protect the next commit > checks PRs using config and supports JSON history output  305ms
+ ✓ tests/staged-review.test.ts (26 tests) 8516ms
+   ✓ full-source review of the next commit > detects a deletion-only regression from index even if worktree is repaired  565ms
+   ✓ full-source review of the next commit > knows existing comment context and does not flag staged examples  513ms
+   ✓ full-source review of the next commit > gates only additional findings and counts disappearing patterns  481ms
+   ✓ full-source review of the next commit > does not block unchanged historical debt when clean code is staged  414ms
+   ✓ full-source review of the next commit > supports initial commits using defaults, and never reads unstaged config  796ms
+   ✓ full-source review of the next commit > uses committed policy even if index and worktree try to disable it  526ms
+   ✓ full-source review of the next commit > honors committed advisory/off policy and explicit fail-on overrides  508ms
+   ✓ full-source review of the next commit > preserves pure renames and reports deletion as disappearance  412ms
+   ✓ full-source review of the next commit > handles linked worktrees and subdirectory invocation  321ms
+   ✓ full-source review of the next commit > refuses unmerged entries, including unsupported non-source conflicts  404ms
+   ✓ full-source review of the next commit > aborts the full review if a concurrent writer stages a different candidate  302ms
+   ✓ full-source review of the next commit > does not execute repository diff helpers or trust replacement objects  300ms
+   ✓ full-source review of the next commit > rejects over-limit inventories instead of silently truncating the commit  327ms
+   ✓ full-source review of the next commit > exports staged JSON, SARIF and markdown through both CLI spellings  663ms
+ ✓ tests/review.test.ts (34 tests) 10575ms
+   ✓ context review of committed code > detects deletion-only empty catches missed by added-line scanning  756ms
+   ✓ context review of committed code > does not flag examples added inside an existing block comment  723ms
+   ✓ context review of committed code > blocks only newly focused tests in committed review and supports explicit advisory  723ms
+   ✓ context review of committed code > keeps existing findings after line shifts and flags only an additional duplicate  428ms
+   ✓ context review of committed code > reports patterns that disappear without equating deletion to a verified fix  394ms
+   ✓ context review of committed code > understands pure renames without claiming a fix or introducing debt  383ms
+   ✓ context review of committed code > does not claim renamed code moved into generated output was fixed  387ms
+   ✓ context review of committed code > reports unsupported extension renames as incomplete  321ms
+   ✓ context review of committed code > uses immutable committed content despite different checkout/index content  303ms
+   ✓ context review of committed code > uses the common ancestor for source and supplied base tip for policy  400ms
+   ✓ context review of committed code > gates a candidate that tries disabling rules or ignoring all paths  350ms
+   ✓ context review of committed code > ignores invalid candidate config but rejects invalid trusted config  424ms
+   ✓ context review of committed code > honors trusted off rules and explicit advisory CLI overrides  474ms
+   ✓ context review of committed code > reports binary, invalid UTF-8 and oversized source as incomplete  317ms
+   ✓ context review of committed code > does not use Git replacement objects to change the inspected candidate  314ms
+   ✓ context review of committed code > handles concurrent independent reviews without persistent shared state  351ms
+
+ Test Files  21 passed (21)
+      Tests  275 passed (275)
+   Start at  09:30:25
+   Duration  10.98s (transform 673ms, setup 0ms, collect 1.86s, tests 45.16s, environment 3ms, prepare 1.48s)
+

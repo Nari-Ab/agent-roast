@@ -106,8 +106,7 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-The current published version is 0.6.0: `npx agent-roast@0.6.0 review --base origin/main`.
-Changes marked upcoming 0.7.0 are available in this working tree until publication. For local development,
+Install 0.7.0: `npx agent-roast@0.7.0 review --base origin/main`. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Baseline adoption
@@ -202,7 +201,7 @@ npx agent-roast --staged
 npx agent-roast init --hook
 ```
 
-In the upcoming 0.7.0, `--staged` (also `review --staged`) compares the **full source**
+Since 0.7.0, `--staged` (also `review --staged`) compares the **full source**
 of changed files in HEAD and the Git index. It detects deletion-only empty handlers
 and retains comment context. Existing findings do not block; additional occurrences
 do. Unstaged edits, untracked files and `git add -N` intent-to-add entries are excluded.
@@ -287,11 +286,11 @@ jobs:
 ### What it checks
 
 `check` scans current source. `review` scans both full versions of changed source;
-the upcoming 0.7.0 `--staged` command does the same for HEAD and index. Legacy
+the 0.7.0 `--staged` command does the same for HEAD and index. Legacy
 `--base` and history audits inspect added lines. Comment/literal masking reduces
 noise; these are heuristic checks and can have false positives and missed findings.
 
-- **Focused tests (`test-focus`, upcoming 0.7.0):** Exclusive `test.only`, `it.only`, `describe.only`, `suite.only`, Playwright `test.describe.only` and common modifier chains in JS/TS-family sources. `fit` / `fdescribe` aliases are recognized in conventional test paths. Supports contiguous multiline chains and ignores literal/comment examples. Default blocking rule; an existing explicit `failOn` list must include it to block. This does not resolve imports or custom aliases; configure your runner's native forbid-only option too when available ([Playwright](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only), [Jest API](https://jestjs.io/docs/api#testonlyname-fn-timeout)).
+- **Focused tests (`test-focus`):** Exclusive `test.only`, `it.only`, `describe.only`, `suite.only`, Playwright `test.describe.only` and common modifier chains in JS/TS-family sources. `fit` / `fdescribe` aliases are recognized in conventional test paths. Supports contiguous multiline chains and ignores literal/comment examples. Default blocking rule; an existing explicit `failOn` list must include it to block. This does not resolve imports or custom aliases; configure your runner's native forbid-only option too when available ([Playwright](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only), [Jest API](https://jestjs.io/docs/api#testonlyname-fn-timeout)).
 - **Skipped tests (`test-skip`):** `it.skip`, `describe.skip`, `xit`, `pytest.skip`, `test.todo` added to silence failing tests. (Default blocking gate).
 - **Trivial assertions (`trivial-assert`):** Tautological or dummy assertions added to fabricate test green checks (`expect(true).toBe(true)`, `expect(1).toBe(1)`, `assert True`, `self.assertTrue(True)`).
 - **Stub abandonment (`stub-abandonment`):** Dummy stubs left unimplemented in committed code (`throw new Error("Not implemented")`, `raise NotImplementedError`, Rust `todo!()` / `unimplemented!()`).
@@ -343,8 +342,8 @@ npm test
 against current code. Regression tests use disposable Git repositories. The programmatic
 `auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
 use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
-The composite Action still installs the published 0.6.0 until the 0.7.0 release;
-new local behavior can be tested with `node dist/cli.js --staged`.
+The composite Action installs exactly 0.7.0. For local development, use
+`node dist/cli.js --staged` after building.
 
 ### Author & Support
 

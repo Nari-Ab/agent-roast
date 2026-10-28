@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 — Unreleased
+## 0.7.0 — 2026-10-28
 
 - Upgraded CLI `--staged` and added `review --staged`: compare complete HEAD/index
   blobs and gate only introduced findings. Detect deletion-only error swallowing,
