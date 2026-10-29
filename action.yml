@@ -92,7 +92,7 @@ runs:
         REPO_DIR="$PWD"
         INSTALL_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/agent-roast.XXXXXX")"
         trap 'rm -rf "$INSTALL_DIR"' EXIT
-        (cd "$INSTALL_DIR" && npm install --prefix "$INSTALL_DIR" agent-roast@0.8.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org) > /dev/null
+        (cd "$INSTALL_DIR" && npm install --prefix "$INSTALL_DIR" agent-roast@0.8.1 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org) > /dev/null
 
         COMMAND_ARGS=()
         if [ "$ROAST_MODE" = "review" ]; then

@@ -26,3 +26,5 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
+      - name: Verify CLI user workflows on the selected runtime
+        run: PATH="$(dirname "$AGENT_ROAST_TEST_NODE"):$PATH" "$AGENT_ROAST_TEST_NODE" scripts/verify-user-workflows.mjs dist/cli.js

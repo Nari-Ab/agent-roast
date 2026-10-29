@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.1 — 2026-10-29
+
+- Fix `init` from repository subdirectories: create effective root policy and CI
+  workflow, preserve existing root files, report the actual destination, and refuse
+  bare repositories before writing ineffective settings.
+- Avoid focused/skipped-test false alarms from JS regexp literals after arrow,
+  throw and control headers; preserve context across contiguous source lines.
+- Detect multiline empty catches, TypeScript bypass casts and placeholder errors,
+  including deletion-only catch regressions. Do not join absent diff hunks. Bound
+  scanning of unfinished catch headers and reduce ordinary TODO-message noise.
+- Add 39 regression tests and 22 disposable-repository CLI workflows. The complete
+  suite contains 486 tests; Node 18/20/22 remain supported. No new dependencies.
+- Document remaining Node test option-object and template-interpolation gaps;
+  hand-selected QA results are not a production accuracy measurement.
+- Update the composite Action to install exactly 0.8.1 and the site/install examples.
+
 ## 0.8.0 — 2026-10-28
 
 - Reviewed, expiring exceptions for exact finding fingerprints and total occurrence

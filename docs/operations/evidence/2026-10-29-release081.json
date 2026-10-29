@@ -1,0 +1,434 @@
+{
+  "version": "0.8.1",
+  "date": "2026-10-29",
+  "status": "prepublication checks complete; external publication tracked separately",
+  "tests": {
+    "passed": 486,
+    "total": 486,
+    "files": 28,
+    "testRunner": "Node22",
+    "cliAndHooks": "Node18"
+  },
+  "installedArchive": {
+    "id": "agent-roast@0.8.1",
+    "name": "agent-roast",
+    "version": "0.8.1",
+    "size": 54986,
+    "unpackedSize": 202713,
+    "shasum": "59d406d9495894359a3f7137a753a5645ae45f01",
+    "integrity": "sha512-PqGwyUmwqovVAz6j4JwBfq5UW62O8SlpdDcLVKgI+uHmKf1I5dLxeq8c/9wGlMHB9tMJ6yzS3UmxkVRCro4ObQ==",
+    "filename": "agent-roast-0.8.1.tgz",
+    "files": [
+      {
+        "path": "LICENSE",
+        "size": 1064,
+        "mode": 420
+      },
+      {
+        "path": "README.md",
+        "size": 23008,
+        "mode": 420
+      },
+      {
+        "path": "dist/chunk-U7OCVA3D.js",
+        "size": 136973,
+        "mode": 493
+      },
+      {
+        "path": "dist/cli.d.ts",
+        "size": 13,
+        "mode": 420
+      },
+      {
+        "path": "dist/cli.js",
+        "size": 16501,
+        "mode": 493
+      },
+      {
+        "path": "dist/index.d.ts",
+        "size": 17928,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.js",
+        "size": 2587,
+        "mode": 493
+      },
+      {
+        "path": "package.json",
+        "size": 1369,
+        "mode": 420
+      },
+      {
+        "path": "schema.json",
+        "size": 3270,
+        "mode": 420
+      }
+    ],
+    "entryCount": 9,
+    "bundled": []
+  },
+  "workflows": [
+    {
+      "generatedAt": "2026-10-29T07:39:10.195Z",
+      "cliVersion": "0.8.1",
+      "runtime": "v18.20.8",
+      "total": 22,
+      "passed": 22,
+      "failed": 0,
+      "results": [
+        {
+          "name": "CLI version is available without a project",
+          "passed": true,
+          "durationMs": 60
+        },
+        {
+          "name": "check explains missing Git repository",
+          "passed": true,
+          "durationMs": 126
+        },
+        {
+          "name": "new project: clean source passes without history",
+          "passed": true,
+          "durationMs": 133
+        },
+        {
+          "name": "untracked skipped test blocks before first commit",
+          "passed": true,
+          "durationMs": 130
+        },
+        {
+          "name": "Git-ignored and generated sources do not become project debt",
+          "passed": true,
+          "durationMs": 129
+        },
+        {
+          "name": "init from a package creates effective root config and CI",
+          "passed": true,
+          "durationMs": 134
+        },
+        {
+          "name": "init retry preserves operator policy bytes",
+          "passed": true,
+          "durationMs": 124
+        },
+        {
+          "name": "baseline adoption accepts old debt but blocks an identical new occurrence",
+          "passed": true,
+          "durationMs": 383
+        },
+        {
+          "name": "one reviewed exception accepts one occurrence, exposes it in SARIF, and expires",
+          "passed": true,
+          "durationMs": 521
+        },
+        {
+          "name": "review allows line shifts of old debt and does not change HEAD or index",
+          "passed": true,
+          "durationMs": 330
+        },
+        {
+          "name": "review blocks deletion-only handling regression with formatted catch",
+          "passed": true,
+          "durationMs": 340
+        },
+        {
+          "name": "candidate policy cannot disable trusted PR gate",
+          "passed": true,
+          "durationMs": 289
+        },
+        {
+          "name": "pure rename preserves old-debt identity",
+          "passed": true,
+          "durationMs": 332
+        },
+        {
+          "name": "staged gate reads staged content despite a repaired worktree",
+          "passed": true,
+          "durationMs": 374
+        },
+        {
+          "name": "first commit cannot approve itself with candidate policy",
+          "passed": true,
+          "durationMs": 260
+        },
+        {
+          "name": "generated hook blocks commit -a and permits a clean retry",
+          "passed": true,
+          "durationMs": 3233
+        },
+        {
+          "name": "invalid policy, symlink, binary and oversized source never produce a clean pass",
+          "passed": true,
+          "durationMs": 497
+        },
+        {
+          "name": "regular-expression examples do not block a clean project",
+          "passed": true,
+          "durationMs": 129
+        },
+        {
+          "name": "formatted type assertion remains visible",
+          "passed": true,
+          "durationMs": 132
+        },
+        {
+          "name": "formatted unfinished implementation remains visible",
+          "passed": true,
+          "durationMs": 131
+        },
+        {
+          "name": "JSON, Markdown, GitHub and SARIF retain the same blocking decision",
+          "passed": true,
+          "durationMs": 366
+        },
+        {
+          "name": "no-source repository reports its lack of source coverage",
+          "passed": true,
+          "durationMs": 206
+        }
+      ]
+    },
+    {
+      "generatedAt": "2026-10-29T07:39:09.986Z",
+      "cliVersion": "0.8.1",
+      "runtime": "v20.19.5",
+      "total": 22,
+      "passed": 22,
+      "failed": 0,
+      "results": [
+        {
+          "name": "CLI version is available without a project",
+          "passed": true,
+          "durationMs": 51
+        },
+        {
+          "name": "check explains missing Git repository",
+          "passed": true,
+          "durationMs": 110
+        },
+        {
+          "name": "new project: clean source passes without history",
+          "passed": true,
+          "durationMs": 205
+        },
+        {
+          "name": "untracked skipped test blocks before first commit",
+          "passed": true,
+          "durationMs": 118
+        },
+        {
+          "name": "Git-ignored and generated sources do not become project debt",
+          "passed": true,
+          "durationMs": 118
+        },
+        {
+          "name": "init from a package creates effective root config and CI",
+          "passed": true,
+          "durationMs": 114
+        },
+        {
+          "name": "init retry preserves operator policy bytes",
+          "passed": true,
+          "durationMs": 102
+        },
+        {
+          "name": "baseline adoption accepts old debt but blocks an identical new occurrence",
+          "passed": true,
+          "durationMs": 341
+        },
+        {
+          "name": "one reviewed exception accepts one occurrence, exposes it in SARIF, and expires",
+          "passed": true,
+          "durationMs": 458
+        },
+        {
+          "name": "review allows line shifts of old debt and does not change HEAD or index",
+          "passed": true,
+          "durationMs": 322
+        },
+        {
+          "name": "review blocks deletion-only handling regression with formatted catch",
+          "passed": true,
+          "durationMs": 333
+        },
+        {
+          "name": "candidate policy cannot disable trusted PR gate",
+          "passed": true,
+          "durationMs": 282
+        },
+        {
+          "name": "pure rename preserves old-debt identity",
+          "passed": true,
+          "durationMs": 316
+        },
+        {
+          "name": "staged gate reads staged content despite a repaired worktree",
+          "passed": true,
+          "durationMs": 352
+        },
+        {
+          "name": "first commit cannot approve itself with candidate policy",
+          "passed": true,
+          "durationMs": 248
+        },
+        {
+          "name": "generated hook blocks commit -a and permits a clean retry",
+          "passed": true,
+          "durationMs": 3342
+        },
+        {
+          "name": "invalid policy, symlink, binary and oversized source never produce a clean pass",
+          "passed": true,
+          "durationMs": 449
+        },
+        {
+          "name": "regular-expression examples do not block a clean project",
+          "passed": true,
+          "durationMs": 118
+        },
+        {
+          "name": "formatted type assertion remains visible",
+          "passed": true,
+          "durationMs": 118
+        },
+        {
+          "name": "formatted unfinished implementation remains visible",
+          "passed": true,
+          "durationMs": 123
+        },
+        {
+          "name": "JSON, Markdown, GitHub and SARIF retain the same blocking decision",
+          "passed": true,
+          "durationMs": 323
+        },
+        {
+          "name": "no-source repository reports its lack of source coverage",
+          "passed": true,
+          "durationMs": 180
+        }
+      ]
+    },
+    {
+      "generatedAt": "2026-10-29T07:39:09.972Z",
+      "cliVersion": "0.8.1",
+      "runtime": "v22.20.0",
+      "total": 22,
+      "passed": 22,
+      "failed": 0,
+      "results": [
+        {
+          "name": "CLI version is available without a project",
+          "passed": true,
+          "durationMs": 39
+        },
+        {
+          "name": "check explains missing Git repository",
+          "passed": true,
+          "durationMs": 236
+        },
+        {
+          "name": "new project: clean source passes without history",
+          "passed": true,
+          "durationMs": 163
+        },
+        {
+          "name": "untracked skipped test blocks before first commit",
+          "passed": true,
+          "durationMs": 118
+        },
+        {
+          "name": "Git-ignored and generated sources do not become project debt",
+          "passed": true,
+          "durationMs": 115
+        },
+        {
+          "name": "init from a package creates effective root config and CI",
+          "passed": true,
+          "durationMs": 126
+        },
+        {
+          "name": "init retry preserves operator policy bytes",
+          "passed": true,
+          "durationMs": 105
+        },
+        {
+          "name": "baseline adoption accepts old debt but blocks an identical new occurrence",
+          "passed": true,
+          "durationMs": 339
+        },
+        {
+          "name": "one reviewed exception accepts one occurrence, exposes it in SARIF, and expires",
+          "passed": true,
+          "durationMs": 456
+        },
+        {
+          "name": "review allows line shifts of old debt and does not change HEAD or index",
+          "passed": true,
+          "durationMs": 320
+        },
+        {
+          "name": "review blocks deletion-only handling regression with formatted catch",
+          "passed": true,
+          "durationMs": 326
+        },
+        {
+          "name": "candidate policy cannot disable trusted PR gate",
+          "passed": true,
+          "durationMs": 278
+        },
+        {
+          "name": "pure rename preserves old-debt identity",
+          "passed": true,
+          "durationMs": 315
+        },
+        {
+          "name": "staged gate reads staged content despite a repaired worktree",
+          "passed": true,
+          "durationMs": 353
+        },
+        {
+          "name": "first commit cannot approve itself with candidate policy",
+          "passed": true,
+          "durationMs": 249
+        },
+        {
+          "name": "generated hook blocks commit -a and permits a clean retry",
+          "passed": true,
+          "durationMs": 3378
+        },
+        {
+          "name": "invalid policy, symlink, binary and oversized source never produce a clean pass",
+          "passed": true,
+          "durationMs": 448
+        },
+        {
+          "name": "regular-expression examples do not block a clean project",
+          "passed": true,
+          "durationMs": 117
+        },
+        {
+          "name": "formatted type assertion remains visible",
+          "passed": true,
+          "durationMs": 120
+        },
+        {
+          "name": "formatted unfinished implementation remains visible",
+          "passed": true,
+          "durationMs": 122
+        },
+        {
+          "name": "JSON, Markdown, GitHub and SARIF retain the same blocking decision",
+          "passed": true,
+          "durationMs": 322
+        },
+        {
+          "name": "no-source repository reports its lack of source coverage",
+          "passed": true,
+          "durationMs": 180
+        }
+      ]
+    }
+  ],
+  "limits": "Node test option objects, template interpolation and documented lexical limits remain; curated cases are not a production accuracy study."
+}
