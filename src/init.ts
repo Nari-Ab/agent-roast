@@ -13,6 +13,8 @@ export interface InitOptions {
 }
 
 export interface InitResult {
+  /** Actual project root containing the initialized files. */
+  directory: string;
   created: string[];
   skipped: string[];
 }
@@ -103,7 +105,17 @@ const hasEntry = (filename: string): boolean => {
 };
 
 export async function initProject(options: InitOptions = {}): Promise<InitResult> {
-  const cwd = fs.realpathSync(path.resolve(options.cwd || process.cwd()));
+  let cwd = fs.realpathSync(path.resolve(options.cwd || process.cwd()));
+  // check/review load policy from the repository root, and GitHub only reads
+  // workflows there. Starting init in a package must configure that same root.
+  const root = spawnSync("git", [...HERMETIC_GIT_FLAGS, "rev-parse", "--show-toplevel"], {
+    cwd, env: { ...getHermeticGitEnv(), LC_ALL: "C" }, encoding: "utf8", timeout: 30_000, maxBuffer: 8192, windowsHide: true,
+  });
+  if (root.error) throw new ConfigError("Cannot resolve the repository root for initialization.");
+  if (root.status === 0) cwd = fs.realpathSync(gitOutputPath(root.stdout));
+  else if (root.status !== 128 || !root.stderr.includes("not a git repository")) {
+    throw new ConfigError("Cannot resolve a working repository root for initialization.");
+  }
   const created: string[] = [];
   const skipped: string[] = [];
   const publish = (root: string, relative: string, label: string, content: string, mode?: number) => {
@@ -140,5 +152,5 @@ export async function initProject(options: InitOptions = {}): Promise<InitResult
       } else publish(commonDir, relative, ".git/hooks/pre-commit", PRE_COMMIT_HOOK_TEMPLATE, 0o755);
     }
   }
-  return { created, skipped };
+  return { directory: cwd, created, skipped };
 }

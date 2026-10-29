@@ -1,0 +1,827 @@
+{
+  "date": "2026-10-29",
+  "runtime": "v22.20.0",
+  "method": "Read-only copies of distributed dependency source and tracked project source. Target code is never executed. Synthetic scale runs include CLI startup and Git reads; three local observations are not a production benchmark.",
+  "snapshots": [
+    {
+      "name": "commander",
+      "version": "12.1.0",
+      "manifest": [
+        {
+          "file": "esm.mjs",
+          "bytes": 310,
+          "sha256": "19331de9ae2588143e74effe5a3072b67faf6c4ed4a00725399c6de477a86971"
+        },
+        {
+          "file": "index.js",
+          "bytes": 812,
+          "sha256": "a1bb4f6511f3801f961ab3efe5b735e6f248dd52c3937b260fc6c0d85d1896b3"
+        },
+        {
+          "file": "lib/argument.js",
+          "bytes": 3223,
+          "sha256": "4248cfb984f6213a152d030b7f6f425ff7c3c892875bd45e941a74a4272db096"
+        },
+        {
+          "file": "lib/command.js",
+          "bytes": 78147,
+          "sha256": "f92b14348d67ebab914c56d538da80afaf30e0343acee6eadcc01ca197753e6f"
+        },
+        {
+          "file": "lib/error.js",
+          "bytes": 1170,
+          "sha256": "013d254f21524dc912aa61a53394d5ebb97e722be1c683f7bd2313c14597d521"
+        },
+        {
+          "file": "lib/help.js",
+          "bytes": 14779,
+          "sha256": "c7d6ad897ebec52adeaf217b230eaf1298e6bc04c800f408c898811616a51b5a"
+        },
+        {
+          "file": "lib/option.js",
+          "bytes": 8575,
+          "sha256": "ac502c5edc3a23f1c97c8058255f724ec273794252151f885ae0f68aa1b95dac"
+        },
+        {
+          "file": "lib/suggestSimilar.js",
+          "bytes": 2774,
+          "sha256": "6a3a368ace1abd1cc6b551ae10bcbae18eda3fed0fb0cfd60c7960c6663dad58"
+        },
+        {
+          "file": "typings/esm.d.mts",
+          "bytes": 168,
+          "sha256": "b124c0624b15412ace7d54644ade38d7a69db7e25488a1a4d2a8df6e11696538"
+        },
+        {
+          "file": "typings/index.d.ts",
+          "bytes": 30145,
+          "sha256": "a722a71d8f3cb0028857b12579c7eca55acc76bf34e5db7eaf6fe817b985f9c3"
+        }
+      ],
+      "before": {
+        "exitCode": 0,
+        "durationMs": 129,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 10,
+          "linesInspected": 4660,
+          "totalFindings": 12,
+          "infractions": [
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 111,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1011,
+              "lineSnippet": "// @ts-ignore: because defaultApp is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "43875495faf3b64a32e0c3b1de58d2124ccc5c2640637901cae4397ef3651add",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1192,
+              "lineSnippet": "// @ts-ignore because signals not typed to known strings",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "24883fd033f872aa2b4d58befa9d40741e60ec23e2fafc514edc71a73c59b94c",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1216,
+              "lineSnippet": "// @ts-ignore: because err.code is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "83fda76eea2130c7620ce2504d9f27a3cc41d63edb91c0b17b44c55aa5008a4b",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1226,
+              "lineSnippet": "// @ts-ignore: because err.code is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "83fda76eea2130c7620ce2504d9f27a3cc41d63edb91c0b17b44c55aa5008a4b",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1995,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 2127,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 3
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 35,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 272,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 285,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 3
+            },
+            {
+              "type": "type-escape",
+              "file": "typings/index.d.ts",
+              "lineNumber": 5,
+              "lineSnippet": "/* eslint-disable @typescript-eslint/method-signature-style */",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "6d09799522ca3c5b830f14f7525eca184549308ddb3846c1e2189555d89954a0",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "typings/index.d.ts",
+              "lineNumber": 6,
+              "lineSnippet": "/* eslint-disable @typescript-eslint/no-explicit-any */",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "d8f0fbc97581ae55815f229bb72bc03f7063d5609b4d46ec6f9c6ed7d664a631",
+              "occurrence": 1
+            }
+          ],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      },
+      "after": {
+        "exitCode": 0,
+        "durationMs": 101,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 10,
+          "linesInspected": 4660,
+          "totalFindings": 12,
+          "infractions": [
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 111,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1011,
+              "lineSnippet": "// @ts-ignore: because defaultApp is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "43875495faf3b64a32e0c3b1de58d2124ccc5c2640637901cae4397ef3651add",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1192,
+              "lineSnippet": "// @ts-ignore because signals not typed to known strings",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "24883fd033f872aa2b4d58befa9d40741e60ec23e2fafc514edc71a73c59b94c",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1216,
+              "lineSnippet": "// @ts-ignore: because err.code is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "83fda76eea2130c7620ce2504d9f27a3cc41d63edb91c0b17b44c55aa5008a4b",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1226,
+              "lineSnippet": "// @ts-ignore: because err.code is an unknown property",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "83fda76eea2130c7620ce2504d9f27a3cc41d63edb91c0b17b44c55aa5008a4b",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 1995,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/command.js",
+              "lineNumber": 2127,
+              "lineSnippet": "// eslint-disable-next-line @typescript-eslint/no-this-alias",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "a3651ba92b9879722b2bac6c58d71406bbe60f2b9c9af8db9928ddc6564fab4f",
+              "occurrence": 3
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 35,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 272,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 2
+            },
+            {
+              "type": "type-escape",
+              "file": "lib/help.js",
+              "lineNumber": 285,
+              "lineSnippet": "// @ts-ignore: because overloaded return type",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "compiler ignore (@ts-ignore)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "21d06d24c59ff9bf361128f8b3a8583f70b12c6bad848140c15a49c037c9768e",
+              "occurrence": 3
+            },
+            {
+              "type": "type-escape",
+              "file": "typings/index.d.ts",
+              "lineNumber": 5,
+              "lineSnippet": "/* eslint-disable @typescript-eslint/method-signature-style */",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "6d09799522ca3c5b830f14f7525eca184549308ddb3846c1e2189555d89954a0",
+              "occurrence": 1
+            },
+            {
+              "type": "type-escape",
+              "file": "typings/index.d.ts",
+              "lineNumber": 6,
+              "lineSnippet": "/* eslint-disable @typescript-eslint/no-explicit-any */",
+              "commitHash": "WORKTREE",
+              "commitDate": "",
+              "reason": "linter suppression (eslint-disable)",
+              "suggestion": "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
+              "fingerprint": "d8f0fbc97581ae55815f229bb72bc03f7063d5609b4d46ec6f9c6ed7d664a631",
+              "occurrence": 1
+            }
+          ],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      }
+    },
+    {
+      "name": "picocolors",
+      "version": "1.1.1",
+      "manifest": [
+        {
+          "file": "picocolors.browser.js",
+          "bytes": 598,
+          "sha256": "a2e045ba16013e35c7045797ae940e3ea1c0e0ada13467bc73f7538690ea091a"
+        },
+        {
+          "file": "picocolors.d.ts",
+          "bytes": 138,
+          "sha256": "8c5f0739f00f89f89b03a1fe6658c6d78000d7ebd7f556f0f8d6908fa679de35"
+        },
+        {
+          "file": "picocolors.js",
+          "bytes": 2663,
+          "sha256": "213bb870fcaad4def0215fe34fbb0f529836cc4d2462e02f14f1a49d09781625"
+        },
+        {
+          "file": "types.d.ts",
+          "bytes": 1013,
+          "sha256": "590595c1230ebb7c43ebac51b2b2da956a719b213355b4358e2a6b16a8b5936c"
+        }
+      ],
+      "before": {
+        "exitCode": 0,
+        "durationMs": 74,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 4,
+          "linesInspected": 135,
+          "totalFindings": 0,
+          "infractions": [],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      },
+      "after": {
+        "exitCode": 0,
+        "durationMs": 77,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 4,
+          "linesInspected": 135,
+          "totalFindings": 0,
+          "infractions": [],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      }
+    },
+    {
+      "name": "agent-roast",
+      "version": "0.8.0 + local QA fixes",
+      "manifest": [
+        {
+          "file": "scripts/evaluate-080.mjs",
+          "bytes": 5127,
+          "sha256": "095e47c89401b47dafb3fce8afaa8c116b0cb62d46f476be04c03d70c04440e5"
+        },
+        {
+          "file": "scripts/evaluate-staged.mjs",
+          "bytes": 3799,
+          "sha256": "e58dce48e4a014141ec5afc8a0a93cbcc017d8df90b18143fffcba7ae8078e96"
+        },
+        {
+          "file": "scripts/generate-demo-gif.js",
+          "bytes": 5339,
+          "sha256": "a84c5f4e299585af1935e9bc261c09db06c2d772adf25ed106451bad169a9792"
+        },
+        {
+          "file": "scripts/render-both-animations.js",
+          "bytes": 11046,
+          "sha256": "1d13dd9e656ae4731d0c33d6d285c49d84f8cf7be4c902b1f218673e80fc2f4a"
+        },
+        {
+          "file": "scripts/render-case-study.js",
+          "bytes": 5536,
+          "sha256": "b82a3cb5092af7ed0607b6c87ace22b9ebbdacc23ee0a6690354571c02aba19d"
+        },
+        {
+          "file": "src/badge.ts",
+          "bytes": 4725,
+          "sha256": "5548d7a837afe123c9dff7b00328eac744919f6f28bc6b0140fbe78600ad22e3"
+        },
+        {
+          "file": "src/baseline.ts",
+          "bytes": 4208,
+          "sha256": "7d3c8b2b28a24786a62f6879fe1c42c5bb10b2694348630c518e38d811688e25"
+        },
+        {
+          "file": "src/check.ts",
+          "bytes": 7608,
+          "sha256": "868c1badf639c21261bc2a48f5c3a428719a4b4340dc960fcc8707a2ea2fd8ea"
+        },
+        {
+          "file": "src/cli.ts",
+          "bytes": 17925,
+          "sha256": "bc2181d15daa8c064a0588ecdbdc55d3c3bc56daed97526f622ba2a6d2997603"
+        },
+        {
+          "file": "src/config.ts",
+          "bytes": 8639,
+          "sha256": "fda1de294925a74cd664d7c05844a98bcf22d2ce9aa50418aff99d2801cfced0"
+        },
+        {
+          "file": "src/detector.ts",
+          "bytes": 3138,
+          "sha256": "b09ac29bb40cfc107fc5456bb766fc1bdb469c025aa93c3ead5775870ce75b91"
+        },
+        {
+          "file": "src/exceptions.ts",
+          "bytes": 3539,
+          "sha256": "edcc7f956cbf223419b3d4118dad27fe51a3603717c142d494ef7f27c2a4356e"
+        },
+        {
+          "file": "src/file-read.ts",
+          "bytes": 1219,
+          "sha256": "716456c773a5a9f35a41f848588f24227a0627940683284aee867ef46f960bdd"
+        },
+        {
+          "file": "src/git.ts",
+          "bytes": 20370,
+          "sha256": "51b9ab5a5acdbf2ba3e32700f17a4858fc552f5328fe5b4c73a2150e0bc97553"
+        },
+        {
+          "file": "src/index.ts",
+          "bytes": 5877,
+          "sha256": "6c509396510c8c2681706ce726fbc741208db77a1ae8985ac068bd002dec1dde"
+        },
+        {
+          "file": "src/init.ts",
+          "bytes": 6870,
+          "sha256": "dfcb69130ab9ce8456b8cacec0c39d68bee758d255cde5ae9deaf82a3a56d91a"
+        },
+        {
+          "file": "src/metrics.ts",
+          "bytes": 27180,
+          "sha256": "9394111601ea9e8bcb3c2d8bbc9c4ecdf7756335ed13cc7749d613b5fc14d030"
+        },
+        {
+          "file": "src/renderer.ts",
+          "bytes": 27453,
+          "sha256": "f6035efc50ddd29b840dc127407b9c8884f5a520eb6d9f6b0a8573214cbaac8d"
+        },
+        {
+          "file": "src/review.ts",
+          "bytes": 8883,
+          "sha256": "7be56f568dc4d7fbcd5f822d812819c38107c096e54a52fcee8f1144c30ff8f0"
+        },
+        {
+          "file": "src/rules.ts",
+          "bytes": 3179,
+          "sha256": "efadb0f65a2fedb6bf54d0172df164c5bc29de365ed87d041e358478ffd005dd"
+        },
+        {
+          "file": "src/sarif.ts",
+          "bytes": 4230,
+          "sha256": "adda219e6653fcd80dfe5657df7a3cb2d19eef2c12a6ed5a1443fa5f8fcba830"
+        },
+        {
+          "file": "src/snapshot.ts",
+          "bytes": 11288,
+          "sha256": "a93e8d74267fe5030b1b2208b996a19ad8f49498a892a4744888ccf37b64e1a7"
+        },
+        {
+          "file": "src/source.ts",
+          "bytes": 6872,
+          "sha256": "16422f2ad291c733e330bb9b675adc4c9e027c989855fe1cd62ce2d14c474466"
+        },
+        {
+          "file": "src/types.ts",
+          "bytes": 4391,
+          "sha256": "d8981a2da49538b199178ee5333a372eb6561321dadcfff673e8bde080d382b4"
+        },
+        {
+          "file": "tests/action.test.ts",
+          "bytes": 4095,
+          "sha256": "25e6d408b4a9fb99edc5071398805da88c9d4f5f1719e769fcd3bcb4fd073a9a"
+        },
+        {
+          "file": "tests/badge.test.ts",
+          "bytes": 3668,
+          "sha256": "a0ecb6126b63612d1d612113fe22d9397916c8ce0e4bb6d91a604315e571d6fb"
+        },
+        {
+          "file": "tests/baseline.test.ts",
+          "bytes": 4446,
+          "sha256": "9bf603319339a1bbd614637d6154da2fce1acd1edf4f17936e31e75d0e59f263"
+        },
+        {
+          "file": "tests/check.test.ts",
+          "bytes": 11042,
+          "sha256": "c00c1c8d91333730a8556e19b97f88e63036a6b1f3599a80636572cfa5b0b35e"
+        },
+        {
+          "file": "tests/config.test.ts",
+          "bytes": 5023,
+          "sha256": "d33703555e7849794383aeed15dd343f29d4d6ce600ce30193d08cf150a41eae"
+        },
+        {
+          "file": "tests/detector.test.ts",
+          "bytes": 4371,
+          "sha256": "bee48294d2da1b60f88b61c3f18c77f569f0de2ef40bbd33c3c62a0b63df0c44"
+        },
+        {
+          "file": "tests/docs.test.ts",
+          "bytes": 637,
+          "sha256": "03dcffbba72bf81e47678f6cb683e2eacf551e9615a76f77b9dfe48ff9a2971b"
+        },
+        {
+          "file": "tests/evaluation.test.ts",
+          "bytes": 5345,
+          "sha256": "a56fc823b5384ab6a7500ce4c1c40d48e8f58ebdadaf25c008f5e0ea240cbc9c"
+        },
+        {
+          "file": "tests/exceptions.test.ts",
+          "bytes": 9331,
+          "sha256": "62a5c1b1e9484dfaf12bbc8733f651617f669aa7a8272734d7cc25b23b527c2a"
+        },
+        {
+          "file": "tests/focus.test.ts",
+          "bytes": 5829,
+          "sha256": "e7605c577fa7aa4edfcbf9393d14bb8b8f204389111d650bf53995f07d3a70c2"
+        },
+        {
+          "file": "tests/git.test.ts",
+          "bytes": 9575,
+          "sha256": "71198847820c8183a86b6ff66b0f7f4dbe38a7731abd0722e239b18ae1be94b5"
+        },
+        {
+          "file": "tests/init.test.ts",
+          "bytes": 3150,
+          "sha256": "c33200c20a4da48af9c1077ab9a55458d48231a642366c30966665fe911e6669"
+        },
+        {
+          "file": "tests/integration.test.ts",
+          "bytes": 14502,
+          "sha256": "72319ae87a838084b2e3d6906212c1beded676e105fe5eca1cf6f9b837e530a9"
+        },
+        {
+          "file": "tests/io-safety.test.ts",
+          "bytes": 14339,
+          "sha256": "295668d6a942f4d67a9e2d64fec7e4f979d14602209b891990b6921e13ef1487"
+        },
+        {
+          "file": "tests/legacy-completeness.test.ts",
+          "bytes": 5623,
+          "sha256": "52a9e39c13972fd7e0bd86510ac22f82dd8b253a895fe0d0cf5880f0dc9c6e6b"
+        },
+        {
+          "file": "tests/metrics.test.ts",
+          "bytes": 14960,
+          "sha256": "8507efe34155c0bf759ee9812464d59f0d5bee6385079f9e2f7336ab73d578e3"
+        },
+        {
+          "file": "tests/regressions.test.ts",
+          "bytes": 10741,
+          "sha256": "4e3cd4a95f754c31af5e12137f9adf0415d32d7a68ba4958cf6418a01d00ce4c"
+        },
+        {
+          "file": "tests/renderer.test.ts",
+          "bytes": 4005,
+          "sha256": "70bd8f030e006611281af59e31832a16a8ec6ca22ec240b66f84d3c8d2c10542"
+        },
+        {
+          "file": "tests/report-safety.test.ts",
+          "bytes": 7876,
+          "sha256": "add612ca41b0739f56bbb74725318ddc9ebd681f278d96c43e26a17b1890f564"
+        },
+        {
+          "file": "tests/review.test.ts",
+          "bytes": 13367,
+          "sha256": "cd17ea9908b447cff88d750d6294f56e1a65d7825702994863975df1c70862b0"
+        },
+        {
+          "file": "tests/sarif.test.ts",
+          "bytes": 4887,
+          "sha256": "925b9a27e847e998190fbc0c0257c7d6d9b80238ac97257651abdc98726b91de"
+        },
+        {
+          "file": "tests/schema.test.ts",
+          "bytes": 1027,
+          "sha256": "ff747c6ee5876c5a85b34dc468271bcc53481055ab48ca90d7aa39683e38a3a6"
+        },
+        {
+          "file": "tests/site.test.ts",
+          "bytes": 3329,
+          "sha256": "45a127a53ee702dc9d545e9f2ac7add53f4b7e89e2effcee4db7f49a3dd1917f"
+        },
+        {
+          "file": "tests/snapshot.test.ts",
+          "bytes": 4850,
+          "sha256": "78290c7a1d5a5f82445f5d39062d545b6eccb9345af3ded8cde68db1bb1a74b5"
+        },
+        {
+          "file": "tests/source.test.ts",
+          "bytes": 9527,
+          "sha256": "604d4525d9778cbfdc14ce6ef3064168c64c8d72ca117f88ec6b690709092e66"
+        },
+        {
+          "file": "tests/staged-review.test.ts",
+          "bytes": 12194,
+          "sha256": "2318514aa0d6293a3d7ea4bc306bd76d037de768ce9a16a9618f118dfaa5c379"
+        },
+        {
+          "file": "tests/telemetry.test.ts",
+          "bytes": 2041,
+          "sha256": "c1a0d813a976ee670d5a96297d00b67abc36e6f2c61cfc0e9ebb19c1d000bb6d"
+        },
+        {
+          "file": "tests/user-qa.test.ts",
+          "bytes": 7797,
+          "sha256": "09ac8da6aee9c4a6029e9ed91c980e798f099b2f1f05b668c778fc9cd3066b01"
+        },
+        {
+          "file": "scripts/verify-user-workflows.mjs",
+          "bytes": 12659,
+          "sha256": "3a35c6c200f0b12081a8dd8f2d62e25a74585a5dbff3826eeeb4218a6c7a9317"
+        }
+      ],
+      "before": {
+        "exitCode": 0,
+        "durationMs": 153,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 53,
+          "linesInspected": 8542,
+          "totalFindings": 0,
+          "infractions": [],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      },
+      "after": {
+        "exitCode": 0,
+        "durationMs": 139,
+        "report": {
+          "schemaVersion": "1.0.0",
+          "mode": "check",
+          "filesInspected": 53,
+          "linesInspected": 8542,
+          "totalFindings": 0,
+          "infractions": [],
+          "baselineCount": 0,
+          "staleBaselineCount": 0,
+          "suppressedFindings": [],
+          "expiredExceptionCount": 0,
+          "skippedFiles": [],
+          "complete": true,
+          "failedRules": [],
+          "passed": true,
+          "exitCode": 0,
+          "output": ""
+        }
+      }
+    }
+  ],
+  "benchmark": {
+    "files": 500,
+    "linesPerOriginalFile": 20,
+    "changedFiles": 100,
+    "check": [
+      {
+        "exitCode": 0,
+        "durationMs": 217,
+        "filesInspected": 500,
+        "linesInspected": 10100
+      },
+      {
+        "exitCode": 0,
+        "durationMs": 216,
+        "filesInspected": 500,
+        "linesInspected": 10100
+      },
+      {
+        "exitCode": 0,
+        "durationMs": 217,
+        "filesInspected": 500,
+        "linesInspected": 10100
+      }
+    ],
+    "review": [
+      {
+        "exitCode": 0,
+        "durationMs": 4898,
+        "filesInspected": 100,
+        "linesInspected": 4100
+      },
+      {
+        "exitCode": 0,
+        "durationMs": 4859,
+        "filesInspected": 100,
+        "linesInspected": 4100
+      },
+      {
+        "exitCode": 0,
+        "durationMs": 4861,
+        "filesInspected": 100,
+        "linesInspected": 4100
+      }
+    ]
+  }
+}

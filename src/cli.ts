@@ -307,7 +307,7 @@ program
       });
 
       if (res.created.length > 0) {
-        console.log(`Initialized agent-roast in ${terminalText(targetDir)}:`);
+        console.log(`Initialized agent-roast in ${terminalText(res.directory)}:`);
         for (const file of res.created) {
           console.log(`  + Created ${terminalText(file)}`);
         }

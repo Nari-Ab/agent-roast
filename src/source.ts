@@ -8,6 +8,8 @@ export class SourceMasker {
   private triple = false;
   private verbatim = false;
   private previousLine = 0;
+  private tokenPrefix = "";
+  private readonly parentheses: boolean[] = [];
   private readonly python: boolean;
   private readonly javascript: boolean;
   private readonly rust: boolean;
@@ -36,12 +38,14 @@ export class SourceMasker {
       this.rawEnd = "";
       this.triple = false;
       this.verbatim = false;
+      this.tokenPrefix = "";
+      this.parentheses.length = 0;
     }
     this.previousLine = number;
     const code = Array<string>(line.length).fill(" ");
     const comments = Array<string>(line.length).fill(" ");
     let i = 0;
-    let prefix = "";
+    let prefix = this.tokenPrefix;
     // Regexp-vs-division needs the preceding token, not the entire line. Keeping
     // an ever-growing prefix caused quadratic work on long arithmetic lines.
     const appendPrefix = (text: string) => {
@@ -118,7 +122,7 @@ export class SourceMasker {
         continue;
       }
       // A slash following an operand is division; after an operator it may start a regexp.
-      if (this.javascript && char === "/" && (/(?:[=(:,[!&|?{;]|\breturn|\byield)\s*$/.test(prefix) || !prefix.trim())) {
+      if (this.javascript && char === "/" && (/(?:=>|[=(:,[!&|?{;]|\breturn|\byield|\bthrow)\s*$/.test(prefix) || !prefix.trim())) {
         let j = i + 1;
         let inClass = false;
         for (; j < line.length; j++) {
@@ -134,12 +138,23 @@ export class SourceMasker {
         }
       }
       code[i] = char;
+      if (this.javascript && char === "(") {
+        const control = /(?<![\w$])(?:if|while|for|with|switch|catch)\s*$/.exec(prefix);
+        this.parentheses.push(Boolean(control && !/\.\s*$/.test(prefix.slice(0, control.index))));
+      } else if (this.javascript && char === ")" && this.parentheses.pop()) {
+        // A control header ends before a statement, where a regexp is legal.
+        // A normal call/expression ')' remains an operand before division.
+        prefix = "; ";
+        i++;
+        continue;
+      }
       appendPrefix(char);
       i++;
     }
     // Ordinary literals span a newline only with an explicit continuation.
     // Raw/text blocks/templates preserve state; a diff hunk gap resets all state.
     if (this.quote !== "`" && !this.triple && !this.verbatim && !continued) this.quote = "";
+    this.tokenPrefix = this.javascript ? (prefix + " ").slice(-64) : "";
     return { code: code.join(""), comments: comments.join(""), templateStarts, blockStarts };
   }
 }

@@ -1,0 +1,398 @@
+
+ RUN  v4.1.12 /private/tmp/agent-roast-qa-20261029-baseline
+
+ ❯ tests/user-qa.test.ts (39 tests | 21 failed) 187ms
+     × initializes effective policy and CI at the repository root from a nested directory 72ms
+     × preserves the existing root policy when initializing from a child 27ms
+     × refuses a bare repository before creating ineffective configuration 33ms
+     × does not block regular-expression literals: const matcher = () => /test.only('example')/; 3ms
+     × does not block regular-expression literals: throw /test.only('example')/; 1ms
+     × does not block regular-expression literals: if (ready) /test.only('example')/.test(value); 1ms
+     × does not block regular-expression literals: if (ready && check(input)) /test.only('example')/.test(value); 0ms
+     × does not block regular-expression literals: while (ready) /test.only('example')/.test(value); 0ms
+     × retains actual focused tests alongside divisions or regexps: const matcher = () => /test.only('example')/; test.only('real', () => {}); 1ms
+     × finds an empty multiline catch in payment.ts 0ms
+     × finds an empty multiline catch in Payment.java 0ms
+     × finds an empty multiline catch in Payment.kt 0ms
+     × finds an empty multiline catch in payment.ts 0ms
+     × retains type bypasses across ordinary formatting: const payload = response as
+ any; 0ms
+     × retains type bypasses across ordinary formatting: const payload = response as /* override */
+ any; 0ms
+     × retains type bypasses across ordinary formatting: const payload = response as
+ unknown as Result; 0ms
+     × retains type bypasses across ordinary formatting: const payload = response as
+ never; 0ms
+     × finds formatted placeholder errors: throw new Error(
+ 'Not implemented'
+); 0ms
+     × finds formatted placeholder errors: throw new
+ Error('Not implemented'); 0ms
+     × finds formatted placeholder errors: throw new Error(`Not implemented`); 0ms
+     × keeps ordinary errors and documentation out of placeholder findings: throw new Error('TODO item not found'); 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > initializes effective policy and CI at the repository root from a nested directory
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/user-qa.test.ts:27:80
+     25|     const result = await initProject({ cwd: nested, ci: true, hook: tr…
+     26|     expect(result.created).toContain(".agentroastrc.json");
+     27|     expect(fs.existsSync(path.join(dir, ".github/workflows/agent-roast…
+       |                                                                                ^
+     28|     expect(fs.existsSync(path.join(nested, ".agentroastrc.json"))).toB…
+     29|     expect(fs.existsSync(path.join(nested, ".github"))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > preserves the existing root policy when initializing from a child
+AssertionError: expected [] to include '.agentroastrc.json'
+ ❯ tests/user-qa.test.ts:38:58
+     36|     const dir = repo(); const nested = path.join(dir, "src"); fs.mkdir…
+     37|     const policy = '{"rules":{"test-focus":"warn"}}\n'; fs.writeFileSy…
+     38|     expect((await initProject({ cwd: nested })).skipped).toContain(".a…
+       |                                                          ^
+     39|     expect(fs.readFileSync(path.join(dir, ".agentroastrc.json"), "utf8…
+     40|     expect(fs.existsSync(path.join(nested, ".agentroastrc.json"))).toB…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > refuses a bare repository before creating ineffective configuration
+AssertionError: promise resolved "{ created: [ …(2) ], skipped: [] }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "created": [
++     ".agentroastrc.json",
++     ".github/workflows/agent-roast.yml",
++   ],
++   "skipped": [],
+  }
+
+ ❯ tests/user-qa.test.ts:45:53
+     43|     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "roast-user-qa-b…
+     44|     execFileSync("git", ["init", "--bare"], { cwd: dir, env, stdio: "p…
+     45|     await expect(initProject({ cwd: dir, ci: true })).rejects.toThrow(…
+       |                                                     ^
+     46|     expect(fs.existsSync(path.join(dir, ".agentroastrc.json"))).toBe(f…
+     47|     expect(fs.existsSync(path.join(dir, ".github"))).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > does not block regular-expression literals: const matcher = () => /test.only('example')/;
+AssertionError: expected [ { type: 'test-focus', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.156Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "const matcher = () => /test.only('example')/;",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:58:24
+     56|     "if (ready &&\n check(input))\n /test.only('example')/.test(value)…
+     57|   ])("does not block regular-expression literals: %s", text => {
+     58|     expect(scan(text)).toEqual([]);
+       |                        ^
+     59|   });
+     60|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > does not block regular-expression literals: throw /test.only('example')/;
+AssertionError: expected [ { type: 'test-focus', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.159Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "throw /test.only('example')/;",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:58:24
+     56|     "if (ready &&\n check(input))\n /test.only('example')/.test(value)…
+     57|   ])("does not block regular-expression literals: %s", text => {
+     58|     expect(scan(text)).toEqual([]);
+       |                        ^
+     59|   });
+     60|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > does not block regular-expression literals: if (ready) /test.only('example')/.test(value);
+AssertionError: expected [ { type: 'test-focus', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.160Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "if (ready) /test.only('example')/.test(value);",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:58:24
+     56|     "if (ready &&\n check(input))\n /test.only('example')/.test(value)…
+     57|   ])("does not block regular-expression literals: %s", text => {
+     58|     expect(scan(text)).toEqual([]);
+       |                        ^
+     59|   });
+     60|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > does not block regular-expression literals: if (ready && check(input)) /test.only('example')/.test(value);
+AssertionError: expected [ { type: 'test-focus', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.161Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "if (ready && check(input)) /test.only('example')/.test(value);",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:58:24
+     56|     "if (ready &&\n check(input))\n /test.only('example')/.test(value)…
+     57|   ])("does not block regular-expression literals: %s", text => {
+     58|     expect(scan(text)).toEqual([]);
+       |                        ^
+     59|   });
+     60|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > does not block regular-expression literals: while (ready) /test.only('example')/.test(value);
+AssertionError: expected [ { type: 'test-focus', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.161Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "while (ready) /test.only('example')/.test(value);",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:58:24
+     56|     "if (ready &&\n check(input))\n /test.only('example')/.test(value)…
+     57|   ])("does not block regular-expression literals: %s", text => {
+     58|     expect(scan(text)).toEqual([]);
+       |                        ^
+     59|   });
+     60|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > retains actual focused tests alongside divisions or regexps: const matcher = () => /test.only('example')/; test.only('real', () => {});
+AssertionError: expected [ { type: 'test-focus', …(7) }, …(1) ] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+@@ -7,6 +7,16 @@
+      "lineSnippet": "const matcher = () => /test.only('example')/; test.only('real', () => {});",
+      "reason": "focused test or suite excludes other tests from the run",
+      "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
+      "type": "test-focus",
+    },
++   {
++     "commitDate": "2026-10-29T06:03:04.162Z",
++     "commitHash": "HEAD",
++     "file": "auth.test.ts",
++     "lineNumber": 1,
++     "lineSnippet": "const matcher = () => /test.only('example')/; test.only('real', () => {});",
++     "reason": "focused test or suite excludes other tests from the run",
++     "suggestion": "Remove .only (or replace fit/fdescribe with it/describe) and run the full suite. Enable your test runner's forbid-only setting in CI when available.",
++     "type": "test-focus",
++   },
+  ]
+
+ ❯ tests/user-qa.test.ts:69:24
+     67|     "const matcher = () => /test.only('example')/; test.only('real', (…
+     68|   ])("retains actual focused tests alongside divisions or regexps: %s"…
+     69|     expect(scan(text)).toEqual([expect.objectContaining({ type: "test-…
+       |                        ^
+     70|   });
+     71|   it("keeps operand-vs-regexp context across consecutive lines", () =>…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds an empty multiline catch in payment.ts
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds an empty multiline catch in Payment.java
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds an empty multiline catch in Payment.kt
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds an empty multiline catch in payment.ts
+AssertionError: expected [] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+- [
+-   ObjectContaining {
+-     "lineNumber": 1,
+-     "type": "swallowed-error",
+-   },
+- ]
++ []
+
+ ❯ tests/user-qa.test.ts:85:32
+     83|     ["payment.ts", "try { save(); } catch\n {\n}"],
+     84|   ])("finds an empty multiline catch in %s", (file, source) => {
+     85|     expect(scan(source, file)).toEqual([expect.objectContaining({ type…
+       |                                ^
+     86|   });
+     87|   it("does not label a multiline catch with handling as empty", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > retains type bypasses across ordinary formatting: const payload = response as
+ any;
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > retains type bypasses across ordinary formatting: const payload = response as /* override */
+ any;
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > retains type bypasses across ordinary formatting: const payload = response as
+ unknown as Result;
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > retains type bypasses across ordinary formatting: const payload = response as
+ never;
+AssertionError: expected [] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+- [
+-   ObjectContaining {
+-     "lineNumber": 1,
+-     "type": "type-escape",
+-   },
+- ]
++ []
+
+ ❯ tests/user-qa.test.ts:108:38
+    106|     "const payload = response as\n never;",
+    107|   ])("retains type bypasses across ordinary formatting: %s", text => {
+    108|     expect(scan(text, "payment.ts")).toEqual([expect.objectContaining(…
+       |                                      ^
+    109|   });
+    110|   it("does not apply TypeScript casts to JavaScript or join casts acro…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds formatted placeholder errors: throw new Error(
+ 'Not implemented'
+);
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds formatted placeholder errors: throw new
+ Error('Not implemented');
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > finds formatted placeholder errors: throw new Error(`Not implemented`);
+AssertionError: expected [] to deeply equal [ ObjectContaining{…} ]
+
+- Expected
++ Received
+
+- [
+-   ObjectContaining {
+-     "lineNumber": 1,
+-     "type": "stub-abandonment",
+-   },
+- ]
++ []
+
+ ❯ tests/user-qa.test.ts:122:38
+    120|     "throw new Error('TODO: implement payments');",
+    121|   ])("finds formatted placeholder errors: %s", text => {
+    122|     expect(scan(text, "payment.ts")).toEqual([expect.objectContaining(…
+       |                                      ^
+    123|   });
+    124|   it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  tests/user-qa.test.ts > independent user workflow regressions > keeps ordinary errors and documentation out of placeholder findings: throw new Error('TODO item not found');
+AssertionError: expected [ { type: 'stub-abandonment', …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "commitDate": "2026-10-29T06:03:04.210Z",
++     "commitHash": "HEAD",
++     "file": "payment.ts",
++     "lineNumber": 1,
++     "lineSnippet": "throw new Error('TODO item not found');",
++     "reason": "unimplemented stub (throw new Error('Not implemented'))",
++     "suggestion": "Implement the path or make its unsupported state explicit to callers. Check whether this is an intentional abstract contract.",
++     "type": "stub-abandonment",
++   },
++ ]
+
+ ❯ tests/user-qa.test.ts:130:38
+    128|     "throw new Error('stubborn provider failed');",
+    129|   ])("keeps ordinary errors and documentation out of placeholder findi…
+    130|     expect(scan(text, "payment.ts")).toEqual([]);
+       |                                      ^
+    131|   });
+    132|   it("does not join a placeholder error through a missing hunk", () =>…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  21 failed | 18 passed (39)
+   Start at  11:03:03
+   Duration  387ms (transform 95ms, setup 0ms, import 117ms, tests 187ms, environment 0ms)

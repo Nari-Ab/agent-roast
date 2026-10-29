@@ -41,7 +41,7 @@ const PYTHON_TRIVIAL_ASSERT_PATTERNS = [
   { regex: /\bself\s*\.\s*assertEqual\s*\(\s*(?:1\s*,\s*1|True\s*,\s*True)\s*\)/, name: "trivial assert (self.assertEqual(1, 1))" },
 ];
 const JS_STUB_PATTERNS = [
-  { regex: /\bthrow\s+new\s+Error\s*\(\s*["'](?:TODO\b|Not implemented\b|to be implemented\b|stub\b|implement me\b)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
+  { regex: /\bthrow\s+new\s+Error\s*\(\s*["'`](?:TODO(?=\s*(?:["'`:]|implement\b))|Not implemented\b|to be implemented\b|stub\b|implement me\b)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
 ];
 const PYTHON_STUB_PATTERNS = [
   { regex: /\braise\s+NotImplementedError\b/, name: "unimplemented stub (raise NotImplementedError)" },
@@ -164,23 +164,6 @@ export function auditFileDiffs(
         foundEscape = true;
       }
 
-      if (typescript && !foundEscape && !isComment) {
-        for (const rule of CODE_TYPE_ESCAPE_PATTERNS) {
-          if (rule.regex.test(cleanedLine)) {
-            infractions.push({
-              type: "type-escape",
-              file: file.path,
-              lineNumber: added.lineNumber,
-              lineSnippet: rawLine.trim(),
-              commitHash,
-              commitDate,
-              reason: rule.name,
-            });
-            break;
-          }
-        }
-      }
-
       // D. Trivial Assertions (only in test files)
       if (python && !isComment && isTestFile(file.path)) {
         for (const rule of PYTHON_TRIVIAL_ASSERT_PATTERNS) {
@@ -199,42 +182,62 @@ export function auditFileDiffs(
         }
       }
 
-      // E. Stub Abandonment
-      if (!isComment) {
-        for (const rule of stubs) {
-          const matches = rawLine.matchAll(new RegExp(rule.regex.source, rule.regex.flags + "g"));
-          const match = [...matches].find(candidate => cleanedLine[candidate.index] === rawLine[candidate.index]);
-          if (match) {
-            infractions.push({
-              type: "stub-abandonment",
-              file: file.path,
-              lineNumber: added.lineNumber,
-              lineSnippet: rawLine.trim(),
-              commitHash,
-              commitDate,
-              reason: rule.name,
-            });
-            break;
-          }
+    }
+
+    let source = "";
+    let code = "";
+    let raw = "";
+    const offsets: number[] = [];
+    for (let i = 0; i < maskedLines.length; i++) {
+      const separator = i ? (maskedLines[i].number === maskedLines[i - 1].number + 1 ? "\n" : "\0") : "";
+      source += separator;
+      code += separator;
+      raw += separator;
+      offsets.push(source.length);
+      source += maskedLines[i].testCode;
+      code += maskedLines[i].code;
+      raw += maskedLines[i].raw;
+    }
+    const evidence = (index: number, length: number) => {
+      let low = 0;
+      let high = offsets.length;
+      while (low + 1 < high) {
+        const middle = (low + high) >>> 1;
+        if (offsets[middle] <= index) low = middle;
+        else high = middle;
+      }
+      let end = low;
+      while (end + 1 < offsets.length && offsets[end + 1] < index + length) end++;
+      return { lineNumber: maskedLines[low].number, lineSnippet: maskedLines.slice(low, end + 1).map(line => line.raw.trim()).join(" ") };
+    };
+
+    const reportedStubs = new Set<number>();
+    for (const rule of stubs) {
+      for (const match of raw.matchAll(new RegExp(rule.regex.source, rule.regex.flags + "g"))) {
+        // The literal message is needed, but its throw/raise/macro must be code.
+        if (code[match.index] !== raw[match.index]) continue;
+        const location = evidence(match.index, match[0].length);
+        if (reportedStubs.has(location.lineNumber)) continue;
+        reportedStubs.add(location.lineNumber);
+        infractions.push({ type: "stub-abandonment", file: file.path, ...location, commitHash, commitDate, reason: rule.name });
+      }
+    }
+
+    if (typescript) {
+      // Cast syntax can span comments/newlines. Keep one type warning per start
+      // line, as before, and never match through a missing diff hunk (NUL).
+      const reported = new Set(infractions.slice(firstFinding).filter(f => f.type === "type-escape").map(f => f.lineNumber));
+      for (const rule of CODE_TYPE_ESCAPE_PATTERNS) {
+        for (const match of code.matchAll(new RegExp(rule.regex.source, "g"))) {
+          const location = evidence(match.index, match[0].length);
+          if (reported.has(location.lineNumber)) continue;
+          reported.add(location.lineNumber);
+          infractions.push({ type: "type-escape", file: file.path, ...location, commitHash, commitDate, reason: rule.name });
         }
       }
     }
 
     if (javascript) {
-      let source = "";
-      const offsets: number[] = [];
-      for (let i = 0; i < maskedLines.length; i++) {
-        if (i) source += maskedLines[i].number === maskedLines[i - 1].number + 1 ? "\n" : "\0";
-        offsets.push(source.length);
-        source += maskedLines[i].testCode;
-      }
-      let row = 0;
-      const evidence = (index: number, length: number) => {
-        while (row + 1 < offsets.length && offsets[row + 1] <= index) row++;
-        let end = row;
-        while (end + 1 < offsets.length && offsets[end + 1] < index + length) end++;
-        return { lineNumber: maskedLines[row].number, lineSnippet: maskedLines.slice(row, end + 1).map(line => line.raw.trim()).join(" ") };
-      };
       for (const match of source.matchAll(JS_TEST_API)) {
         let previous = match.index - 1;
         while (previous >= 0 && /\s/.test(source[previous])) previous--;
@@ -248,37 +251,32 @@ export function auditFileDiffs(
         });
       }
       if (isTestFile(file.path)) {
-        row = 0;
         for (const rule of JS_TRIVIAL_ASSERT_PATTERNS) {
           for (const match of source.matchAll(new RegExp(rule.regex.source, "g"))) {
             infractions.push({ type: "trivial-assert", file: file.path, ...evidence(match.index, match[0].length), commitHash, commitDate, reason: rule.name });
           }
-          row = 0;
         }
       }
     }
 
     // Empty handlers frequently span several lines. Only contiguous added code
     // can prove emptiness; hunk gaps must not be joined into a fabricated block.
+    if (braceCatches) {
+      for (const match of code.matchAll(/(?<![\w$.])catch\s*(?:\(\s*[^()\s\0][^()\0]*\))?\s*\{\s*\}/g)) {
+        infractions.push({ type: "swallowed-error", file: file.path, ...evidence(match.index, match[0].length),
+          commitHash, commitDate, reason: match[0].includes("\n") ? "empty multi-line catch block" : "empty catch block (catch {})" });
+      }
+    }
     for (let index = 0; index < maskedLines.length; index++) {
       const start = maskedLines[index];
-      const catches = braceCatches ? [...start.code.matchAll(/(?<![\w$.])catch\s*(?:\(\s*[^)\s][^)]*\))?\s*\{/g)] : [];
-      for (const match of catches) {
-        if (/^\s*}/.test(start.code.slice(match.index + match[0].length))) {
-          infractions.push({ type: "swallowed-error", file: file.path, lineNumber: start.number, lineSnippet: start.raw.trim(), commitHash, commitDate, reason: "empty catch block (catch {})" });
-        }
-      }
-      const lastCatch = catches.at(-1);
-      const isCatch = lastCatch && /^\s*$/.test(start.code.slice(lastCatch.index + lastCatch[0].length));
       const inlineExcept = python && /^\s*except(?:\*?\s+[^:]+)?:\s*pass\s*;?\s*$/.test(start.code);
       if (inlineExcept) infractions.push({ type: "swallowed-error", file: file.path, lineNumber: start.number, lineSnippet: start.raw.trim(), commitHash, commitDate, reason: "silent python error swallow (except: pass)" });
       const isExcept = python && /^\s*except(?:\*?\s+[^:]+)?:\s*$/.test(start.code);
-      if (!isCatch && !isExcept) continue;
+      if (!isExcept) continue;
       let next = index + 1;
       while (next < maskedLines.length && maskedLines[next].number === maskedLines[next - 1].number + 1 && !maskedLines[next].code.trim()) next++;
       const end = maskedLines[next];
       if (!end || end.number !== maskedLines[next - 1].number + 1) continue;
-      const closesCatch = isCatch && /^\s*}/.test(end.code);
       let closesExcept = isExcept && /^\s*pass\s*;?\s*$/.test(end.code);
       if (closesExcept) {
         const indent = start.raw.search(/\S/);
@@ -287,10 +285,10 @@ export function auditFileDiffs(
         while (after < maskedLines.length && maskedLines[after].number === maskedLines[after - 1].number + 1 && !maskedLines[after].code.trim()) after++;
         if (after < maskedLines.length && maskedLines[after].number === maskedLines[after - 1].number + 1 && maskedLines[after].raw.search(/\S/) > indent) closesExcept = false;
       }
-      if (closesCatch || closesExcept) infractions.push({
+      if (closesExcept) infractions.push({
         type: "swallowed-error", file: file.path, lineNumber: start.number,
         lineSnippet: maskedLines.slice(index, next + 1).map(line => line.raw.trim()).join(" "),
-        commitHash, commitDate, reason: closesCatch ? "empty multi-line catch block" : "silent multi-line python error swallow",
+        commitHash, commitDate, reason: "silent multi-line python error swallow",
       });
     }
     // Detection passes share source context; preserve source order in reports.

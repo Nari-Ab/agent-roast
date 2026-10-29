@@ -1,0 +1,429 @@
+{
+  "date": "2026-10-29",
+  "method": "Exploratory hand-selected cases; counts are not accuracy measurements. The invalid Jest chaining API is excluded. Node options and template interpolation are documented remaining gaps. Native node:test fixtures validate actual skip/only behavior.",
+  "exploratory": [
+    {
+      "name": "js skip",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [
+        "test-skip"
+      ],
+      "before": [
+        "test-skip"
+      ],
+      "after": [
+        "test-skip"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "js focus",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [
+        "test-focus"
+      ],
+      "before": [
+        "test-focus"
+      ],
+      "after": [
+        "test-focus"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "node test skip option",
+      "file": "auth.test.js",
+      "category": "unsupported-options",
+      "expected": [
+        "test-skip"
+      ],
+      "before": [],
+      "after": [],
+      "matchedAfter": false
+    },
+    {
+      "name": "node test only option",
+      "file": "auth.test.js",
+      "category": "unsupported-options",
+      "expected": [
+        "test-focus"
+      ],
+      "before": [],
+      "after": [],
+      "matchedAfter": false
+    },
+    {
+      "name": "jest table",
+      "file": "auth.test.ts",
+      "category": "invalid-framework-api-excluded",
+      "expected": [
+        "test-focus"
+      ],
+      "before": [],
+      "after": [],
+      "matchedAfter": false
+    },
+    {
+      "name": "jest todo",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [
+        "test-skip"
+      ],
+      "before": [
+        "test-skip"
+      ],
+      "after": [
+        "test-skip"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "js fake assert",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [
+        "trivial-assert"
+      ],
+      "before": [
+        "trivial-assert"
+      ],
+      "after": [
+        "trivial-assert"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "js clean assert",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "js multiline throw",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [
+        "stub-abandonment"
+      ],
+      "before": [],
+      "after": [
+        "stub-abandonment"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "js template throw",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [
+        "stub-abandonment"
+      ],
+      "before": [],
+      "after": [
+        "stub-abandonment"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "ts multiline assertion",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [
+        "type-escape"
+      ],
+      "before": [],
+      "after": [
+        "type-escape"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "ts generic any identifier",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "js multiline empty handler",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [
+        "swallowed-error"
+      ],
+      "before": [],
+      "after": [
+        "swallowed-error"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "js nonempty handler",
+      "file": "payment.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "py skip",
+      "file": "test_auth.py",
+      "category": "in-scope",
+      "expected": [
+        "test-skip"
+      ],
+      "before": [
+        "test-skip"
+      ],
+      "after": [
+        "test-skip"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "py conditional skip false",
+      "file": "test_auth.py",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "py raw docstring",
+      "file": "test_auth.py",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "py floor division then skip",
+      "file": "test_auth.py",
+      "category": "in-scope",
+      "expected": [
+        "test-skip"
+      ],
+      "before": [
+        "test-skip"
+      ],
+      "after": [
+        "test-skip"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "py except pass",
+      "file": "auth.py",
+      "category": "in-scope",
+      "expected": [
+        "swallowed-error"
+      ],
+      "before": [
+        "swallowed-error"
+      ],
+      "after": [
+        "swallowed-error"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "py except handled",
+      "file": "auth.py",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "rust todo",
+      "file": "payment.rs",
+      "category": "in-scope",
+      "expected": [
+        "stub-abandonment"
+      ],
+      "before": [
+        "stub-abandonment"
+      ],
+      "after": [
+        "stub-abandonment"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "rust raw string example",
+      "file": "payment.rs",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "java empty handler",
+      "file": "Payment.java",
+      "category": "in-scope",
+      "expected": [
+        "swallowed-error"
+      ],
+      "before": [
+        "swallowed-error"
+      ],
+      "after": [
+        "swallowed-error"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "java multiline empty handler",
+      "file": "Payment.java",
+      "category": "in-scope",
+      "expected": [
+        "swallowed-error"
+      ],
+      "before": [],
+      "after": [
+        "swallowed-error"
+      ],
+      "matchedAfter": true
+    },
+    {
+      "name": "go raw literal",
+      "file": "payment.go",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "ruby ordinary string",
+      "file": "payment.rb",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS regexp after return",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS regexp after arrow",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [
+        "test-focus"
+      ],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS regexp after if",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [
+        "test-focus"
+      ],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS regexp after throw",
+      "file": "auth.test.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [
+        "test-focus"
+      ],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "TS literal import alias",
+      "file": "model.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS string with directives",
+      "file": "model.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS normal todo error",
+      "file": "todo.ts",
+      "category": "in-scope",
+      "expected": [],
+      "before": [
+        "stub-abandonment"
+      ],
+      "after": [],
+      "matchedAfter": true
+    },
+    {
+      "name": "JS error in nested template",
+      "file": "payment.ts",
+      "category": "known-template-interpolation-limit",
+      "expected": [
+        "type-escape"
+      ],
+      "before": [],
+      "after": [],
+      "matchedAfter": false
+    }
+  ],
+  "native": [
+    {
+      "name": "Node test options.skip",
+      "source": "import {test} from 'node:test';\ntest('skipped integration', {skip: true}, () => { throw new Error('must not execute'); });\ntest('active', () => {});\n",
+      "runnerExit": 0,
+      "runnerSummary": [
+        "ok 1 - skipped integration # SKIP",
+        "# tests 2",
+        "# pass 1",
+        "# fail 0",
+        "# skipped 1"
+      ],
+      "analyzerFindings": []
+    },
+    {
+      "name": "Node test options.only with --test-only",
+      "source": "import {test} from 'node:test';\ntest('selected', {only: true}, () => {});\ntest('excluded', () => { throw new Error('must not execute'); });\n",
+      "runnerExit": 0,
+      "runnerSummary": [
+        "# tests 1",
+        "# pass 1",
+        "# fail 0",
+        "# skipped 0"
+      ],
+      "analyzerFindings": []
+    }
+  ]
+}

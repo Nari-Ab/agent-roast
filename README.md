@@ -278,6 +278,11 @@ The JSON schema version for context reviews is now `1.1.0`.
 The generated hook uses the locally installed CLI (`--no-install`) and blocks on configured error rules instead of scoring
 old commits. It preserves an existing pre-commit hook.
 
+`init` resolves the repository root even when run from a package/subdirectory, so
+its policy is used by `check` and its workflow can be discovered by GitHub. Outside
+a Git repository, initialization uses the supplied directory. Its output shows the
+actual destination and existing policy/hooks are preserved.
+
 ### Configure what blocks a change
 
 Create `.agentroastrc.json` (or run `npx agent-roast init`):
@@ -393,6 +398,11 @@ Rust raw strings/lifetimes and Java/Kotlin text blocks. Contiguous comments, Pyt
 docstrings and multiline empty handlers are recognized. Template interpolation, complex language syntax and context outside
 the added diff in legacy audit modes are not fully parsed. Custom test API aliases,
 computed property calls and type/import resolution are not handled. Panic loops are an observational history heuristic.
+Test registration options such as Node's `test('name', { skip: true }, fn)` and
+`{ only: true }` are currently not inspected; use explicit `.skip`/`.only` APIs and
+the runner's CI safeguards. Regexp masking is contextual, not a full JavaScript
+parser. Formatting across contiguous lines is supported for casts, empty catches
+and placeholder errors, but legacy added-line audits cannot recover missing hunks.
 The discipline score summarizes added history; it does not certify current code quality.
 `check` reports actionable findings without assigning a personality or quality score.
 History attribution is based on explicit text/identity heuristics; it does not prove
@@ -416,6 +426,9 @@ are exercised on Node 18/20/22 using `AGENT_ROAST_TEST_NODE`.
 npm ci
 npm run typecheck
 npm test
+
+# Optional end-to-end CLI checks in disposable Git repositories
+node scripts/verify-user-workflows.mjs dist/cli.js
 ```
 
 `npm test` builds the distribution first so CLI integration and bundle checks run
