@@ -374,7 +374,7 @@ const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
 
-export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number }
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number }
 
 // A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
 const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
@@ -391,7 +391,8 @@ function matchingLines(text: string, pattern: RegExp): number {
 export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
-  return { file, before: gatingTestLines(file, was), after: gatingTestLines(file, now), reusableAfter: matchingLines(now, CI_REUSABLE) };
+  const after = gatingTestLines(file, now);
+  return { file, before: gatingTestLines(file, was), after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, CI_RUNNER) : 0 };
 }
 
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
@@ -401,7 +402,9 @@ export function resolveCiTestSteps(counts: CiTestCount[], commit: string): Infra
   const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
   if (after >= before) return [];
   return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
-    .map(item => finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
+    .map(item => item.ungatedAfter > 0
+      ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)
+      : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
 }
 
 const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true/;

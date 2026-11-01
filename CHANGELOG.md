@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.10.0 — 2026-11-01
+
+Measured on 12,645 commits from 166 public repositories, then fixed. The finding: weakened
+checks are rare (about 1 in 300 test-touching commits triggers a block), usually deliberate, and
+not more frequent in AI-signed commits. This release makes the rules quieter and more accurate.
+
+- **Behavior change:** `assertion-weakened` now means an exact check replaced by a weaker one and
+  still blocks. A test that only lost assertions is the new `assertion-removed` rule, which warns:
+  most such cases were deliberate or false alarms. A policy that set `"assertion-weakened": "off"`
+  to silence lost assertions should set `"assertion-removed": "off"` instead.
+- `guard-weakened` now reports a workflow that keeps its tests but stops running on pushes and pull
+  requests, and a deleted workflow that gated changes. It no longer reports: tolerated failure on a
+  step or job added in the same change; a lint rule enforced by a namespaced twin or switched off
+  only in an override; CI restructuring that keeps test steps (multi-line run blocks, shared
+  workflows, tests moved to another workflow); or scheduled-only workflows.
+- Fewer false alarms in the assertion rules: formatter rewraps and trailing remarks are ignored;
+  Python `assert_*` helpers (mocks, numeric comparisons) count as checks; checks moved into an
+  assertion helper introduced by the same change, checks whose literals are still asserted in the
+  test, Testing Library `getBy*` presence checks, and not-null checks flipped to presence checks are
+  not reported.
+- Add `scripts/benchmark-agents.mjs` (AI-signed versus other commits, Wilson intervals,
+  per-repository comparison), a `--cli` option for benchmarking a frozen install,
+  `benchmarks/agent-corpus.tsv` (the 166 repositories and their revisions), and 76 labeled cases
+  (40 cheats, 33 harmless changes, 3 documented gaps). Method and results: `docs/benchmarks.md`.
+- The README no longer presents the tool as an AI-cheating detector: the measurements show these moves are not specific to AI.
+- The SARIF rule list and `schema.json` include `assertion-removed`.
+
+
 ## 0.9.0 — 2026-11-01
 
 - New diff-aware rules for `review` and `--staged` that catch changes which make a project

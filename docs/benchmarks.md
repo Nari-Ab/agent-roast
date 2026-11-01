@@ -1,77 +1,202 @@
 # Benchmarks
 
-Two measurements back the claims about the diff-aware rules (`assertion-weakened`,
-`test-removed`, `expectation-rewritten`, `guard-weakened`). Neither is an accuracy
-guarantee; both are reproducible.
+What is measured: how well the diff-aware rules (`assertion-weakened`, `assertion-removed`,
+`test-removed`, `expectation-rewritten`, `guard-weakened`) separate changes that make a project
+easier to pass from changes that do not, and whether AI-signed commits trigger them more often
+than other commits. Everything here is reproducible, and none of it is an accuracy guarantee.
 
-## 1. Labeled changes (recall and controls)
+**Summary.** Weakened checks are rare (about 1 in 300 test- or CI-touching commits triggers a
+block), usually deliberate and explained, and not more frequent in AI-signed commits. About one
+finding in five is a false alarm. Most of the rest are decisions a reviewer should see.
 
-`benchmarks/cases.mjs` holds before/after changes with the rule that must fire, `null` for
-changes that must stay silent, and `miss` for gaps that are documented rather than hidden.
-`scripts/benchmark-recall.mjs` builds a throwaway Git repository per case and runs the built CLI.
+| Measurement | Result |
+| --- | --- |
+| Labeled regression cases | 40/40 cheats caught, 33/33 harmless changes left alone, 3 documented gaps open |
+| Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
+| 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
+| Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
+| Hand labels on unseen repositories | blocking: 2 unexplained, 7 deliberate, 2 false alarms (n=11) |
+
+## 1. Labeled changes (regression cases)
+
+`benchmarks/cases.mjs` holds before/after changes with the rule that must fire, `null` for changes
+that must stay silent, and `miss` for gaps that are documented rather than hidden.
+`scripts/benchmark-recall.mjs` builds a throwaway Git repository per case and runs the built CLI;
 `tests/benchmark.test.ts` runs the same cases in the test suite.
 
 ```bash
 npm run build && npm run bench
 ```
 
-Result at 0.9.0: **32/32 cheats caught, 15/15 harmless changes left alone, 3/3 documented gaps
-still open.** The cases were written together with the detector. They protect against regressions
-and show what is covered; they say nothing about cheats nobody thought to write down.
+Result: **40/40 cheats caught, 33/33 harmless changes left alone, 3/3 documented gaps still
+open.** The cases were written together with the detector, and many were added after a real
+false alarm. They protect against regressions and show what is covered; they say nothing about
+cheats nobody thought to write down. Open gaps: mocking the module under test, hardcoding the
+tested value in production code, and vacuous matchers such as `expect.anything()`.
 
-Open gaps: mocking the module under test, hardcoding the tested value in production code, and
-vacuous matchers such as `expect.anything()`.
+## 2. Five mature open-source projects
 
-## 2. Noise on real human history
-
-`scripts/benchmark-noise.mjs` runs `review` over the last N first-parent commits of each repository
-(only commits that touch tests or CI/config are reviewed) and counts findings. Git history is only
+`scripts/benchmark-noise.mjs` runs `review` over the newest 300 first-parent commits of each
+repository and counts findings on the commits that touch tests or CI/config. Git history is only
 read; project code is never executed.
 
-```bash
-git clone --depth 600 https://github.com/<owner>/<repo>.git
-npm run build && npm run bench:noise -- ./repo --commits 300
-```
+| Repository | Revision at clone | Commits touching tests/config |
+| --- | --- | ---: |
+| tj/commander.js | `ba6d13ddb4` | 134 |
+| sindresorhus/execa | `247faa0ff0` | 59 |
+| pallets/click | `2247b35ea1` | 102 |
+| psf/requests | `3c7baaa05a` | 112 |
+| colinhacks/zod | `2554b70c3d` | 199 |
+| **Total** | | **606** |
 
-Corpus (shallow clones taken 2026-11-01), last 300 commits each:
-
-| Repository | HEAD | Relevant commits | Commits with a blocking finding |
-| --- | --- | ---: | ---: |
-| tj/commander.js | `ba6d13ddb4` | 134 | 2 |
-| sindresorhus/execa | `247faa0ff0` | 59 | 0 |
-| pallets/click | `2247b35ea1` | 102 | 1 |
-| psf/requests | `3c7baaa05a` | 112 | 2 |
-| colinhacks/zod | `2554b70c3d` | 199 | 2 |
-| **Total** | | **606** | **7 (1.2%)** |
-
-Non-blocking rules on the same 606 commits: `test-removed` 37 commits (6.1%),
-`expectation-rewritten` 17 commits (2.8%).
-
-### The seven blocking commits, read by hand
+Blocking rules fired on 3 commits (0.5%): `assertion-removed` 5 commits (0.8%), `test-removed` 37
+(6.1%), `expectation-rewritten` 17 (2.8%). Reading the blocking commits:
 
 | Commit | Finding | Verdict |
 | --- | --- | --- |
-| commander.js `3dd608610b` | fewer assertions after moving tests from Jest to `node:test` (`expect.assertions(n)` guards dropped) | deliberate migration |
-| commander.js `96c6c25113` | `noImplicitAny` and `strictNullChecks` set to `false` in a reworked `tsconfig.json` | deliberate, but strictness is lower in that config |
-| click `0e0c00324a` | `test_stderr` 10 → 6 assertions after the `mix_stderr` option was removed | deliberate rewrite |
-| requests `8bce583b95` | duplicate `u('...')` check removed when Python 2 support ended | deliberate cleanup |
-| requests `e36f34597c` | `test_header_validation` lost its `assert`; the comparison no longer does anything | **real defect** |
-| zod `6f0483671e` | assertions moved from internal `bag` values to `toJSONSchema()` output | deliberate refactor |
+| commander.js `96c6c25113` | `noImplicitAny` and `strictNullChecks` set to `false` in a reworked `tsconfig.json` | deliberate; strictness is lower in that config |
 | zod `a0898b4b7f` | `continue-on-error: true` on a publish step, with a documented reason | deliberate |
+| zod `eb1c1089f7` | release workflow moved from every push to manual dispatch behind an approval environment; its tests stay | deliberate, explained in the commit |
 
-So one of seven was a mistake and six were decisions a reviewer is right to look at. That is the
-intended behavior of a review aid, and it is also why exceptions need a reason and an expiry date.
+The five `assertion-removed` commits were a Jest to `node:test` migration, an API removal, a
+Python 2 cleanup, checks moved from internals to JSON Schema output, and one real defect: a
+refactor in `requests` (`e36f34597c`) dropped the `assert` keyword from a comparison, which left
+a statement with no effect.
 
-### What went wrong on the first runs
+## 3. AI-signed commits in public repositories
 
-The first run produced 39 blocking findings on 12 commits; the numbers above are 11 findings on
-7 commits. Causes that were fixed and are now covered by cases: `expect.assertions(n)` counted as an assertion; `black`/`prettier` rewrapping
-read as removed assertions; multi-line Python signatures cutting a test short; parametrized tests
-read as fewer assertions; CI steps split or moved to another package manager read as a removed
-test step; several assertions on one line counted once; a very long `@parametrize` decorator.
+### Method
 
-## Limits
+- **Finding repositories.** GitHub commit search for the signatures `Co-Authored-By: Claude`,
+  `Generated with Claude Code`, `Co-authored-by: Copilot`, `Co-authored-by: Cursor Agent`,
+  `Co-authored-by: Codex`, `devin-ai-integration` and `aider:` (monthly windows from March to
+  October 2026 for Claude, the whole range for the others, up to 300 hits per query). The hits were
+  grouped by repository.
+- **Choosing repositories.** Public, not a fork, not archived, under 250 MB, primarily
+  TypeScript, JavaScript, Python or Go (Java in batch 3, which the detectors do not parse). Three
+  disjoint batches: 1 and 2 ranked by number of Claude hits, 3 found through the non-Claude
+  signatures. Copies of the same project were removed by comparing sampled commits (three
+  repositories). The final corpus is 166 repositories in `benchmarks/agent-corpus.tsv`, with the
+  revision of each at the time of cloning.
+- **Cloning.** Shallow (`--depth 1500`), without hooks or LFS files; nothing from these repositories
+  is executed.
+- **Marking commits.** A commit is AI-signed when its message or its author/committer identity
+  carries one of the signatures of Claude, Copilot, Cursor, Codex, Devin, aider or Gemini. Everything
+  else is "other".
+- **Sampling.** From the newest 1,500 non-merge commits of each repository, only commits that touch
+  tests or CI/config files, then a seeded random sample per repository (batch 1: up to 120 AI-signed
+  and 150 other; batches 2 and 3: up to 50 and 50).
+- **Reviewing.** `review` of each commit against its parent, with the packed npm package installed in
+  a separate folder so that a rebuild cannot change a run in progress.
+- **Statistics.** Wilson 95% intervals for rates; Mantel-Haenszel odds ratio over repositories that
+  have both kinds of commits.
 
-- Human history, five projects, JS/TS and Python mostly. No real AI-agent pull requests yet.
-- Text and structure only: no type information, no execution, no dataflow.
-- No Go project is in the real-history sample; Go support rests on labeled cases only.
+### Results
+
+All three batches, shipped build, duplicates removed.
+
+| | AI-signed | Other |
+| --- | ---: | ---: |
+| Repositories | 160 | 141 |
+| Commits reviewed | 6,895 | 5,750 |
+| Blocking rules | 20 (0.3%, 0.2-0.4%) | 16 (0.3%, 0.2-0.5%) |
+| `assertion-weakened` | 5 (0.1%) | 7 (0.1%) |
+| `guard-weakened` | 15 (0.2%) | 9 (0.2%) |
+| `assertion-removed` (warns) | 165 (2.4%) | 124 (2.2%) |
+| `test-removed` (warns) | 1,062 (15.4%) | 730 (12.7%) |
+| `expectation-rewritten` (warns) | 396 (5.7%) | 315 (5.5%) |
+| `test-skip` | 116 (1.7%) | 71 (1.2%) |
+| `trivial-assert` | 10 (0.1%) | 5 (0.1%) |
+
+Inside the same repository, over the 135 repositories that have both kinds: Mantel-Haenszel odds
+ratio **0.81 (95% CI 0.40-1.67)** for a blocking finding in an AI-signed commit versus another
+commit. Of the 91 repositories with at least 10 reviewed commits of each kind, the AI-signed rate
+was higher in 12, lower in 10 and equal in 69. Batch 3, which the detector had not seen before the
+last round of fixes, gives the same picture (4 of 1,947 AI-signed commits versus 4 of 1,418 other).
+
+| Agent | AI-signed commits | Blocking | `assertion-removed` |
+| --- | ---: | ---: | ---: |
+| Claude | 5,380 | 19 (0.4%) | 122 (2.3%) |
+| Copilot | 596 | 0 | 20 (3.4%) |
+| Devin | 455 | 0 | 7 (1.5%) |
+| Codex | 238 | 1 (0.4%) | 6 (2.5%) |
+| Cursor | 170 | 0 | 9 (5.3%) |
+| aider | 50 | 0 | 1 (2.0%) |
+| Gemini | 6 | 0 | 0 |
+
+Outside Claude the samples are too small to compare agents.
+
+### Hand labels
+
+I read findings with the group (AI-signed or other) and the repository hidden, looking at the
+commit subject, an excerpt of its message and the diff of the flagged file. Each finding got one of:
+
+- **unexplained weakening:** something that was checked is no longer checked and the commit gives
+  no reason;
+- **deliberate and explained:** the behavior or configuration changed on purpose and the commit or
+  its comments say or show it (a feature removed, an API changed, a gate relaxed with a stated plan);
+- **unclear:** I could not tell from the diff;
+- **false alarm:** the checks were in fact kept (moved, merged into a stronger one, extracted into a
+  helper) or the finding was wrong.
+
+Labels are one reader's opinion, not independently verified; the reader was the AI assistant that
+developed this release.
+
+| Round | Build | Findings | Unexplained | Deliberate | Unclear | False alarm |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1, used to fix the detector | 0.9.0 | 60 | 6 | 30 | 5 | 19 |
+| 2, used to fix the detector | candidate | 16 | 2 | 5 | 0 | 9 |
+| 3a, unseen repositories, blocking | candidate | 11 | 2 | 7 | 0 | 2 |
+| 3b, unseen repositories, `assertion-removed` | candidate | 24 | 1 | 12 | 6 | 5 |
+
+Round 3 is the only out-of-sample number: **11 blocking findings, 2 unexplained (both TypeScript
+strictness switched off in commits titled "Changes", from unsigned commits), 7 deliberate, 2 false
+alarms.** By group over all rounds, an unexplained weakening was found in 6 of 73 AI-signed findings
+and 5 of 38 others; the samples are small and partly used for tuning, so this shows no difference
+rather than a difference in either direction.
+
+Re-running the shipped build on all 111 labeled commits: all 11 unexplained weakenings are still
+reported (5 as blocking, 6 as warnings), and of 35 false alarms 11 disappeared, 22 are warnings and
+2 still block.
+
+### What changed because of the labels
+
+False alarms found by reading were fixed one class at a time and each became a regression case:
+Python mock and numeric `assert_*` helpers not counted as checks; a call inside `assert` treated
+as a truthiness check; a trailing remark treated as part of the assertion; several checks merged
+into one stronger assertion; `toBeNull()` flipped to `toBeTruthy()` read as weaker; the count of test
+steps in CI (multi-line run blocks, shared workflows, a lint command with a `.test/` path, tests
+moved between workflows, deleted scheduled workflows); `continue-on-error` on a step added in the
+same change; a base lint rule replaced by its `typescript-eslint` twin or switched off only in an
+override; checks moved into an assertion helper; Testing Library `getBy*` queries that throw.
+The first round also showed that a lost assertion is mostly a deliberate change, so
+`assertion-removed` was split out of `assertion-weakened` and only warns.
+
+### Limits
+
+- A signature shows that a tool was involved, not how much. Unsigned AI help in the "other" group
+  would hide a difference.
+- The repositories were found by searching for those signatures, so many are small personal projects,
+  and most signatures are Claude's.
+- This measures what was committed, not what an agent tries during a session. A weakened check that
+  is noticed and fixed before the commit does not appear.
+- Text and structure only: no type information, no execution, no data flow.
+- The Go detectors rest on labeled cases; the real-history samples contain few Go projects.
+- Three fixes (assertion helpers, throwing test-library queries, scheduled-only workflows) came after
+  the last labeling round and have regression cases but no new labels. The rates above are from the
+  shipped build; the round 3 labels are from the build before those fixes.
+
+## Reproduce
+
+```bash
+npm run build
+npm run bench                                                     # labeled cases
+npm run bench:noise -- ./commander.js ./execa ./click ./requests ./zod --commits 300
+node scripts/benchmark-agents.mjs ./repo-a ./repo-b \
+  --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --out agents.json
+```
+
+`benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For
+an exact rerun, clone each with `git clone --no-tags`, then `git fetch origin <revision>` (with
+`--depth 1500`) and check it out. Search results change over time, so a fresh search will find
+different repositories.
