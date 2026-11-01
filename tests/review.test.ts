@@ -216,7 +216,8 @@ describe("context review of committed code", () => {
   it("lists blocking findings first in the current-code check as well", () => {
     write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");
     write("src/zz.test.ts", "it.skip('adds', () => {});\n"); commit();
-    const terminal = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "check", dir], { encoding: "utf8", env }).stdout;
+    // The check report colors its badges when CI is set, which splits "FAIL [rule]" with escape codes.
+    const terminal = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "check", dir], { encoding: "utf8", env }).stdout.replace(/\u001b\[[0-9;]*m/g, "");
     expect(terminal).toContain("BLOCKED: test-skip");
     expect(terminal.indexOf("FAIL [test-skip]")).toBeGreaterThan(-1);
     expect(terminal.indexOf("FAIL [test-skip]")).toBeLessThan(terminal.indexOf("WARN [type-escape]"));
