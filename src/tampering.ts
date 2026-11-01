@@ -157,6 +157,21 @@ function splitStatements(text: string): string[] {
   return pieces.map(piece => piece.trim()).filter(Boolean);
 }
 
+/** Drop a trailing `# note` or `// note`, so adding or removing a remark does not change the assertion. */
+function stripTrailingComment(line: string, language: Language): string {
+  const marker = language === "py" ? "#" : "//";
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (line.startsWith(marker, i) && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i).trimEnd();
+  }
+  return line;
+}
+
 /** `, () => { expect(a)` on a one-line test: drop the callback header from the statement. */
 const CALLBACK_HEADER = /^[,\s]*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{\s*|^[,\s]*(?:async\s+)?function\s*\w*\s*\([^)]*\)\s*\{\s*/;
 
@@ -164,7 +179,7 @@ function parseTests(text: string, language: Language): TestInfo[] {
   const assertionPattern = language === "js" ? JS_ASSERTION : language === "py" ? PY_ASSERTION : GO_ASSERTION;
   const seen = new Map<string, number>();
   return testBodies(text, language).map(test => {
-    const body = test.body.split("\n");
+    const body = test.body.split("\n").map(line => language === "go" ? line : stripTrailingComment(line, language));
     const assertions: string[] = [], raw: string[] = [], setupLines: string[] = [];
     for (let i = 0; i < body.length; i++) {
       if (!assertionPattern.test(body[i])) { setupLines.push(body[i]); continue; }
@@ -200,8 +215,11 @@ const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not
 const WEAK_PY = /^\s*assert\s+[\w.\[\]]+\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
 const PY_SPECIFIC = /==|!=|<=|>=|\bin\b|\bis\b|\bisinstance\s*\(|\.startswith\s*\(|\.endswith\s*\(|\bcallable\s*\(/;
 
+// Only an exact check can be weakened: `toBeNull()` becoming `toBeTruthy()` is a flipped expectation, not a looser one.
+const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toContainEqual|toMatch|toMatchObject|toHaveProperty|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveTextContent|toHaveAttribute|toHaveValue|toThrow\w*|toBeGreaterThan\w*|toBeLessThan\w*)\s*\(/;
+
 function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
-  if (language === "js") return WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion);
+  if (language === "js") return WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion) && JS_SPECIFIC.test(oldAssertion);
   if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion) && PY_SPECIFIC.test(oldAssertion);
   return false;
 }
@@ -338,12 +356,39 @@ const THRESHOLD_PATTERNS: RegExp[] = [
 
 const SWITCHES = ["strict", "noImplicitAny", "strictNullChecks", "noImplicitReturns", "useUnknownInCatchVariables"];
 
-// A run step that mentions a test/unit target (not merely a path such as `.test/src/`), a bare test runner, or a
-// call to a shared workflow: a split, a package-manager swap or a move to a reusable workflow keeps the count.
-const TESTISH = String.raw`(?<![\w./])(?:tests?|unit|e2e|pytest|vitest|jest|mocha|ava|tap|tox|nox|spec)(?![\w/])`;
-const TEST_COMMAND = new RegExp(
-  String.raw`\brun:.*${TESTISH}|^\s*-?\s*(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make)\s+(?:run\s+)?(?:\w+\s+)?tests?\b` +
-  String.raw`|^\s*-?\s*(?:python\s+-m\s+)?(?:pytest|vitest|jest|mocha|tox|nox)\b|^\s*-?\s*uses:\s*\S*\.github/workflows/\S+`);
+// A line that runs a known test runner, wherever it sits in the step (single-line `run:` or a multi-line block),
+// or a `run:` that names a test/unit/e2e target. Paths such as `.test/src/` are not test steps.
+const CI_RUNNER = new RegExp(
+  String.raw`(?<![\w./-])(?:pytest|vitest|jest|mocha|tox|nox)(?![\w/-])` +
+  String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make|dotnet|flutter)\s+(?:run\s+)?(?:-\S+\s+)*test(?![\w/])` +
+  String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
+const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
+// A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
+const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
+
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number }
+
+function matchingLines(text: string, pattern: RegExp): number {
+  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
+}
+
+/** Test-step counts for one changed CI file; null when it is not a CI file. */
+export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
+  if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
+  const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
+  return { file, before: matchingLines(was, CI_RUNNER), after: matchingLines(now, CI_RUNNER), reusableAfter: matchingLines(now, CI_REUSABLE) };
+}
+
+/** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
+ * moving them to another workflow, or to a shared one, is not removal. */
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string): Infraction[] {
+  const before = counts.reduce((sum, item) => sum + item.before, 0);
+  const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
+  if (after >= before) return [];
+  return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
+    .map(item => finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
+}
+
 const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true/;
 
 /** Tolerated-failure markers per enclosing step or job, keyed by that step's own line. */
@@ -391,16 +436,25 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
     }
   }
   if (/eslint/i.test(file)) {
-    const rules = (text: string) => new Map([...text.matchAll(/["']([@\w/.-]+)["']\s*:\s*(?:\[\s*)?["']?(error|warn|off|[012])["']?/g)]
-      .map(match => [match[1], { level: severityOf(match[2]), index: match.index ?? 0 }] as const));
-    const before = rules(oldText);
-    for (const [name, now] of rules(newText)) {
+    // Highest level per rule: an override that switches a rule off for some files does not downgrade it.
+    const rules = (text: string) => {
+      const found = new Map<string, { level: number; index: number }>();
+      for (const match of text.matchAll(/["']([@\w/.-]+)["']\s*:\s*(?:\[\s*)?["']?(error|warn|off|[012])["']?/g)) {
+        const level = severityOf(match[2]);
+        const known = found.get(match[1]);
+        if (!known || level > known.level) found.set(match[1], { level, index: match.index ?? 0 });
+      }
+      return found;
+    };
+    const before = rules(oldText), after = rules(newText);
+    for (const [name, now] of after) {
       const previous = before.get(name);
-      if (previous && previous.level === 2 && now.level < 2) add(now.index, `${name}: error → ${now.level ? "warn" : "off"}`, "Lint rule downgraded");
+      // `no-restricted-imports` handed over to `@typescript-eslint/no-restricted-imports` is still enforced.
+      const replaced = [...after].some(([other, setting]) => other !== name && other.endsWith(`/${name}`) && setting.level === 2);
+      if (previous && previous.level === 2 && now.level < 2 && !replaced) add(now.index, `${name}: error → ${now.level ? "warn" : "off"}`, "Lint rule downgraded");
     }
   }
-  if (/(?:\.github\/workflows\/|\.gitlab-ci)/.test(file)) {
-    const count = (text: string, pattern: RegExp) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
+  if (CI_FILE.test(file)) {
     // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
     // same change is a new best-effort check, not a weakened one.
     const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).map(line => line.trim()));
@@ -409,9 +463,6 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
         out.push(finding("guard-weakened", file, now.line, "continue-on-error: true", "CI step is now allowed to fail", commit));
         break;
       }
-    }
-    if (count(newText, TEST_COMMAND) < count(oldText, TEST_COMMAND)) {
-      add(0, "test command no longer runs in CI", "Test step removed from CI");
     }
   }
   if (/(?:^|\/)package\.json$/i.test(file)) {

@@ -1,8 +1,8 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
-import { analyzeGuardFile, analyzeTestFile, isGuardFile, resolveTampering } from "./tampering.js";
-import type { FileTampering } from "./tampering.js";
+import { analyzeGuardFile, analyzeTestFile, ciTestSteps, isGuardFile, resolveCiTestSteps, resolveTampering } from "./tampering.js";
+import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
 import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot } from "./snapshot.js";
@@ -72,6 +72,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
   let totalBytes = 0;
   const tamperingFiles: FileTampering[] = [];
   const guardFindings: Infraction[] = [];
+  const ciCounts: CiTestCount[] = [];
   let productionChanged = false;
   const readText = async (mode: string, oid: string): Promise<string | null> => {
     if (mode === "000000") return null;
@@ -94,6 +95,8 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
         const oldText = await readText(change.oldMode, change.oldOid);
         const newText = await readText(change.newMode, change.newOid);
         guardFindings.push(...analyzeGuardFile(change.newPath, oldText, newText, refs.headSha));
+        const ci = ciTestSteps(change.newPath, oldText, newText);
+        if (ci) ciCounts.push(ci);
         result.filesInspected++;
       } catch (error) {
         assertNotAborted(options.signal);
@@ -150,7 +153,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
   await staged?.verify();
   result.complete = result.skippedFiles.length === 0;
   const rules = policy.config.rules ?? {};
-  result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings].filter(finding => rules[finding.type] !== "off"));
+  result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings, ...resolveCiTestSteps(ciCounts, refs.headSha)].filter(finding => rules[finding.type] !== "off"));
   const exceptions = applyExceptions(result.infractions, options.ignoreExceptions ? [] : policy.config.exceptions, new Date(), existingCounts);
   result.infractions = exceptions.findings;
   result.suppressedFindings = exceptions.suppressedFindings;
