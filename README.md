@@ -46,22 +46,24 @@ cannot switch the rules off for itself.
 
 ### How well does it work?
 
-Measured, not promised (`npm run build`, then `npm run bench` and `npm run bench:noise`):
+Measured, not promised (`npm run build`, then `npm run bench` and `npm run bench:noise`;
+method and raw numbers are in [docs/benchmarks.md](docs/benchmarks.md)):
 
-- **Labeled changes** (`benchmarks/cases.mjs`): 29 cheating edits across JS/TS, Python, Go
-  and CI/config files are caught, and 14 harmless look-alikes (reformat, rename, move,
-  parametrize, raised thresholds, CI step split) stay silent. These were written together
-  with the detector, so they guard against regressions; they do not prove accuracy.
-  Three known gaps are listed in the file and still open: mocking the module under test,
-  hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
-- **Noise on real human history** (last 300 commits each of commander.js, execa, click,
-  requests, zod; 606 commits touched tests or CI/config): the two blocking rules fired on
-  about 1% of those commits. I read each of them: one was a real defect (a refactor in
-  `requests` dropped the `assert` keyword, leaving a comparison with no effect), the rest
-  were test rewrites or config changes a reviewer should look at but that were deliberate,
-  such as a framework migration or a documented `continue-on-error`.
-  `test-removed` fired on 6.1% and `expectation-rewritten` on 3.1% of such commits, which
-  is why they only report.
+- **Labeled changes** (`benchmarks/cases.mjs`): 32 cheating edits across JS/TS, Python, Go
+  and CI/config files are caught, and 15 harmless look-alikes (reformat, rename, move,
+  parametrize, snapshot, raised thresholds, CI step split) stay silent. The cases were
+  written together with the detector, so they guard against regressions; they do not prove
+  accuracy. Three known gaps are listed in the file and still open: mocking the module
+  under test, hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
+- **Noise on real human history** (the last 300 commits of commander.js, execa, click,
+  requests and zod; 606 of them touched tests or CI/config): the two blocking rules fired on
+  7 commits (1.2%). Each was read by hand: one was a real defect (a refactor in `requests`
+  dropped the `assert` keyword, leaving a comparison with no effect); the other six were
+  deliberate rewrites a reviewer should still see, such as a test-framework migration,
+  dropping Python 2, or a documented `continue-on-error`. `test-removed` fired on 6.1% and
+  `expectation-rewritten` on 2.8% of those commits, which is why they only report.
+- **Not measured yet:** accuracy on real AI-agent pull requests. The sample above is human
+  history, and it is small. Treat the numbers as a floor for noise, not a guarantee.
 
 It is a **review aid**. It cannot prove who wrote a change or that code is correct, and it
 reads text, not program semantics. A green result is not a quality certificate.
@@ -143,12 +145,12 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-Install 0.8.1: `npx agent-roast@0.8.1 review --base origin/main`. For local development,
+Install 0.9.0: `npx agent-roast@0.9.0 review --base origin/main`. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Precise exceptions (since 0.8.0)
 
-Use `npx agent-roast@0.8.1 check --format json`, or build this checkout with
+Use `npx agent-roast@0.9.0 check --format json`, or build this checkout with
 `npm run build` and run `node dist/cli.js`.
 
 Some skipped integrations or abstract stubs are intentional. In 0.8.0 you can accept
@@ -384,7 +386,7 @@ jobs:
 
 To pilot the Action without blocking on findings, set `advisory: true`. It passes
 an explicit empty fail-on list; invalid configuration, Git errors and incomplete
-scans still fail. The `v1` Action installs 0.8.1. The CLI equivalent is `--fail-on ''`.
+scans still fail. The `v1` Action installs 0.9.0. The CLI equivalent is `--fail-on ''`.
 
 > **Security Note:** `agent-roast` runs in an isolated runner directory (`$RUNNER_TEMP`) with `--ignore-scripts` to neutralize malicious `.npmrc` files in untrusted pull requests. `pull_request_target` is not supported.
 
@@ -472,7 +474,7 @@ node scripts/verify-user-workflows.mjs dist/cli.js
 against current code. Regression tests use disposable Git repositories. The programmatic
 `auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
 use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
-The composite Action installs exactly 0.8.1. For local development, use
+The composite Action installs exactly 0.9.0. For local development, use
 `node dist/cli.js --staged` after building.
 
 ### Author & Support

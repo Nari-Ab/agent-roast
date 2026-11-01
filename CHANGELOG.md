@@ -1,19 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-11-01
 
-- Add diff-aware rules that catch changes which make a project easier to pass without
-  making it more correct: `assertion-weakened`, `test-removed`, `expectation-rewritten`
-  and `guard-weakened` (coverage thresholds, compiler strictness, lint severity, CI
-  tolerance, always-passing test scripts). They run in `review` and `--staged`.
-- Normalize quotes, whitespace and trailing commas and treat whole statements as one
-  assertion so prettier/black rewraps are not reported. Recognize renamed, moved and
-  parametrized tests. Python tests with multi-line signatures are parsed correctly.
-- `assertion-weakened` and `guard-weakened` join the default blocking set.
-- Add `benchmarks/cases.mjs` (29 cheats, 14 controls, 3 documented gaps),
-  `scripts/benchmark-recall.mjs` and `scripts/benchmark-noise.mjs`.
-- Remove unreferenced launch assets (audio/video, GIF render scripts, Product Hunt kit)
-  and the `gifenc` and `@napi-rs/canvas` dev dependencies.
+- New diff-aware rules for `review` and `--staged` that catch changes which make a project
+  easier to pass without making it more correct:
+  - `assertion-weakened`: a test loses assertions, or an exact check becomes a weaker one.
+  - `test-removed`: a test, or a whole test file, disappears (renames and moves are not reported).
+  - `expectation-rewritten`: an expected value changes while the inputs stay the same and
+    production code changed in the same review.
+  - `guard-weakened`: lower coverage thresholds, compiler strictness switched off, lint rules
+    downgraded, CI steps allowed to fail or no longer running tests, test scripts that cannot fail.
+- **Behavior change:** `assertion-weakened` and `guard-weakened` block by default, like
+  `test-skip`. To relax, set `"rules": { "assertion-weakened": "warn" }` (or `"off"`) in the
+  trusted policy. `test-removed` and `expectation-rewritten` report without blocking.
+- Comparison is statement-based and formatter-safe: quote style, wrapping and trailing commas are
+  ignored; moved, renamed, parametrized and snapshot-folded tests are not reported. Parsing is
+  bounded by the next test's start, so work stays linear on very large or malformed test files.
+- Add `benchmarks/cases.mjs` (32 cheats, 15 controls, 3 documented gaps),
+  `scripts/benchmark-recall.mjs` and `scripts/benchmark-noise.mjs`, and document the method and
+  results in `docs/benchmarks.md`. On 606 test/config commits of five open-source projects the
+  blocking rules fired on 7 (1.2%); each was read by hand.
+- The SARIF rule list and `schema.json` include the new rules.
+- Remove unreferenced launch assets (audio/video, GIF render scripts, Product Hunt kit, the old
+  site video page) and the `gifenc` and `@napi-rs/canvas` dev dependencies.
+- Update the composite Action to install exactly 0.9.0, and the site and README to match.
 
 ## 0.8.1 — 2026-10-29
 

@@ -1,7 +1,7 @@
 {
   "name": "agent-roast",
-  "version": "0.8.1",
-  "description": "Offline code checks for skipped tests, swallowed errors, unfinished stubs and AI coding shortcuts",
+  "version": "0.9.0",
+  "description": "Offline review for AI-assisted changes: catches weakened tests, lowered quality gates, skipped tests and swallowed errors",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -27,11 +27,15 @@
   "keywords": [
     "ai",
     "agents",
-    "cursor",
+    "ai-agents",
     "claude-code",
-    "roast",
+    "cursor",
+    "codex",
+    "code-review",
+    "test-quality",
+    "ci",
+    "sarif",
     "git",
-    "code-quality",
     "cli"
   ],
   "author": "Nari-Ab",
