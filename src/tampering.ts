@@ -218,8 +218,11 @@ const PY_SPECIFIC = /==|!=|<=|>=|\bin\b|\bis\b|\bisinstance\s*\(|\.startswith\s*
 // Only an exact check can be weakened: `toBeNull()` becoming `toBeTruthy()` is a flipped expectation, not a looser one.
 const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toContainEqual|toMatch|toMatchObject|toHaveProperty|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveTextContent|toHaveAttribute|toHaveValue|toThrow\w*|toBeGreaterThan\w*|toBeLessThan\w*)\s*\(/;
 
+// Testing Library's getBy*/findBy* queries throw when nothing matches, so `toBeTruthy()` on one is still a presence check.
+const THROWING_QUERY = /\b(?:get|find)(?:All)?By\w*\s*\(/;
+
 function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
-  if (language === "js") return WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion) && JS_SPECIFIC.test(oldAssertion);
+  if (language === "js") return !THROWING_QUERY.test(newAssertion) && WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion) && JS_SPECIFIC.test(oldAssertion);
   if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion) && PY_SPECIFIC.test(oldAssertion);
   return false;
 }
@@ -236,6 +239,9 @@ function literalTokens(statement: string): string[] {
   }
   return [...tokens];
 }
+
+/** A call to an assertion helper: `expectCheckout(...)`, `assertShape(...)`, `_assert_ok(...)`, `requireBody(...)`. */
+const HELPER_CALL = /(?<![\w$])((?:expect|assert|verify|check|require)[A-Z]\w*|_{0,2}(?:assert|check|verify|expect|require)_\w+)\s*\(/g;
 
 function finding(type: DetectorType, file: string, line: number, snippet: string, reason: string, commit: string): Infraction {
   return { type, file, lineNumber: Math.max(1, line), lineSnippet: snippet, commitHash: commit, commitDate: "", reason, suggestion: RULE_GUIDES[type].suggestion };
@@ -276,6 +282,8 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
     const snapshot = (test: TestInfo) => test.raw.some(statement => /\.toMatch(?:Inline)?Snapshot\b|\.matchSnapshot\b|\bsnapshot\s*\(/.test(statement));
     if (snapshot(current) && !snapshot(old)) continue;
     if (current.assertions.length < old.assertions.length) {
+      // The checks moved into an assertion helper that this change introduces: they are still made, just not here.
+      if ([...current.text.matchAll(HELPER_CALL)].some(call => !(oldText ?? "").includes(call[1]))) continue;
       // A check that left this test is not lost when the same text was added elsewhere in the file, or when
       // every literal it pinned down (a title, a path, a message) is still asserted in this test or in a new one.
       const budget = tally([current]);
