@@ -215,7 +215,7 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
     lines.push(pc.bold(`  INFRACTIONS DETECTED (${result.infractions.length})`));
     lines.push(pc.dim("  ──────────────────────────────────────────────────────────"));
 
-    for (const inf of result.infractions) {
+    for (const inf of mostImportantFirst(result.infractions, result.failedRules)) {
       const isFailedRule = result.failedRules.includes(inf.type);
       const badge = isFailedRule ? pc.red("FAIL") : pc.yellow("WARN");
       const loc = `${inf.file || "unknown"}:${inf.lineNumber || 1}`;
@@ -242,18 +242,32 @@ export function formatPrTerminalCard(result: import("./types.js").PrAuditResult)
   return lines.join("\n");
 }
 
+// Before/after rules and the default blocking shortcuts carry the signal; the line patterns are noisier.
+const RULE_PRIORITY: Partial<Record<string, number>> = {
+  "assertion-weakened": 0, "guard-weakened": 0, "test-skip": 0, "test-focus": 0, "trivial-assert": 0,
+  "assertion-removed": 1, "expectation-rewritten": 1, "test-removed": 1,
+};
+
+/** Rules that failed the run first (even in advisory mode, where none do), then by priority. */
+function findingRank(type: string, failedRules: readonly string[]): number {
+  return failedRules.includes(type) ? -1 : RULE_PRIORITY[type] ?? 2;
+}
+
+/**
+ * Puts the findings that matter first, so a long list of warnings cannot push them below a
+ * display cap. The order inside each rank is unchanged.
+ */
+function mostImportantFirst<T extends { type: string }>(findings: readonly T[], failedRules: readonly string[]): T[] {
+  return [...findings].sort((a, b) => findingRank(a.type, failedRules) - findingRank(b.type, failedRules));
+}
+
 /**
  * Deterministically sorts infractions:
- * Errors first (test-skip, swallowed-error), then warnings (type-escape, panic-loop),
- * then by file ascending, then by lineNumber ascending.
+ * by importance (see findingRank), then by file ascending, then by lineNumber ascending.
  */
-function sortInfractionsDeterministic(infractions: import("./types.js").Infraction[]): import("./types.js").Infraction[] {
-  const getLevelRank = (type: string) => {
-    return type === "test-skip" || type === "trivial-assert" || type === "swallowed-error" ? 0 : 1;
-  };
-
+function sortInfractionsDeterministic(infractions: import("./types.js").Infraction[], failedRules: readonly string[]): import("./types.js").Infraction[] {
   return [...infractions].sort((a, b) => {
-    const rankDiff = getLevelRank(a.type) - getLevelRank(b.type);
+    const rankDiff = findingRank(a.type, failedRules) - findingRank(b.type, failedRules);
     if (rankDiff !== 0) return rankDiff;
 
     const fileA = a.file || "";
@@ -275,7 +289,7 @@ function escapeCommand(value: string, property = false): string {
 
 export function formatGithubAnnotations(result: Pick<import("./types.js").PrAuditResult, "infractions" | "failedRules">): string {
   const outputLines: string[] = [];
-  const sorted = sortInfractionsDeterministic(result.infractions);
+  const sorted = sortInfractionsDeterministic(result.infractions, result.failedRules);
 
   const MAX_PER_LEVEL = 10;
   let errorCount = 0;
@@ -348,7 +362,7 @@ export function formatGithubStepSummary(result: import("./types.js").PrAuditResu
     lines.push("| Type | File:Line | Description | Snippet |");
     lines.push("| --- | --- | --- | --- |");
 
-    const sorted = sortInfractionsDeterministic(result.infractions);
+    const sorted = sortInfractionsDeterministic(result.infractions, result.failedRules);
     for (const inf of sorted) {
       const loc = inf.file ? markdownCell(`${inf.file}:${inf.lineNumber || 1}`) : "history";
       const snippet = inf.lineSnippet ? markdownCell(inf.lineSnippet) : "-";
@@ -402,7 +416,7 @@ export function formatPrMarkdownComment(result: import("./types.js").PrAuditResu
     lines.push("| Type | File:Line | Description | Snippet |");
     lines.push("| :--- | :--- | :--- | :--- |");
 
-    const sorted = sortInfractionsDeterministic(result.infractions);
+    const sorted = sortInfractionsDeterministic(result.infractions, result.failedRules);
     for (const inf of sorted) {
       const loc = inf.file ? markdownCell(`${inf.file}:${inf.lineNumber || 1}`) : "history";
       const snippet = inf.lineSnippet ? markdownCell(inf.lineSnippet) : "-";
@@ -460,7 +474,7 @@ export function formatCheckTerminal(result: import("./types.js").CheckResult): s
     `  ${result.infractions.length} findings to review · ${result.baselineCount} accepted baseline findings`];
   lines.push(...exceptionTerminal(result));
   if (result.staleBaselineCount) lines.push(`  ${result.staleBaselineCount} baseline findings no longer present (or now disabled/ignored).`);
-  for (const inf of result.infractions.slice(0, 20)) {
+  for (const inf of mostImportantFirst(result.infractions, result.failedRules).slice(0, 20)) {
     lines.push("", `  ${result.failedRules.includes(inf.type) ? pc.red("FAIL") : pc.yellow("WARN")} [${inf.type}] ${terminalText(inf.file || "unknown")}:${inf.lineNumber}`, `    ${terminalText(inf.lineSnippet || inf.reason)}`);
     if (inf.suggestion) lines.push(`    Next: ${terminalText(inf.suggestion)}`);
   }
@@ -481,7 +495,7 @@ export function formatCheckMarkdown(result: import("./types.js").CheckResult): s
   const lines = [`## agent-roast current code check: ${status}`, "",
     `${result.filesInspected} files, ${result.linesInspected} lines inspected. ${result.infractions.length} findings to review; ${result.baselineCount} accepted baseline findings.`, "",
     "| Rule | Location | Finding | Next step |", "| --- | --- | --- | --- |"];
-  for (const inf of result.infractions) lines.push(`| ${inf.type} | ${markdownCell(`${inf.file}:${inf.lineNumber}`)} | ${markdownCell(inf.lineSnippet || inf.reason)} | ${markdownCell(inf.suggestion || "Review this occurrence.")} |`);
+  for (const inf of mostImportantFirst(result.infractions, result.failedRules)) lines.push(`| ${inf.type} | ${markdownCell(`${inf.file}:${inf.lineNumber}`)} | ${markdownCell(inf.lineSnippet || inf.reason)} | ${markdownCell(inf.suggestion || "Review this occurrence.")} |`);
   lines.push(...exceptionMarkdown(result));
   if (result.staleBaselineCount) lines.push("", `${result.staleBaselineCount} baseline findings no longer present (or now disabled/ignored).`);
   for (const skipped of result.skippedFiles) lines.push("", `Not scanned: ${markdownCell(skipped.file)} — ${markdownCell(skipped.reason)}`);
@@ -497,7 +511,7 @@ export function formatReviewTerminal(result: import("./types.js").ReviewResult):
   lines.push(...exceptionTerminal(result));
   if (result.policyChanges.length) lines.push("  Candidate policy changes were ignored; adopt them separately after review.");
   if (result.excludedFiles || result.unsupportedFiles) lines.push(`  ${result.excludedFiles} excluded · ${result.unsupportedFiles} unsupported/non-source changes`);
-  for (const finding of result.infractions.slice(0, 20)) {
+  for (const finding of mostImportantFirst(result.infractions, result.failedRules).slice(0, 20)) {
     lines.push("", `  ${result.failedRules.includes(finding.type) ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`,
       `    ${terminalText(finding.lineSnippet || finding.reason)}`, `    Next: ${terminalText(finding.suggestion || "Review this occurrence.")}`);
   }
@@ -515,7 +529,7 @@ export function formatReviewMarkdown(result: import("./types.js").ReviewResult):
     `**${result.infractions.length} new** · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected.`, ""];
   if (result.policyChanges.length) lines.push("Candidate policy changes were ignored. This review uses the supplied base commit's policy.", "");
   lines.push("| New finding | Head location | Evidence | Next step |", "| --- | --- | --- | --- |");
-  for (const finding of result.infractions) lines.push(`| ${finding.type} | ${markdownCell(`${finding.file}:${finding.lineNumber}`)} | ${markdownCell(finding.lineSnippet || finding.reason)} | ${markdownCell(finding.suggestion || "Review this occurrence.")} |`);
+  for (const finding of mostImportantFirst(result.infractions, result.failedRules)) lines.push(`| ${finding.type} | ${markdownCell(`${finding.file}:${finding.lineNumber}`)} | ${markdownCell(finding.lineSnippet || finding.reason)} | ${markdownCell(finding.suggestion || "Review this occurrence.")} |`);
   lines.push(...exceptionMarkdown(result));
   if (result.removedFindings.length) {
     lines.push("", "### No longer detected", "", "These patterns disappeared from the compared source. Deleting code is not proof of a behavioral fix.", "",

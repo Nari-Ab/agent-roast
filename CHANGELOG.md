@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.10.1 — 2026-11-01
+
+- Fix: a blocking finding could be hidden. The terminal report shows at most 20 findings, in file
+  order, so a change with 20 or more warnings in files that sort earlier (typically `as any` in a
+  large pull request) left a finding such as `assertion-weakened` behind "N more new findings",
+  with only the `BLOCKED` line naming the rule. Advisory runs (`--fail-on ''`) had the same
+  problem. Findings are now ordered by importance: rules that block, then the before/after rules
+  and the default blocking shortcuts, then the noisier line patterns. The markdown and GitHub
+  summary tables use the same order. JSON and SARIF output are unchanged.
+- Docs: [docs/pilot.md](docs/pilot.md) describes how to try the tool on your own repository, and
+  there is a feedback form for it.
+
 ## 0.10.0 — 2026-11-01
 
 Measured on 12,645 commits from 166 public repositories, then fixed. The finding: weakened

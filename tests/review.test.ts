@@ -190,4 +190,36 @@ describe("context review of committed code", () => {
     expect(fs.readFileSync(summary, "utf8")).toContain("1 new");
     expect(fs.readFileSync(outputs, "utf8")).toContain("complete=true");
   });
+  it("lists blocking findings before warnings so the display cap cannot hide them", () => {
+    write("src/add.ts", "export const add = (a: number, b: number) => a + b;\n");
+    write("src/zz.test.ts", "import { add } from './add';\nit('adds', () => {\n  expect(add(1, 2)).toBe(3);\n});\n"); base = commit();
+    write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");
+    write("src/zz.test.ts", "import { add } from './add';\nit('adds', () => {\n  expect(add(1, 2)).toBeDefined();\n});\n"); commit();
+    const terminal = run("--base", base).stdout;
+    expect(terminal).toContain("BLOCKED: assertion-weakened");
+    expect(terminal).toContain("FAIL [assertion-weakened] src/zz.test.ts");
+    expect(terminal.indexOf("FAIL [assertion-weakened]")).toBeLessThan(terminal.indexOf("WARN [type-escape]"));
+    expect(terminal).toContain("6 more new findings");
+    const markdown = run("--base", base, "--format", "markdown").stdout;
+    expect(markdown.indexOf("| assertion-weakened |")).toBeLessThan(markdown.indexOf("| type-escape |"));
+  });
+  it("keeps the before/after rules in view in advisory mode, where nothing fails", () => {
+    write("src/add.ts", "export const add = (a: number, b: number) => a + b;\n");
+    write("src/zz.test.ts", "import { add } from './add';\nit('adds', () => {\n  expect(add(1, 2)).toBe(3);\n});\n"); base = commit();
+    write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");
+    write("src/zz.test.ts", "import { add } from './add';\nit('adds', () => {\n  expect(add(1, 2)).toBeDefined();\n});\n"); commit();
+    const result = run("--base", base, "--fail-on", "");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("WARN [assertion-weakened] src/zz.test.ts");
+    expect(result.stdout.indexOf("WARN [assertion-weakened]")).toBeLessThan(result.stdout.indexOf("WARN [type-escape]"));
+  });
+  it("lists blocking findings first in the current-code check as well", () => {
+    write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");
+    write("src/zz.test.ts", "it.skip('adds', () => {});\n"); commit();
+    // The check report colors its badges when CI is set, which splits "FAIL [rule]" with escape codes.
+    const terminal = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "check", dir], { encoding: "utf8", env }).stdout.replace(/\u001b\[[0-9;]*m/g, "");
+    expect(terminal).toContain("BLOCKED: test-skip");
+    expect(terminal.indexOf("FAIL [test-skip]")).toBeGreaterThan(-1);
+    expect(terminal.indexOf("FAIL [test-skip]")).toBeLessThan(terminal.indexOf("WARN [type-escape]"));
+  });
 });
