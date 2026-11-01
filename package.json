@@ -20,7 +20,9 @@
     "test": "vitest run",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "node scripts/benchmark-recall.mjs",
+    "bench:noise": "node scripts/benchmark-noise.mjs"
   },
   "keywords": [
     "ai",
@@ -47,9 +49,7 @@
     "picocolors": "^1.1.0"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.0.10",
     "@types/node": "^20.0.0",
-    "gifenc": "^1.0.3",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.12"

@@ -17,36 +17,73 @@
 
 </div>
 
-`agent-roast` is an offline review aid for skipped tests, fake assertions, swallowed
-errors, unfinished stubs and type-check bypasses. Start with the code you have now;
-no AI commit tags, cloud account, API key or commit history are required for `check`.
-A Git repository is required; `git init` is sufficient.
+**Did the AI fix the code, or just make the checks pass?**
+
+Coding agents (and tired humans) often get a red build green by changing the *checks*
+instead of the *code*: deleting the failing assertion, weakening it to `toBeDefined()`,
+removing the test, lowering the coverage threshold, switching off `strict`, or letting
+CI steps fail. A linter reading the new file cannot see that, because nothing in the new
+file looks wrong. `agent-roast review` compares the **before and after** of a change and
+flags exactly these moves. It is offline, runs no project code, and needs only Git.
 
 ```bash
-# Inspect current tracked + non-ignored untracked source files
-npx agent-roast check
+npx agent-roast review --base origin/main        # a pull request
+npx agent-roast --staged                         # what you are about to commit
+```
 
-# Understand a finding and what to do next
+| Rule | Fires when | Blocks by default |
+| --- | --- | --- |
+| `assertion-weakened` | a test keeps its name but loses assertions, or an exact check becomes `toBeDefined`/`toBeTruthy`/`assert x` | yes |
+| `guard-weakened` | coverage threshold lowered, `strict`/`noImplicitAny` off, lint rule downgraded, CI step may fail or no longer runs tests, test script cannot fail | yes |
+| `test-removed` | a test (or test file) disappears and no identical body appears elsewhere | no, reported |
+| `expectation-rewritten` | an expected value changed, test inputs did not, and production code changed in the same PR | no, reported |
+| `test-skip`, `test-focus`, `trivial-assert`, `swallowed-error`, `type-escape`, `stub-abandonment` | the classic shortcuts, compared before/after so old debt does not block | skip/focus/trivial: yes |
+
+Renames, moved tests, parametrization, and formatter rewraps (prettier, black) are
+recognized and not reported. Intentional cases can be accepted one by one with an
+expiring, reviewed exception (see below). Policy is read from the base branch, so a PR
+cannot switch the rules off for itself.
+
+### How well does it work?
+
+Measured, not promised (`npm run build`, then `npm run bench` and `npm run bench:noise`):
+
+- **Labeled changes** (`benchmarks/cases.mjs`): 29 cheating edits across JS/TS, Python, Go
+  and CI/config files are caught, and 14 harmless look-alikes (reformat, rename, move,
+  parametrize, raised thresholds, CI step split) stay silent. These were written together
+  with the detector, so they guard against regressions; they do not prove accuracy.
+  Three known gaps are listed in the file and still open: mocking the module under test,
+  hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
+- **Noise on real human history** (last 300 commits each of commander.js, execa, click,
+  requests, zod; 606 commits touched tests or CI/config): the two blocking rules fired on
+  about 1% of those commits. I read each of them: one was a real defect (a refactor in
+  `requests` dropped the `assert` keyword, leaving a comparison with no effect), the rest
+  were test rewrites or config changes a reviewer should look at but that were deliberate,
+  such as a framework migration or a documented `continue-on-error`.
+  `test-removed` fired on 6.1% and `expectation-rewritten` on 3.1% of such commits, which
+  is why they only report.
+
+It is a **review aid**. It cannot prove who wrote a change or that code is correct, and it
+reads text, not program semantics. A green result is not a quality certificate.
+
+### Quick start
+
+```bash
+# Everything that is true of the code you have now
+npx agent-roast check
 npx agent-roast explain swallowed-error
 
-# Adopt it in an existing project without blocking on all historical debt
+# Adopt in an existing project without blocking on historical debt
 npx agent-roast check --write-baseline .agentroast-baseline.json
-# Review the findings and commit this policy file, then gate only new problems
 npx agent-roast check --baseline .agentroast-baseline.json
 
-# Verify precisely what you are about to commit
-npx agent-roast --staged
-
-# Audit pull request diffs (CI gate)
-npx agent-roast review --base origin/main --head HEAD --format github
-
-# Optional historical audit
+# Optional: score a repository's history
 npx agent-roast --all --verbose
 ```
 
-A finding includes its file and line, the source snippet, and a concrete next step.
-To see the complete machine-readable result, use `check --format json`; terminal
-output shows the first 20 findings. `check --format markdown` produces a review table.
+A finding includes its file and line, the evidence, and a concrete next step.
+`--format json|markdown|sarif|github` are available; terminal output shows the first
+20 findings.
 
 ### Context review for pull requests
 

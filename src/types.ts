@@ -16,7 +16,11 @@ export type DetectorType =
   | "panic-loop"
   | "trivial-assert"
   | "stub-abandonment"
-  | "test-focus";
+  | "test-focus"
+  | "assertion-weakened"
+  | "test-removed"
+  | "expectation-rewritten"
+  | "guard-weakened";
 
 export const VALID_DETECTORS: readonly DetectorType[] = [
   "test-skip",
@@ -26,6 +30,10 @@ export const VALID_DETECTORS: readonly DetectorType[] = [
   "trivial-assert",
   "stub-abandonment",
   "test-focus",
+  "assertion-weakened",
+  "test-removed",
+  "expectation-rewritten",
+  "guard-weakened",
 ] as const;
 
 export interface Infraction {

@@ -23,7 +23,7 @@ inputs:
     required: false
     default: "false"
   fail-on:
-    description: "Comma-separated detectors that trigger pipeline failure (test-skip, test-focus, type-escape, swallowed-error, trivial-assert, stub-abandonment)"
+    description: "Comma-separated detectors that trigger pipeline failure (test-skip, test-focus, type-escape, swallowed-error, trivial-assert, stub-abandonment, assertion-weakened, test-removed, expectation-rewritten, guard-weakened)"
     required: false
     default: ""
   format:

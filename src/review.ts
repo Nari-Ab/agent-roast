@@ -1,6 +1,8 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
-import { auditFileDiffs, isCodeFile } from "./metrics.js";
+import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
+import { analyzeGuardFile, analyzeTestFile, isGuardFile, resolveTampering } from "./tampering.js";
+import type { FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
 import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot } from "./snapshot.js";
@@ -53,7 +55,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
     : await reviewPolicy(cwd, refs.baseSha, options.signal);
   const format = options.format ?? "terminal";
   if (!["terminal", "json", "github", "markdown", "sarif"].includes(format)) throw new ConfigError("Unsupported review format.");
-  const failOn = options.failOn ?? policy.config.failOn ?? ["test-skip", "trivial-assert", "test-focus"];
+  const failOn = options.failOn ?? policy.config.failOn ?? ["test-skip", "trivial-assert", "test-focus", "assertion-weakened", "guard-weakened"];
   for (const rule of failOn) if (!VALID_DETECTORS.includes(rule as DetectorType)) throw new ConfigError(`Unknown review rule '${rule}'.`);
   const changes = staged?.changes ?? await changedTreeFiles(cwd, refs.mergeBaseSha, refs.headSha, options.signal);
   const policyChanges = changes.filter(change => CONFIG_FILENAMES.includes(change.oldPath) || CONFIG_FILENAMES.includes(change.newPath)).map(change => change.newPath);
@@ -68,12 +70,38 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
     failedRules: [], passed: false, exitCode: 2, output: "",
   };
   let totalBytes = 0;
+  const tamperingFiles: FileTampering[] = [];
+  const guardFindings: Infraction[] = [];
+  let productionChanged = false;
+  const readText = async (mode: string, oid: string): Promise<string | null> => {
+    if (mode === "000000") return null;
+    if (!["100644", "100755"].includes(mode)) throw new ConfigError("Changed source is a symlink, submodule or unsupported Git mode; comparison is incomplete.");
+    const content = await readBlob(cwd, oid, options.signal);
+    totalBytes += content.length;
+    if (totalBytes > MAX_SCAN_BYTES) throw new ConfigError("Review exceeds the 50 MiB source comparison limit.");
+    if (content.includes(0)) throw new ConfigError("Binary content in a source comparison.");
+    return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  };
   const existingCounts = new Map<string, number>();
   for (const change of changes) {
     assertNotAborted(options.signal);
     const oldSupported = change.oldMode !== "000000" && isCodeFile(change.oldPath);
     const newSupported = change.newMode !== "000000" && isCodeFile(change.newPath);
-    if (!oldSupported && !newSupported) { result.unsupportedFiles++; continue; }
+    if (!oldSupported && !newSupported) {
+      const guarded = (isGuardFile(change.newPath) || isGuardFile(change.oldPath)) && isCodeFile(change.newPath + ".ts", ignores);
+      if (!guarded) { result.unsupportedFiles++; continue; }
+      try {
+        const oldText = await readText(change.oldMode, change.oldOid);
+        const newText = await readText(change.newMode, change.newOid);
+        guardFindings.push(...analyzeGuardFile(change.newPath, oldText, newText, refs.headSha));
+        result.filesInspected++;
+      } catch (error) {
+        assertNotAborted(options.signal);
+        result.skippedFiles.push({ file: change.newPath, reason: error instanceof Error ? error.message : String(error) });
+        if (totalBytes > MAX_SCAN_BYTES) break;
+      }
+      continue;
+    }
     // A rename into an excluded/unsupported path is not evidence of a fix. Keep
     // old/new findings in scope if either corresponding source path is in scope.
     const oldInScope = oldSupported && isCodeFile(change.oldPath, ignores);
@@ -81,14 +109,8 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
     if (!oldInScope && !newInScope) { result.excludedFiles++; continue; }
     try {
       let inspectedLines = 0;
-      const scan = async (mode: string, oid: string, filename: string, commit: string) => {
-        if (mode === "000000") return [];
-        if (!["100644", "100755"].includes(mode)) throw new ConfigError("Changed source is a symlink, submodule or unsupported Git mode; comparison is incomplete.");
-        const content = await readBlob(cwd, oid, options.signal);
-        totalBytes += content.length;
-        if (totalBytes > MAX_SCAN_BYTES) throw new ConfigError("Review exceeds the 50 MiB source comparison limit.");
-        if (content.includes(0)) throw new ConfigError("Binary content in a source comparison.");
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+      const scan = (text: string | null, filename: string, commit: string) => {
+        if (text === null) return [];
         const lines = text.split(/\r?\n/);
         if (lines.at(-1) === "") lines.pop();
         inspectedLines += lines.length;
@@ -97,8 +119,13 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
       if (oldSupported && !newSupported && change.newMode !== "000000") {
         throw new ConfigError("Source moved to an unsupported extension; cannot claim its findings were resolved.");
       }
-      const before = await scan(change.oldMode, change.oldOid, change.oldPath, refs.mergeBaseSha);
-      const after = await scan(change.newMode, change.newOid, change.newPath, refs.headSha);
+      const oldText = await readText(change.oldMode, change.oldOid);
+      const newText = await readText(change.newMode, change.newOid);
+      const before = scan(oldText, change.oldPath, refs.mergeBaseSha);
+      const after = scan(newText, change.newPath, refs.headSha);
+      if (isTestFile(change.oldPath) || isTestFile(change.newPath)) tamperingFiles.push(analyzeTestFile(change.oldPath, change.newPath, oldText, newText, refs.headSha));
+      else if (change.oldOid !== change.newOid) productionChanged = true;
+      if ((isGuardFile(change.newPath) || isGuardFile(change.oldPath)) && oldText !== null && newText !== null) guardFindings.push(...analyzeGuardFile(change.newPath, oldText, newText, refs.headSha));
       const compared = compareFindings(before, after, change.newPath);
       const introduced = new Set(compared.introduced);
       for (const finding of after) {
@@ -122,6 +149,8 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
   assertNotAborted(options.signal);
   await staged?.verify();
   result.complete = result.skippedFiles.length === 0;
+  const rules = policy.config.rules ?? {};
+  result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings].filter(finding => rules[finding.type] !== "off"));
   const exceptions = applyExceptions(result.infractions, options.ignoreExceptions ? [] : policy.config.exceptions, new Date(), existingCounts);
   result.infractions = exceptions.findings;
   result.suppressedFindings = exceptions.suppressedFindings;

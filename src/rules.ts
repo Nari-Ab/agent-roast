@@ -45,6 +45,30 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
     suggestion: "Implement the path or make its unsupported state explicit to callers. Check whether this is an intentional abstract contract.",
     example: "throw new Error('Not implemented') → implement the operation and add a behavior test",
   },
+  "assertion-weakened": {
+    title: "Test checks less than before",
+    why: "A test that keeps its name but loses assertions, or has one replaced by a weaker check, still passes while verifying less behavior.",
+    suggestion: "Restore the removed assertion or explain in the PR why that behavior is no longer required. Fix the code under test instead of weakening its check.",
+    example: "expect(total).toBe(42) → expect(total).toBeDefined()  (restore the exact check)",
+  },
+  "test-removed": {
+    title: "Test removed",
+    why: "Deleting a failing test makes a suite green without fixing the behavior it covered. Removals are legitimate when the feature itself is gone.",
+    suggestion: "Confirm the behavior was intentionally removed. If it still exists, restore the test and fix the code.",
+    example: "it('rejects expired tokens', ...) deleted while token validation remains in src/",
+  },
+  "expectation-rewritten": {
+    title: "Expected value edited alongside production code",
+    why: "Changing an expected value while the test inputs stay the same can mean the test was adjusted to match new output instead of the output being corrected.",
+    suggestion: "Verify the new expectation against the requirement, not against the program's current output. Intentional behavior changes should say so in the PR.",
+    example: "expect(price(cart)).toBe(100) → toBe(90) with price() changed in the same PR",
+  },
+  "guard-weakened": {
+    title: "Quality gate made easier to pass",
+    why: "Lower coverage thresholds, disabled compiler strictness, downgraded lint rules, tolerated CI failures or an always-passing test script let defects through without touching the code.",
+    suggestion: "Keep the gate and fix the underlying failure. If the change is deliberate, record the reason and a plan to restore it.",
+    example: 'coverageThreshold lines: 80 → 60, "strict": true → false, continue-on-error: true',
+  },
   "panic-loop": {
     title: "Rapid overlapping fix commits",
     why: "Repeated short fix cycles can suggest a missing reproduction or feedback loop; timing alone does not prove poor work.",

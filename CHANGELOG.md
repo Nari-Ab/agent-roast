@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Add diff-aware rules that catch changes which make a project easier to pass without
+  making it more correct: `assertion-weakened`, `test-removed`, `expectation-rewritten`
+  and `guard-weakened` (coverage thresholds, compiler strictness, lint severity, CI
+  tolerance, always-passing test scripts). They run in `review` and `--staged`.
+- Normalize quotes, whitespace and trailing commas and treat whole statements as one
+  assertion so prettier/black rewraps are not reported. Recognize renamed, moved and
+  parametrized tests. Python tests with multi-line signatures are parsed correctly.
+- `assertion-weakened` and `guard-weakened` join the default blocking set.
+- Add `benchmarks/cases.mjs` (29 cheats, 14 controls, 3 documented gaps),
+  `scripts/benchmark-recall.mjs` and `scripts/benchmark-noise.mjs`.
+- Remove unreferenced launch assets (audio/video, GIF render scripts, Product Hunt kit)
+  and the `gifenc` and `@napi-rs/canvas` dev dependencies.
+
 ## 0.8.1 — 2026-10-29
 
 - Fix `init` from repository subdirectories: create effective root policy and CI

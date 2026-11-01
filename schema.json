@@ -20,7 +20,11 @@
           "panic-loop",
           "trivial-assert",
           "stub-abandonment",
-          "test-focus"
+          "test-focus",
+          "assertion-weakened",
+          "test-removed",
+          "expectation-rewritten",
+          "guard-weakened"
         ]
       }
     },
@@ -89,6 +93,34 @@
           ]
         },
         "test-focus": {
+          "enum": [
+            "error",
+            "warn",
+            "off"
+          ]
+        },
+        "assertion-weakened": {
+          "enum": [
+            "error",
+            "warn",
+            "off"
+          ]
+        },
+        "test-removed": {
+          "enum": [
+            "error",
+            "warn",
+            "off"
+          ]
+        },
+        "expectation-rewritten": {
+          "enum": [
+            "error",
+            "warn",
+            "off"
+          ]
+        },
+        "guard-weakened": {
           "enum": [
             "error",
             "warn",
