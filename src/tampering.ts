@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { isTestFile } from "./metrics.js";
+import { RULE_GUIDES } from "./rules.js";
 import type { DetectorType, Infraction } from "./types.js";
 
 /** Diff-aware detection of changes that make a project easier to pass without
@@ -201,7 +202,7 @@ function isWeaker(oldAssertion: string, newAssertion: string, language: Language
 }
 
 function finding(type: DetectorType, file: string, line: number, snippet: string, reason: string, commit: string): Infraction {
-  return { type, file, lineNumber: Math.max(1, line), lineSnippet: snippet, commitHash: commit, commitDate: "", reason };
+  return { type, file, lineNumber: Math.max(1, line), lineSnippet: snippet, commitHash: commit, commitDate: "", reason, suggestion: RULE_GUIDES[type].suggestion };
 }
 
 /** Compare a test file's behavior-checking surface before and after a change. */

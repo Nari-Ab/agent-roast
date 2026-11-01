@@ -40,6 +40,8 @@ describe("assertion-weakened", () => {
     expect(types(result)).toEqual(["assertion-weakened"]);
     expect(result.exitCode).toBe(1);
     expect(result.infractions[0]).toMatchObject({ file: "cart.test.ts", lineSnippet: "totals items: 2 → 1 assertions" });
+    expect(result.infractions[0].suggestion).toMatch(/Restore the removed assertion/);
+    expect(result.output).not.toMatch(/Review this occurrence/);
   });
   it("blocks replacing an exact check by a weaker one", async () => {
     write("cart.test.ts", SUITE); base = commit();
