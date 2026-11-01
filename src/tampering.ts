@@ -23,6 +23,8 @@ interface TestInfo {
   setup: string;
   /** Body hash that ignores the test title, so a rename or move is not a removal. */
   bodyHash: string;
+  /** Body text with whole-line comments blanked. */
+  text: string;
 }
 
 export interface RemovedTest { finding: Infraction; bodyHash: string }
@@ -63,7 +65,7 @@ const PY_TEST_START = /^\s*(?:async\s+)?def\s+(test\w*)\s*\(/;
 const GO_TEST_START = /^func\s+(Test\w+)\s*\(/;
 
 const JS_ASSERTION = /(?<![\w$.])(?:expect|assert|expectTypeOf)\b(?!\s*\.\s*(?:assertions|hasAssertions|extend|anything|any|objectContaining|arrayContaining|stringContaining|stringMatching)\b)(?:\s*\.\s*\w+)*\s*\(|\.should\b/;
-const PY_ASSERTION = /^\s*assert\b|\bself\s*\.\s*assert\w*\s*\(|\bpytest\s*\.\s*raises\b|\bassertRaises\b/;
+const PY_ASSERTION = /^\s*assert\b|\bself\s*\.\s*assert\w*\s*\(|\bpytest\s*\.\s*raises\b|\bassertRaises\b|(?<!\w)assert_\w+\s*\(/;
 const GO_ASSERTION = /\bt\s*\.\s*(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)\b|\b(?:assert|require)\s*\.\s*\w+\s*\(/;
 
 /** End offset of the call whose opening parenthesis precedes `from`, never past `limit`.
@@ -179,7 +181,7 @@ function parseTests(text: string, language: Language): TestInfo[] {
     const bodyHash = createHash("sha1").update(test.body.replace(/\s+/g, "")).digest("hex");
     const count = (seen.get(test.name) ?? 0) + 1;
     seen.set(test.name, count);
-    return { key: `${test.name}#${count}`, parametrized: test.parametrized, name: test.name, line: test.line, assertions, raw, setup, bodyHash };
+    return { key: `${test.name}#${count}`, parametrized: test.parametrized, name: test.name, line: test.line, assertions, raw, setup, bodyHash, text: test.body };
   });
 }
 
@@ -193,12 +195,28 @@ function skeleton(assertion: string): string {
 }
 
 const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)/;
-const WEAK_PY = /^\s*assert\s+[\w.()\[\]]+\s*$|^\s*assert\s+.+\sis\s+not\s+None\s*$|^\s*assert\s+True\s*$/;
+// A bare name, attribute, `is not None` or `True` only says "something exists". A call such as
+// `assert caps.has_any([...])` is a real check, so it is never the weaker side.
+const WEAK_PY = /^\s*assert\s+[\w.\[\]]+\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
+const PY_SPECIFIC = /==|!=|<=|>=|\bin\b|\bis\b|\bisinstance\s*\(|\.startswith\s*\(|\.endswith\s*\(|\bcallable\s*\(/;
 
 function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
   if (language === "js") return WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion);
-  if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion);
+  if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion) && PY_SPECIFIC.test(oldAssertion);
   return false;
+}
+
+/** Words from string and regexp literals in an assertion: the data it pinned down. */
+const GENERIC_ARGUMENT = /^(?:not\.)?(?:be|have|contain|include|exist|match|eq|equal|length|text|value|attr|class|css|visible|checked|disabled|enabled|selected|focus|empty|true|false|null|undefined|deep)(?:\.\w+)*$/;
+function literalTokens(statement: string): string[] {
+  const tokens = new Set<string>();
+  const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1|(?<=[(,]\s*)\/((?:\\.|[^/\\\n])+)\/[a-z]*/g;
+  for (const match of statement.matchAll(literal)) {
+    for (const token of (match[2] ?? match[3] ?? "").match(/[A-Za-z0-9_:.=@#%-]{4,}/g) ?? []) {
+      if (!GENERIC_ARGUMENT.test(token)) tokens.add(token);
+    }
+  }
+  return [...tokens];
 }
 
 function finding(type: DetectorType, file: string, line: number, snippet: string, reason: string, commit: string): Infraction {
@@ -220,6 +238,7 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
   };
   const oldTotals = tally(before), newTotals = tally(after);
   const beforeKeys = new Set(before.map(test => test.key));
+  const addedText = after.filter(test => !beforeKeys.has(test.key)).map(test => test.text).join("\n");
   const result: FileTampering = { immediate: [], removedTests: [], addedHashes: [], rewritten: [] };
   for (const test of after) if (!beforeKeys.has(test.key)) result.addedHashes.push(test.bodyHash);
   for (const old of before) {
@@ -239,14 +258,22 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
     const snapshot = (test: TestInfo) => test.raw.some(statement => /\.toMatch(?:Inline)?Snapshot\b|\.matchSnapshot\b|\bsnapshot\s*\(/.test(statement));
     if (snapshot(current) && !snapshot(old)) continue;
     if (current.assertions.length < old.assertions.length) {
-      // A check that left this test but was added elsewhere in the file (same text, higher total) moved; it did not vanish.
+      // A check that left this test is not lost when the same text was added elsewhere in the file, or when
+      // every literal it pinned down (a title, a path, a message) is still asserted in this test or in a new one.
       const budget = tally([current]);
-      const lost = old.assertions.filter(assertion => {
+      const lost: { normalized: string; raw: string }[] = [];
+      old.assertions.forEach((assertion, i) => {
         const left = budget.get(assertion) ?? 0;
-        if (left > 0) { budget.set(assertion, left - 1); return false; }
-        return true;
+        if (left > 0) budget.set(assertion, left - 1);
+        else lost.push({ normalized: assertion, raw: old.raw[i] });
       });
-      if (lost.every(assertion => (newTotals.get(assertion) ?? 0) >= (oldTotals.get(assertion) ?? 0))) continue;
+      const introduced = `${current.text}\n${addedText}`;
+      const accounted = (item: { normalized: string; raw: string }) => {
+        if ((newTotals.get(item.normalized) ?? 0) >= (oldTotals.get(item.normalized) ?? 0)) return true;
+        const tokens = literalTokens(item.raw);
+        return tokens.length > 0 && tokens.every(token => introduced.includes(token));
+      };
+      if (lost.every(accounted)) continue;
       result.immediate.push(finding("assertion-weakened", newPath, current.line,
         `${old.name}: ${old.assertions.length} → ${current.assertions.length} assertions`,
         "Test checks less than before", commit));
@@ -311,8 +338,29 @@ const THRESHOLD_PATTERNS: RegExp[] = [
 
 const SWITCHES = ["strict", "noImplicitAny", "strictNullChecks", "noImplicitReturns", "useUnknownInCatchVariables"];
 
-// Any run step that mentions a test/unit target, so a split or a package-manager swap keeps the count.
-const TEST_COMMAND = /\brun:.*\b(?:tests?|unit|pytest|vitest|jest|mocha|ava|tap|tox|nox|e2e|spec)\b|^\s*-?\s*(?:npm|yarn|pnpm|go|cargo|mvn|gradle|make)\s+(?:run\s+)?(?:\w+\s+)?tests?\b/;
+// A run step that mentions a test/unit target (not merely a path such as `.test/src/`), a bare test runner, or a
+// call to a shared workflow: a split, a package-manager swap or a move to a reusable workflow keeps the count.
+const TESTISH = String.raw`(?<![\w./])(?:tests?|unit|e2e|pytest|vitest|jest|mocha|ava|tap|tox|nox|spec)(?![\w/])`;
+const TEST_COMMAND = new RegExp(
+  String.raw`\brun:.*${TESTISH}|^\s*-?\s*(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make)\s+(?:run\s+)?(?:\w+\s+)?tests?\b` +
+  String.raw`|^\s*-?\s*(?:python\s+-m\s+)?(?:pytest|vitest|jest|mocha|tox|nox)\b|^\s*-?\s*uses:\s*\S*\.github/workflows/\S+`);
+const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true/;
+
+/** Tolerated-failure markers per enclosing step or job, keyed by that step's own line. */
+function lenientSteps(text: string): Map<string, { count: number; line: number }> {
+  const lines = text.split(/\r?\n/);
+  const indentOf = (line: string) => line.length - line.trimStart().length;
+  const found = new Map<string, { count: number; line: number }>();
+  lines.forEach((line, i) => {
+    if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
+    let j = i - 1;
+    while (j >= 0 && (!lines[j].trim() || lines[j].trim().startsWith("#") || indentOf(lines[j]) >= indentOf(line))) j--;
+    const identity = j >= 0 ? lines[j].trim() : "";
+    const entry = found.get(identity);
+    if (entry) entry.count++; else found.set(identity, { count: 1, line: i + 1 });
+  });
+  return found;
+}
 
 function severityOf(value: string): number {
   return /^(?:error|2)$/.test(value) ? 2 : /^(?:warn|1)$/.test(value) ? 1 : 0;
@@ -353,9 +401,14 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
   }
   if (/(?:\.github\/workflows\/|\.gitlab-ci)/.test(file)) {
     const count = (text: string, pattern: RegExp) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
-    const lenient = /continue-on-error:\s*true|allow_failure:\s*true/;
-    if (count(newText, lenient) > count(oldText, lenient)) {
-      add(newText.search(lenient), "continue-on-error: true", "CI step is now allowed to fail");
+    // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
+    // same change is a new best-effort check, not a weakened one.
+    const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).map(line => line.trim()));
+    for (const [identity, now] of lenientSteps(newText)) {
+      if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
+        out.push(finding("guard-weakened", file, now.line, "continue-on-error: true", "CI step is now allowed to fail", commit));
+        break;
+      }
     }
     if (count(newText, TEST_COMMAND) < count(oldText, TEST_COMMAND)) {
       add(0, "test command no longer runs in CI", "Test step removed from CI");
