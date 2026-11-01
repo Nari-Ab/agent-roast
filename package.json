@@ -1,7 +1,7 @@
 {
   "name": "agent-roast",
-  "version": "0.8.1",
-  "description": "Offline code checks for skipped tests, swallowed errors, unfinished stubs and AI coding shortcuts",
+  "version": "0.9.0",
+  "description": "Offline review for AI-assisted changes: catches weakened tests, lowered quality gates, skipped tests and swallowed errors",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,16 +20,22 @@
     "test": "vitest run",
     "prepublishOnly": "npm run build",
     "pretest": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "node scripts/benchmark-recall.mjs",
+    "bench:noise": "node scripts/benchmark-noise.mjs"
   },
   "keywords": [
     "ai",
     "agents",
-    "cursor",
+    "ai-agents",
     "claude-code",
-    "roast",
+    "cursor",
+    "codex",
+    "code-review",
+    "test-quality",
+    "ci",
+    "sarif",
     "git",
-    "code-quality",
     "cli"
   ],
   "author": "Nari-Ab",
@@ -47,9 +53,7 @@
     "picocolors": "^1.1.0"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.0.10",
     "@types/node": "^20.0.0",
-    "gifenc": "^1.0.3",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.12"

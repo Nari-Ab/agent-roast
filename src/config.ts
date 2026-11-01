@@ -23,7 +23,7 @@ export interface AgentRoastConfig {
 }
 
 export const DEFAULT_CONFIG: AgentRoastConfig = {
-  failOn: ["test-skip", "trivial-assert", "test-focus"],
+  failOn: ["test-skip", "trivial-assert", "test-focus", "assertion-weakened", "guard-weakened"],
   ignorePaths: [
     "**/fixtures/**",
     "**/__fixtures__/**",
@@ -39,6 +39,10 @@ export const DEFAULT_CONFIG: AgentRoastConfig = {
     "test-skip": "error",
     "trivial-assert": "error",
     "test-focus": "error",
+    "assertion-weakened": "error",
+    "guard-weakened": "error",
+    "test-removed": "warn",
+    "expectation-rewritten": "warn",
     "swallowed-error": "warn",
     "stub-abandonment": "warn",
     "type-escape": "warn",

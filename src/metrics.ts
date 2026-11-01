@@ -462,7 +462,8 @@ export class MetricsCollector {
       ignorePaths: this.ignorePaths,
       rules: this.rules,
     });
-    const buckets = {
+    // Diff-aware rules (tampering.ts) only run in context reviews, not here.
+    const buckets: Partial<Record<Infraction["type"], Infraction[]>> = {
       "test-skip": this.testSkips,
       "test-focus": this.focusedTests,
       "type-escape": this.typeEscapes,
@@ -474,7 +475,7 @@ export class MetricsCollector {
     const counts: Record<string, number> = {};
     for (const infraction of audit.infractions) {
       const count = counts[infraction.type] || 0;
-      if (count < MAX_INFRACTIONS_PER_COMMIT) buckets[infraction.type].push(infraction);
+      if (count < MAX_INFRACTIONS_PER_COMMIT) buckets[infraction.type]?.push(infraction);
       counts[infraction.type] = count + 1;
     }
   }

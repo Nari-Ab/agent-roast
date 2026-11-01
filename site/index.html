@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agent-roast — catch coding shortcuts before they ship</title>
-  <meta name="description" content="Check current code and pull requests for skipped tests, focused tests, swallowed errors and obvious stubs. Offline analysis, no API key.">
+  <meta name="description" content="Review pull requests for weakened tests, lowered quality gates, skipped tests and swallowed errors. Compares before and after, offline, no API key.">
   <link rel="canonical" href="https://nari-ab.github.io/agent-roast/">
   <link rel="icon" type="image/svg+xml" href="assets/logo-dark.svg">
 
@@ -51,7 +51,7 @@
         <div class="hero-head">
           <h1 id="hero-title">Catch coding shortcuts before they ship.</h1>
           <div class="hero-row">
-            <p class="lead">Review skipped or focused tests, swallowed errors and unfinished stubs in code written by people or AI. Start with <code>check</code>; compare full source before and after a PR with <code>review --base origin/main</code>. No account or API key.</p>
+            <p class="lead">Did the change fix the code, or only make the checks pass? Review deleted or loosened assertions, removed tests, lowered coverage thresholds and relaxed CI, plus skipped tests and swallowed errors, in code written by people or AI. Start with <code>check</code>; compare full source before and after a PR with <code>review --base origin/main</code>. No account or API key.</p>
             <div class="hero-cta">
               <div class="hero-actions">
                 <div class="install-pill">
@@ -155,6 +155,7 @@
               <li><strong>Skipped suites:</strong> <code>it.skip()</code> added to 3 test files. Critical edge cases never run.</li>
               <li><strong>Type evasion:</strong> Strict types suppressed with <code>as any</code> and <code>// @ts-ignore</code>.</li>
               <li><strong>Focused tests:</strong> <code>test.only()</code> can leave other tests unexecuted.</li>
+              <li><strong>Weakened checks:</strong> An assertion is deleted or loosened, a failing test is removed, a coverage threshold is lowered, or a CI step may now fail.</li>
               <li><strong>Review gap:</strong> A green status alone does not establish which behavior was checked.</li>
             </ul>
           </article>
@@ -167,6 +168,7 @@
               <li><strong>Exact citations:</strong> Reports repository-relative file, line and a concrete next step.</li>
               <li><strong>Clean type hygiene:</strong> Reports common suppressions and suspicious casts for review; legitimate exceptions exist.</li>
               <li><strong>Context comparison:</strong> Notices deletion-only empty handlers and separates existing findings from new ones.</li>
+              <li><strong>Weakened checks:</strong> Compares tests and quality-gate settings before and after, and recognizes renames, moves and reformatting.</li>
               <li><strong>Adoption:</strong> Use advisory mode first, agree on blocking rules, and keep compiling and testing the code.</li>
             </ul>
           </article>
@@ -176,7 +178,7 @@
       <!-- CI Quality Gate Section -->
       <section class="ci-gate" id="ci-gate">
         <div class="section-head">
-          <div class="badge-v02">Published v0.8.1</div>
+          <div class="badge-v02">Published v0.9.0</div>
           <h2>Review new shortcuts in pull requests</h2>
           <p>Compare full changed source with policy from the trusted base commit. GitHub summaries and SARIF keep findings available for review.</p>
         </div>
