@@ -194,3 +194,21 @@ describe("guard-weakened", () => {
     expect(accepted.suppressedFindings).toHaveLength(1);
   });
 });
+
+describe("parser robustness", () => {
+  it("handles a test file with tens of thousands of tests in linear time", async () => {
+    const suite = (assertions: number) => Array.from({ length: 20_000 }, (_, i) => `it("case ${i}", () => { ${"expect(a).toBe(1); ".repeat(i === 19_999 ? assertions : 1)}});\n`).join("");
+    write("big.test.ts", suite(2)); base = commit();
+    write("big.test.ts", suite(1)); commit();
+    const result = await reviewChanges({ cwd: dir, base });
+    expect(result.complete).toBe(true);
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-weakened", lineSnippet: "case 19999: 2 → 1 assertions" })]);
+  }, 30_000);
+  it("does not let unbalanced quotes inside one test swallow the tests after it", async () => {
+    const suite = (second: string) => `it("first", () => {\n  run(); // don't panic\n  expect(a).toBe(1);\n  expect(/\`/.test(s)).toBe(true);\n});\nit("second", () => {\n${second}});\nit("third", () => {\n  expect(c).toBe(3);\n});\n`;
+    write("quotes.test.ts", suite("  expect(b).toBe(2);\n  expect(b2).toBe(2);\n")); base = commit();
+    write("quotes.test.ts", suite("  expect(b).toBe(2);\n")); commit();
+    const result = await reviewChanges({ cwd: dir, base });
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-weakened", lineSnippet: "second: 2 → 1 assertions" })]);
+  });
+});

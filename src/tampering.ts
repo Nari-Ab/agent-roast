@@ -65,50 +65,64 @@ const JS_ASSERTION = /(?<![\w$.])(?:expect|assert|expectTypeOf)\b(?!\s*\.\s*(?:a
 const PY_ASSERTION = /^\s*assert\b|\bself\s*\.\s*assert\w*\s*\(|\bpytest\s*\.\s*raises\b|\bassertRaises\b/;
 const GO_ASSERTION = /\bt\s*\.\s*(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)\b|\b(?:assert|require)\s*\.\s*\w+\s*\(/;
 
-/** End offset of the call whose opening parenthesis precedes `from`; skips string literals. */
-function callEnd(text: string, from: number): number {
+/** End offset of the call whose opening parenthesis precedes `from`, never past `limit`.
+ * Skips string literals and trailing line comments; ' and " end with the line. */
+function callEnd(text: string, from: number, limit: number): number {
   let depth = 1, quote = "";
-  for (let i = from; i < text.length; i++) {
+  for (let i = from; i < limit; i++) {
     const char = text[i];
     if (quote) {
       if (char === "\\") i++;
-      else if (char === quote) quote = "";
+      else if (char === quote || (char === "\n" && quote !== "`")) quote = "";
     } else if (char === '"' || char === "'" || char === "`") quote = char;
-    else if (char === "(") depth++;
+    else if (char === "/" && text[i + 1] === "/" && (i === from || /\s/.test(text[i - 1]))) {
+      const newline = text.indexOf("\n", i);
+      i = newline < 0 || newline > limit ? limit : newline;
+    } else if (char === "(") depth++;
     else if (char === ")" && --depth === 0) return i;
   }
-  return text.length;
+  return limit;
 }
 
-/** Bodies are bounded by syntax, so a test's hash does not depend on what follows it in the file. */
-function testBodies(text: string, language: Language): { name: string; line: number; body: string; parametrized: boolean }[] {
+interface TestBody { name: string; line: number; body: string; parametrized: boolean }
+
+/** Bodies are bounded by syntax and by the next test's start, so a test's hash does not
+ * depend on what follows it and total work stays linear even for malformed input. */
+function testBodies(text: string, language: Language): TestBody[] {
   const lines = codeLines(text, language);
   if (language === "js") {
     const code = lines.join("\n");
-    const lineAt = (offset: number) => code.slice(0, offset).split("\n").length;
-    const pattern = new RegExp(JS_TEST_START.source, "g");
-    return [...code.matchAll(pattern)].map(match => {
-      const from = (match.index ?? 0) + match[0].length;
-      return { name: match[2], line: lineAt(match.index ?? 0), body: code.slice(from, callEnd(code, from) + 1), parametrized: false };
+    const matches = [...code.matchAll(new RegExp(JS_TEST_START.source, "g"))];
+    let line = 1, cursor = 0;
+    return matches.map((match, i) => {
+      const at = match.index ?? 0;
+      for (; cursor < at; cursor++) if (code.charCodeAt(cursor) === 10) line++;
+      const from = at + match[0].length;
+      const limit = i + 1 < matches.length ? (matches[i + 1].index ?? code.length) : code.length;
+      return { name: match[2], line, body: code.slice(from, Math.min(callEnd(code, from, limit) + 1, limit)), parametrized: false };
     });
   }
   const startPattern = language === "py" ? PY_TEST_START : GO_TEST_START;
-  const result: { name: string; line: number; body: string; parametrized: boolean }[] = [];
+  const starts: { index: number; name: string; length: number }[] = [];
   lines.forEach((line, index) => {
     const match = startPattern.exec(line);
-    if (!match) return;
-    const indent = /^\s*/.exec(line)![0].length;
-    let end = index + 1, depth = balance(line);
-    while (depth > 0 && end < lines.length) depth += balance(lines[end++]);
-    while (end < lines.length && (language === "go" ? lines[end - 1] !== "}" : !lines[end].trim() || /^\s*/.exec(lines[end])![0].length > indent)) end++;
-    let top = index;
-    while (top > 0 && index - top < 12 && !/^\s*(?:async\s+)?(?:def|class)\b/.test(lines[top - 1])) top--;
-    result.push({
-      name: match[1], line: index + 1, body: [line.slice(match[0].length), ...lines.slice(index + 1, end)].join("\n"),
-      parametrized: /parametrize/.test(lines.slice(top, index).join("\n")),
-    });
+    if (match) starts.push({ index, name: match[1], length: match[0].length });
   });
-  return result;
+  const indentOf = (line: string) => /^\s*/.exec(line)![0].length;
+  return starts.map((start, n) => {
+    const limit = n + 1 < starts.length ? starts[n + 1].index : lines.length;
+    const header = lines[start.index], indent = indentOf(header);
+    let end = start.index + 1, depth = balance(header);
+    while (depth > 0 && end < limit) depth += balance(lines[end++]);
+    while (end < limit && (language === "go" ? lines[end - 1] !== "}" : !lines[end].trim() || indentOf(lines[end]) > indent)) end++;
+    let top = start.index;
+    // Decorators sit directly above `def`, however long their arguments are.
+    while (top > 0 && start.index - top < 200 && lines[top - 1].trim() && !/^\s*(?:async\s+)?(?:def|class)\b/.test(lines[top - 1])) top--;
+    return {
+      name: start.name, line: start.index + 1, body: [header.slice(start.length), ...lines.slice(start.index + 1, end)].join("\n"),
+      parametrized: /parametrize/.test(lines.slice(top, start.index).join("\n")),
+    };
+  });
 }
 
 /** Net open brackets on a line, ignoring string contents. */
@@ -124,6 +138,25 @@ function normalize(statement: string): string {
   return statement.replace(/\s+/g, "").replace(/'/g, '"').replace(/,([)\]}])/g, "$1").replace(/;$/, "");
 }
 
+/** Split on `;` outside string literals, so `expect(a); expect(b);` is two statements. */
+function splitStatements(text: string): string[] {
+  const pieces: string[] = [];
+  let quote = "", start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (char === ";") { pieces.push(text.slice(start, i)); start = i + 1; }
+  }
+  pieces.push(text.slice(start));
+  return pieces.map(piece => piece.trim()).filter(Boolean);
+}
+
+/** `, () => { expect(a)` on a one-line test: drop the callback header from the statement. */
+const CALLBACK_HEADER = /^[,\s]*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{\s*|^[,\s]*(?:async\s+)?function\s*\w*\s*\([^)]*\)\s*\{\s*/;
+
 function parseTests(text: string, language: Language): TestInfo[] {
   const assertionPattern = language === "js" ? JS_ASSERTION : language === "py" ? PY_ASSERTION : GO_ASSERTION;
   const seen = new Map<string, number>();
@@ -135,7 +168,11 @@ function parseTests(text: string, language: Language): TestInfo[] {
       // A statement can span lines after formatting; keep it whole.
       let statement = body[i].trim(), depth = balance(body[i]);
       while (depth > 0 && i + 1 < body.length) { i++; statement += " " + body[i].trim(); depth += balance(body[i]); }
-      raw.push(statement); assertions.push(normalize(statement));
+      for (const piece of language === "js" ? splitStatements(statement) : [statement]) {
+        const clean = piece.replace(CALLBACK_HEADER, "");
+        if (assertionPattern.test(clean)) { raw.push(clean); assertions.push(normalize(clean)); }
+        else setupLines.push(clean);
+      }
     }
     const setup = setupLines.join("\n").replace(/\s+/g, "");
     const bodyHash = createHash("sha1").update(test.body.replace(/\s+/g, "")).digest("hex");
@@ -175,15 +212,20 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
   const after = newText === null ? [] : parseTests(newText, language);
   const afterByKey = new Map(after.map(test => [test.key, test]));
   const newCode = newText === null ? "" : codeLines(newText, language).join("\n");
-  const newLines = new Set(after.flatMap(test => test.assertions));
+  const tally = (tests: TestInfo[]) => {
+    const totals = new Map<string, number>();
+    for (const test of tests) for (const assertion of test.assertions) totals.set(assertion, (totals.get(assertion) ?? 0) + 1);
+    return totals;
+  };
+  const oldTotals = tally(before), newTotals = tally(after);
   const beforeKeys = new Set(before.map(test => test.key));
   const result: FileTampering = { immediate: [], removedTests: [], addedHashes: [], rewritten: [] };
   for (const test of after) if (!beforeKeys.has(test.key)) result.addedHashes.push(test.bodyHash);
   for (const old of before) {
     const current = afterByKey.get(old.key);
     if (!current) {
-      // A title still present as a string was renamed into a table (it.each, subTest) rather than deleted.
-      if (newCode && [`"${old.name}`, `'${old.name}`, `\`${old.name}`].some(quoted => newCode.includes(quoted))) continue;
+      // The exact title still present as a string means the test moved into a table (it.each, subTest), not away.
+      if (newCode && ['"', "'", "`"].some(quote => newCode.includes(quote + old.name + quote))) continue;
       result.removedTests.push({
         bodyHash: old.bodyHash,
         finding: finding("test-removed", newPath, 1, `${old.name}: test no longer present`,
@@ -196,9 +238,14 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
     const snapshot = (test: TestInfo) => test.raw.some(statement => /\.toMatch(?:Inline)?Snapshot\b|\.matchSnapshot\b|\bsnapshot\s*\(/.test(statement));
     if (snapshot(current) && !snapshot(old)) continue;
     if (current.assertions.length < old.assertions.length) {
-      // Checks that merely moved to another test, helper or loop in this file are still there.
-      const kept = new Set(current.assertions);
-      if (old.assertions.filter(assertion => !kept.has(assertion)).every(assertion => newLines.has(assertion))) continue;
+      // A check that left this test but was added elsewhere in the file (same text, higher total) moved; it did not vanish.
+      const budget = tally([current]);
+      const lost = old.assertions.filter(assertion => {
+        const left = budget.get(assertion) ?? 0;
+        if (left > 0) { budget.set(assertion, left - 1); return false; }
+        return true;
+      });
+      if (lost.every(assertion => (newTotals.get(assertion) ?? 0) >= (oldTotals.get(assertion) ?? 0))) continue;
       result.immediate.push(finding("assertion-weakened", newPath, current.line,
         `${old.name}: ${old.assertions.length} → ${current.assertions.length} assertions`,
         "Test checks less than before", commit));
