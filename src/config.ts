@@ -40,6 +40,7 @@ export const DEFAULT_CONFIG: AgentRoastConfig = {
     "trivial-assert": "error",
     "test-focus": "error",
     "assertion-weakened": "error",
+    "assertion-removed": "warn",
     "guard-weakened": "error",
     "test-removed": "warn",
     "expectation-rewritten": "warn",

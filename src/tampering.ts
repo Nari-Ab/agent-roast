@@ -23,6 +23,8 @@ interface TestInfo {
   setup: string;
   /** Body hash that ignores the test title, so a rename or move is not a removal. */
   bodyHash: string;
+  /** Body text with whole-line comments blanked. */
+  text: string;
 }
 
 export interface RemovedTest { finding: Infraction; bodyHash: string }
@@ -63,7 +65,7 @@ const PY_TEST_START = /^\s*(?:async\s+)?def\s+(test\w*)\s*\(/;
 const GO_TEST_START = /^func\s+(Test\w+)\s*\(/;
 
 const JS_ASSERTION = /(?<![\w$.])(?:expect|assert|expectTypeOf)\b(?!\s*\.\s*(?:assertions|hasAssertions|extend|anything|any|objectContaining|arrayContaining|stringContaining|stringMatching)\b)(?:\s*\.\s*\w+)*\s*\(|\.should\b/;
-const PY_ASSERTION = /^\s*assert\b|\bself\s*\.\s*assert\w*\s*\(|\bpytest\s*\.\s*raises\b|\bassertRaises\b/;
+const PY_ASSERTION = /^\s*assert\b|\bself\s*\.\s*assert\w*\s*\(|\bpytest\s*\.\s*raises\b|\bassertRaises\b|(?<!\w)assert_\w+\s*\(/;
 const GO_ASSERTION = /\bt\s*\.\s*(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)\b|\b(?:assert|require)\s*\.\s*\w+\s*\(/;
 
 /** End offset of the call whose opening parenthesis precedes `from`, never past `limit`.
@@ -155,6 +157,21 @@ function splitStatements(text: string): string[] {
   return pieces.map(piece => piece.trim()).filter(Boolean);
 }
 
+/** Drop a trailing `# note` or `// note`, so adding or removing a remark does not change the assertion. */
+function stripTrailingComment(line: string, language: Language): string {
+  const marker = language === "py" ? "#" : "//";
+  let quote = "";
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (line.startsWith(marker, i) && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i).trimEnd();
+  }
+  return line;
+}
+
 /** `, () => { expect(a)` on a one-line test: drop the callback header from the statement. */
 const CALLBACK_HEADER = /^[,\s]*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*\{\s*|^[,\s]*(?:async\s+)?function\s*\w*\s*\([^)]*\)\s*\{\s*/;
 
@@ -162,7 +179,7 @@ function parseTests(text: string, language: Language): TestInfo[] {
   const assertionPattern = language === "js" ? JS_ASSERTION : language === "py" ? PY_ASSERTION : GO_ASSERTION;
   const seen = new Map<string, number>();
   return testBodies(text, language).map(test => {
-    const body = test.body.split("\n");
+    const body = test.body.split("\n").map(line => language === "go" ? line : stripTrailingComment(line, language));
     const assertions: string[] = [], raw: string[] = [], setupLines: string[] = [];
     for (let i = 0; i < body.length; i++) {
       if (!assertionPattern.test(body[i])) { setupLines.push(body[i]); continue; }
@@ -179,7 +196,7 @@ function parseTests(text: string, language: Language): TestInfo[] {
     const bodyHash = createHash("sha1").update(test.body.replace(/\s+/g, "")).digest("hex");
     const count = (seen.get(test.name) ?? 0) + 1;
     seen.set(test.name, count);
-    return { key: `${test.name}#${count}`, parametrized: test.parametrized, name: test.name, line: test.line, assertions, raw, setup, bodyHash };
+    return { key: `${test.name}#${count}`, parametrized: test.parametrized, name: test.name, line: test.line, assertions, raw, setup, bodyHash, text: test.body };
   });
 }
 
@@ -193,13 +210,38 @@ function skeleton(assertion: string): string {
 }
 
 const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)/;
-const WEAK_PY = /^\s*assert\s+[\w.()\[\]]+\s*$|^\s*assert\s+.+\sis\s+not\s+None\s*$|^\s*assert\s+True\s*$/;
+// A bare name, attribute, `is not None` or `True` only says "something exists". A call such as
+// `assert caps.has_any([...])` is a real check, so it is never the weaker side.
+const WEAK_PY = /^\s*assert\s+[\w.\[\]]+\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
+const PY_SPECIFIC = /==|!=|<=|>=|\bin\b|\bis\b|\bisinstance\s*\(|\.startswith\s*\(|\.endswith\s*\(|\bcallable\s*\(/;
+
+// Only an exact check can be weakened: `toBeNull()` becoming `toBeTruthy()` is a flipped expectation, not a looser one.
+const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toContainEqual|toMatch|toMatchObject|toHaveProperty|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveTextContent|toHaveAttribute|toHaveValue|toThrow\w*|toBeGreaterThan\w*|toBeLessThan\w*)\s*\(/;
+
+// Testing Library's getBy*/findBy* queries throw when nothing matches, so `toBeTruthy()` on one is still a presence check.
+const THROWING_QUERY = /\b(?:get|find)(?:All)?By\w*\s*\(/;
 
 function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
-  if (language === "js") return WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion);
-  if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion);
+  if (language === "js") return !THROWING_QUERY.test(newAssertion) && WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion) && JS_SPECIFIC.test(oldAssertion);
+  if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion) && PY_SPECIFIC.test(oldAssertion);
   return false;
 }
+
+/** Words from string and regexp literals in an assertion: the data it pinned down. */
+const GENERIC_ARGUMENT = /^(?:not\.)?(?:be|have|contain|include|exist|match|eq|equal|length|text|value|attr|class|css|visible|checked|disabled|enabled|selected|focus|empty|true|false|null|undefined|deep)(?:\.\w+)*$/;
+function literalTokens(statement: string): string[] {
+  const tokens = new Set<string>();
+  const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1|(?<=[(,]\s*)\/((?:\\.|[^/\\\n])+)\/[a-z]*/g;
+  for (const match of statement.matchAll(literal)) {
+    for (const token of (match[2] ?? match[3] ?? "").match(/[A-Za-z0-9_:.=@#%-]{4,}/g) ?? []) {
+      if (!GENERIC_ARGUMENT.test(token)) tokens.add(token);
+    }
+  }
+  return [...tokens];
+}
+
+/** A call to an assertion helper: `expectCheckout(...)`, `assertShape(...)`, `_assert_ok(...)`, `requireBody(...)`. */
+const HELPER_CALL = /(?<![\w$])((?:expect|assert|verify|check|require)[A-Z]\w*|_{0,2}(?:assert|check|verify|expect|require)_\w+)\s*\(/g;
 
 function finding(type: DetectorType, file: string, line: number, snippet: string, reason: string, commit: string): Infraction {
   return { type, file, lineNumber: Math.max(1, line), lineSnippet: snippet, commitHash: commit, commitDate: "", reason, suggestion: RULE_GUIDES[type].suggestion };
@@ -220,6 +262,7 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
   };
   const oldTotals = tally(before), newTotals = tally(after);
   const beforeKeys = new Set(before.map(test => test.key));
+  const addedText = after.filter(test => !beforeKeys.has(test.key)).map(test => test.text).join("\n");
   const result: FileTampering = { immediate: [], removedTests: [], addedHashes: [], rewritten: [] };
   for (const test of after) if (!beforeKeys.has(test.key)) result.addedHashes.push(test.bodyHash);
   for (const old of before) {
@@ -239,15 +282,25 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
     const snapshot = (test: TestInfo) => test.raw.some(statement => /\.toMatch(?:Inline)?Snapshot\b|\.matchSnapshot\b|\bsnapshot\s*\(/.test(statement));
     if (snapshot(current) && !snapshot(old)) continue;
     if (current.assertions.length < old.assertions.length) {
-      // A check that left this test but was added elsewhere in the file (same text, higher total) moved; it did not vanish.
+      // The checks moved into an assertion helper that this change introduces: they are still made, just not here.
+      if ([...current.text.matchAll(HELPER_CALL)].some(call => !(oldText ?? "").includes(call[1]))) continue;
+      // A check that left this test is not lost when the same text was added elsewhere in the file, or when
+      // every literal it pinned down (a title, a path, a message) is still asserted in this test or in a new one.
       const budget = tally([current]);
-      const lost = old.assertions.filter(assertion => {
+      const lost: { normalized: string; raw: string }[] = [];
+      old.assertions.forEach((assertion, i) => {
         const left = budget.get(assertion) ?? 0;
-        if (left > 0) { budget.set(assertion, left - 1); return false; }
-        return true;
+        if (left > 0) budget.set(assertion, left - 1);
+        else lost.push({ normalized: assertion, raw: old.raw[i] });
       });
-      if (lost.every(assertion => (newTotals.get(assertion) ?? 0) >= (oldTotals.get(assertion) ?? 0))) continue;
-      result.immediate.push(finding("assertion-weakened", newPath, current.line,
+      const introduced = `${current.text}\n${addedText}`;
+      const accounted = (item: { normalized: string; raw: string }) => {
+        if ((newTotals.get(item.normalized) ?? 0) >= (oldTotals.get(item.normalized) ?? 0)) return true;
+        const tokens = literalTokens(item.raw);
+        return tokens.length > 0 && tokens.every(token => introduced.includes(token));
+      };
+      if (lost.every(accounted)) continue;
+      result.immediate.push(finding("assertion-removed", newPath, current.line,
         `${old.name}: ${old.assertions.length} → ${current.assertions.length} assertions`,
         "Test checks less than before", commit));
       continue;
@@ -311,8 +364,66 @@ const THRESHOLD_PATTERNS: RegExp[] = [
 
 const SWITCHES = ["strict", "noImplicitAny", "strictNullChecks", "noImplicitReturns", "useUnknownInCatchVariables"];
 
-// Any run step that mentions a test/unit target, so a split or a package-manager swap keeps the count.
-const TEST_COMMAND = /\brun:.*\b(?:tests?|unit|pytest|vitest|jest|mocha|ava|tap|tox|nox|e2e|spec)\b|^\s*-?\s*(?:npm|yarn|pnpm|go|cargo|mvn|gradle|make)\s+(?:run\s+)?(?:\w+\s+)?tests?\b/;
+// A line that runs a known test runner, wherever it sits in the step (single-line `run:` or a multi-line block),
+// or a `run:` that names a test/unit/e2e target. Paths such as `.test/src/` are not test steps.
+const CI_RUNNER = new RegExp(
+  String.raw`(?<![\w./-])(?:pytest|vitest|jest|mocha|tox|nox)(?![\w/-])` +
+  String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make|dotnet|flutter)\s+(?:run\s+)?(?:-\S+\s+)*test(?![\w/])` +
+  String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
+const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
+// A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
+const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
+
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number }
+
+// A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
+const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
+
+function gatingTestLines(file: string, text: string): number {
+  return /\.gitlab-ci/.test(file) || CI_GATE.test(text) ? matchingLines(text, CI_RUNNER) : 0;
+}
+
+function matchingLines(text: string, pattern: RegExp): number {
+  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
+}
+
+/** Test-step counts for one changed CI file; null when it is not a CI file. */
+export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
+  if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
+  const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
+  const after = gatingTestLines(file, now);
+  return { file, before: gatingTestLines(file, was), after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, CI_RUNNER) : 0 };
+}
+
+/** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
+ * moving them to another workflow, or to a shared one, is not removal. */
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string): Infraction[] {
+  const before = counts.reduce((sum, item) => sum + item.before, 0);
+  const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
+  if (after >= before) return [];
+  return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
+    .map(item => item.ungatedAfter > 0
+      ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)
+      : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
+}
+
+const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true/;
+
+/** Tolerated-failure markers per enclosing step or job, keyed by that step's own line. */
+function lenientSteps(text: string): Map<string, { count: number; line: number }> {
+  const lines = text.split(/\r?\n/);
+  const indentOf = (line: string) => line.length - line.trimStart().length;
+  const found = new Map<string, { count: number; line: number }>();
+  lines.forEach((line, i) => {
+    if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
+    let j = i - 1;
+    while (j >= 0 && (!lines[j].trim() || lines[j].trim().startsWith("#") || indentOf(lines[j]) >= indentOf(line))) j--;
+    const identity = j >= 0 ? lines[j].trim() : "";
+    const entry = found.get(identity);
+    if (entry) entry.count++; else found.set(identity, { count: 1, line: i + 1 });
+  });
+  return found;
+}
 
 function severityOf(value: string): number {
   return /^(?:error|2)$/.test(value) ? 2 : /^(?:warn|1)$/.test(value) ? 1 : 0;
@@ -343,22 +454,33 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
     }
   }
   if (/eslint/i.test(file)) {
-    const rules = (text: string) => new Map([...text.matchAll(/["']([@\w/.-]+)["']\s*:\s*(?:\[\s*)?["']?(error|warn|off|[012])["']?/g)]
-      .map(match => [match[1], { level: severityOf(match[2]), index: match.index ?? 0 }] as const));
-    const before = rules(oldText);
-    for (const [name, now] of rules(newText)) {
+    // Highest level per rule: an override that switches a rule off for some files does not downgrade it.
+    const rules = (text: string) => {
+      const found = new Map<string, { level: number; index: number }>();
+      for (const match of text.matchAll(/["']([@\w/.-]+)["']\s*:\s*(?:\[\s*)?["']?(error|warn|off|[012])["']?/g)) {
+        const level = severityOf(match[2]);
+        const known = found.get(match[1]);
+        if (!known || level > known.level) found.set(match[1], { level, index: match.index ?? 0 });
+      }
+      return found;
+    };
+    const before = rules(oldText), after = rules(newText);
+    for (const [name, now] of after) {
       const previous = before.get(name);
-      if (previous && previous.level === 2 && now.level < 2) add(now.index, `${name}: error → ${now.level ? "warn" : "off"}`, "Lint rule downgraded");
+      // `no-restricted-imports` handed over to `@typescript-eslint/no-restricted-imports` is still enforced.
+      const replaced = [...after].some(([other, setting]) => other !== name && other.endsWith(`/${name}`) && setting.level === 2);
+      if (previous && previous.level === 2 && now.level < 2 && !replaced) add(now.index, `${name}: error → ${now.level ? "warn" : "off"}`, "Lint rule downgraded");
     }
   }
-  if (/(?:\.github\/workflows\/|\.gitlab-ci)/.test(file)) {
-    const count = (text: string, pattern: RegExp) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
-    const lenient = /continue-on-error:\s*true|allow_failure:\s*true/;
-    if (count(newText, lenient) > count(oldText, lenient)) {
-      add(newText.search(lenient), "continue-on-error: true", "CI step is now allowed to fail");
-    }
-    if (count(newText, TEST_COMMAND) < count(oldText, TEST_COMMAND)) {
-      add(0, "test command no longer runs in CI", "Test step removed from CI");
+  if (CI_FILE.test(file)) {
+    // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
+    // same change is a new best-effort check, not a weakened one.
+    const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).map(line => line.trim()));
+    for (const [identity, now] of lenientSteps(newText)) {
+      if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
+        out.push(finding("guard-weakened", file, now.line, "continue-on-error: true", "CI step is now allowed to fail", commit));
+        break;
+      }
     }
   }
   if (/(?:^|\/)package\.json$/i.test(file)) {

@@ -46,10 +46,16 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
     example: "throw new Error('Not implemented') → implement the operation and add a behavior test",
   },
   "assertion-weakened": {
-    title: "Test checks less than before",
-    why: "A test that keeps its name but loses assertions, or has one replaced by a weaker check, still passes while verifying less behavior.",
-    suggestion: "Restore the removed assertion or explain in the PR why that behavior is no longer required. Fix the code under test instead of weakening its check.",
+    title: "Exact check replaced by a weaker one",
+    why: "Swapping an exact assertion for toBeDefined, a truthiness check or `is not None` keeps the test green while it verifies far less.",
+    suggestion: "Restore the exact check, or assert the specific value the code should produce.",
     example: "expect(total).toBe(42) → expect(total).toBeDefined()  (restore the exact check)",
+  },
+  "assertion-removed": {
+    title: "Test checks less than before",
+    why: "A test that keeps its name but loses assertions verifies less behavior. Often the behavior changed on purpose; sometimes a check was dropped to get the suite green.",
+    suggestion: "Confirm the removed checks no longer apply, or restore them. Say so in the PR when the behavior was removed on purpose.",
+    example: "expect(a).toBe(1); expect(b).toBe(2) → expect(a).toBe(1)  (is the second check still needed?)",
   },
   "test-removed": {
     title: "Test removed",

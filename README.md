@@ -5,7 +5,7 @@
   <img src="docs/assets/logo.svg" alt="agent-roast" width="380">
 </picture>
 
-<h2>Catch coding shortcuts before they ship</h2>
+<h2>Catch weakened tests and quality gates before they ship</h2>
 
 <p>
   <a href="https://github.com/Nari-Ab/agent-roast/actions/workflows/test.yml"><img src="https://github.com/Nari-Ab/agent-roast/actions/workflows/test.yml/badge.svg" alt="CLI tests"></a>
@@ -17,55 +17,85 @@
 
 </div>
 
-**Did the AI fix the code, or just make the checks pass?**
+**Did this change fix the code, or only make the checks pass?**
 
-Coding agents (and tired humans) often get a red build green by changing the *checks*
-instead of the *code*: deleting the failing assertion, weakening it to `toBeDefined()`,
-removing the test, lowering the coverage threshold, switching off `strict`, or letting
-CI steps fail. A linter reading the new file cannot see that, because nothing in the new
-file looks wrong. `agent-roast review` compares the **before and after** of a change and
-flags exactly these moves. It is offline, runs no project code, and needs only Git.
+A red build can be turned green by changing the *checks* instead of the *code*: loosening or
+deleting the failing assertion, removing the test, lowering the coverage threshold, switching
+off `strict`, or letting a CI step fail. Nothing in the new file looks wrong, so a linter
+cannot see it. `agent-roast review` compares the **before and after** of a change and reports
+exactly these moves. It is offline, runs no project code, and needs only Git. It was built to
+review AI-assisted changes, but it cannot tell who wrote a change, and the measurements below
+show these moves are not specific to AI.
 
 ```bash
 npx agent-roast review --base origin/main        # a pull request
 npx agent-roast --staged                         # what you are about to commit
 ```
 
-| Rule | Fires when | Blocks by default |
+| Rule | Fires when | By default |
 | --- | --- | --- |
-| `assertion-weakened` | a test keeps its name but loses assertions, or an exact check becomes `toBeDefined`/`toBeTruthy`/`assert x` | yes |
-| `guard-weakened` | coverage threshold lowered, `strict`/`noImplicitAny` off, lint rule downgraded, CI step may fail or no longer runs tests, test script cannot fail | yes |
-| `test-removed` | a test (or test file) disappears and no identical body appears elsewhere | no, reported |
-| `expectation-rewritten` | an expected value changed, test inputs did not, and production code changed in the same PR | no, reported |
-| `test-skip`, `test-focus`, `trivial-assert`, `swallowed-error`, `type-escape`, `stub-abandonment` | the classic shortcuts, compared before/after so old debt does not block | skip/focus/trivial: yes |
+| `assertion-weakened` | an exact check is replaced by a weaker one: `toBe(42)` → `toBeDefined()`, `assert x == 1` → `assert x`, `isinstance(...)` → `is not None` | blocks |
+| `guard-weakened` | coverage threshold lowered, `strict`/`noImplicitAny` off, lint rule downgraded, an existing CI step allowed to fail, a workflow that stops running tests or stops running on push and pull requests, a test script that cannot fail | blocks |
+| `assertion-removed` | a test keeps its name but loses assertions | warns |
+| `test-removed` | a test (or test file) disappears and no identical body appears elsewhere | warns |
+| `expectation-rewritten` | an expected value changed, test inputs did not, and production code changed in the same PR | warns |
+| `test-skip`, `test-focus`, `trivial-assert`, `swallowed-error`, `type-escape`, `stub-abandonment` | the classic shortcuts, compared before/after so old debt does not block | skip, focus and trivial-assert block |
 
-Renames, moved tests, parametrization, and formatter rewraps (prettier, black) are
-recognized and not reported. Intentional cases can be accepted one by one with an
-expiring, reviewed exception (see below). Policy is read from the base branch, so a PR
-cannot switch the rules off for itself.
+Renames, moved tests, parametrization, assertions moved into a new helper, and formatter
+rewraps (prettier, black) are recognized and not reported. Intentional cases can be accepted
+one by one with an expiring, reviewed exception (see below). Policy is read from the base
+branch, so a PR cannot switch the rules off for itself.
 
 ### How well does it work?
 
-Measured, not promised (`npm run build`, then `npm run bench` and `npm run bench:noise`;
-method and raw numbers are in [docs/benchmarks.md](docs/benchmarks.md)):
+Measured, not promised; method, corpus and raw numbers are in
+[docs/benchmarks.md](docs/benchmarks.md). **Short version: weakened checks are rare, usually
+deliberate, and not specific to AI. The tool finds them; a person decides.**
 
-- **Labeled changes** (`benchmarks/cases.mjs`): 32 cheating edits across JS/TS, Python, Go
-  and CI/config files are caught, and 15 harmless look-alikes (reformat, rename, move,
-  parametrize, snapshot, raised thresholds, CI step split) stay silent. The cases were
-  written together with the detector, so they guard against regressions; they do not prove
-  accuracy. Three known gaps are listed in the file and still open: mocking the module
-  under test, hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
-- **Noise on real human history** (the last 300 commits of commander.js, execa, click,
-  requests and zod; 606 of them touched tests or CI/config): the two blocking rules fired on
-  7 commits (1.2%). Each was read by hand: one was a real defect (a refactor in `requests`
-  dropped the `assert` keyword, leaving a comparison with no effect); the other six were
-  deliberate rewrites a reviewer should still see, such as a test-framework migration,
-  dropping Python 2, or a documented `continue-on-error`. `test-removed` fired on 6.1% and
-  `expectation-rewritten` on 2.8% of those commits, which is why they only report.
-- **Not measured yet:** accuracy on real AI-agent pull requests. The sample above is human
-  history, and it is small. Treat the numbers as a floor for noise, not a guarantee.
+- **Labeled changes** (`benchmarks/cases.mjs`): 40 cheating edits across JS/TS, Python, Go and
+  CI/config files are caught and 33 harmless look-alikes (reformat, rename, move, parametrize,
+  helper extraction, raised thresholds, CI restructuring) stay silent. The cases were written
+  together with the detector, so they guard against regressions; they do not prove accuracy.
+  Three known gaps are listed in the file and still open: mocking the module under test,
+  hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
+- **Five mature open-source projects** (commander.js, execa, click, requests, zod; 606 commits
+  that touch tests or CI/config): the blocking rules fired on 3 commits (0.5%), all of them
+  deliberate. `assertion-removed` fired on 5 (0.8%), including one real defect:
+  a refactor in `requests` dropped the `assert` keyword and left a comparison with no effect.
+- **AI-signed commits in 166 public repositories** (signatures from Claude, Copilot, Cursor,
+  Codex, Devin and aider; 12,645 commits that touch tests or CI/config):
 
-It is a **review aid**. It cannot prove who wrote a change or that code is correct, and it
+  | | AI-signed | Other commits |
+  | --- | ---: | ---: |
+  | Repositories | 160 | 141 |
+  | Commits reviewed | 6,895 | 5,750 |
+  | Blocking rules | 0.3% (20) | 0.3% (16) |
+  | `assertion-removed` (warns) | 2.4% | 2.2% |
+  | `test-removed` (warns) | 15.4% | 12.7% |
+  | `expectation-rewritten` (warns) | 5.7% | 5.5% |
+
+  Compared inside the same repository (135 repositories with both kinds), the odds of a
+  blocking finding in an AI-signed commit are 0.81 times those of another commit (95% CI
+  0.40-1.67): no sign that AI-signed commits weaken checks more often. Claude accounts for
+  5,380 of the AI-signed commits; the other agents are too few to compare.
+- **Hand-read precision.** Findings were read without knowing who wrote the commit (one
+  reader, an AI assistant; not independently verified). On repositories the detector had never
+  seen, the 11 blocking findings were 2 unexplained relaxations (TypeScript strictness switched
+  off in commits titled "Changes"), 7 deliberate and explained changes, and 2 false alarms. Of
+  24 `assertion-removed` warnings, 1 was an unexplained weakening, 12 deliberate, 6 unclear and
+  5 false alarms. So most findings are decisions a reviewer should see rather than mistakes,
+  and roughly one in five is a false alarm. Earlier rounds (76 findings) were used to fix the
+  detector and are not counted here.
+
+Caveats. A signature shows a tool was involved, not how much, and unsigned AI help in the
+"other" group would hide a difference. The repositories came from searching for those
+signatures, so many are small personal projects. This measures what was committed, not what an
+agent tries mid-session: a weakened check fixed before the commit is invisible. Labels are one
+reader's opinion. Three small fixes (assertion helpers, throwing test-library queries,
+scheduled-only workflows) were added after the labeling and have regression cases, but were not
+re-labeled.
+
+It is a **review aid**: it cannot prove who wrote a change or that code is correct, and it
 reads text, not program semantics. A green result is not a quality certificate.
 
 ### Quick start
@@ -145,12 +175,12 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-Install 0.9.0: `npx agent-roast@0.9.0 review --base origin/main`. For local development,
+Install 0.10.0: `npx agent-roast@0.10.0 review --base origin/main`. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Precise exceptions (since 0.8.0)
 
-Use `npx agent-roast@0.9.0 check --format json`, or build this checkout with
+Use `npx agent-roast@0.10.0 check --format json`, or build this checkout with
 `npm run build` and run `node dist/cli.js`.
 
 Some skipped integrations or abstract stubs are intentional. In 0.8.0 you can accept
@@ -386,7 +416,7 @@ jobs:
 
 To pilot the Action without blocking on findings, set `advisory: true`. It passes
 an explicit empty fail-on list; invalid configuration, Git errors and incomplete
-scans still fail. The `v1` Action installs 0.9.0. The CLI equivalent is `--fail-on ''`.
+scans still fail. The `v1` Action installs 0.10.0. The CLI equivalent is `--fail-on ''`.
 
 > **Security Note:** `agent-roast` runs in an isolated runner directory (`$RUNNER_TEMP`) with `--ignore-scripts` to neutralize malicious `.npmrc` files in untrusted pull requests. `pull_request_target` is not supported.
 
@@ -474,7 +504,7 @@ node scripts/verify-user-workflows.mjs dist/cli.js
 against current code. Regression tests use disposable Git repositories. The programmatic
 `auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
 use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
-The composite Action installs exactly 0.9.0. For local development, use
+The composite Action installs exactly 0.10.0. For local development, use
 `node dist/cli.js --staged` after building.
 
 ### Author & Support

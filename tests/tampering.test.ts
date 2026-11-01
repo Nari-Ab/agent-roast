@@ -33,15 +33,16 @@ const SUITE = `describe("cart", () => {
 `;
 
 describe("assertion-weakened", () => {
-  it("blocks a test that loses an assertion", async () => {
+  it("reports a test that loses an assertion without blocking by default", async () => {
     write("cart.test.ts", SUITE); base = commit();
     write("cart.test.ts", SUITE.replace("    expect(cart.items).toHaveLength(2);\n", "")); commit();
     const result = await reviewChanges({ cwd: dir, base });
-    expect(types(result)).toEqual(["assertion-weakened"]);
-    expect(result.exitCode).toBe(1);
+    expect(types(result)).toEqual(["assertion-removed"]);
+    expect(result.exitCode).toBe(0);
     expect(result.infractions[0]).toMatchObject({ file: "cart.test.ts", lineSnippet: "totals items: 2 → 1 assertions" });
-    expect(result.infractions[0].suggestion).toMatch(/Restore the removed assertion/);
+    expect(result.infractions[0].suggestion).toMatch(/Confirm the removed checks no longer apply/);
     expect(result.output).not.toMatch(/Review this occurrence/);
+    expect((await reviewChanges({ cwd: dir, base, failOn: ["assertion-removed"] })).exitCode).toBe(1);
   });
   it("blocks replacing an exact check by a weaker one", async () => {
     write("cart.test.ts", SUITE); base = commit();
@@ -50,7 +51,7 @@ describe("assertion-weakened", () => {
     expect(types(result)).toEqual(["assertion-weakened"]);
     expect(result.infractions[0].reason).toMatch(/weaker/);
   });
-  it("blocks python tests that drop an assert or weaken it to a truthiness check", async () => {
+  it("blocks python tests that weaken an assert to a truthiness check", async () => {
     write("test_cart.py", "def test_total():\n    total = price(cart)\n    assert total == 42\n    assert len(cart) == 2\n"); base = commit();
     write("test_cart.py", "def test_total():\n    total = price(cart)\n    assert total\n    assert len(cart) == 2\n"); commit();
     expect(types(await reviewChanges({ cwd: dir, base }))).toEqual(["assertion-weakened"]);
@@ -75,10 +76,10 @@ describe("assertion-weakened", () => {
   it("treats a commented-out assertion as removed", async () => {
     write("cart.test.ts", SUITE); base = commit();
     write("cart.test.ts", SUITE.replace("    expect(cart.items).toHaveLength(2);", "    // expect(cart.items).toHaveLength(2);")); commit();
-    expect(types(await reviewChanges({ cwd: dir, base }))).toEqual(["assertion-weakened"]);
+    expect(types(await reviewChanges({ cwd: dir, base }))).toEqual(["assertion-removed"]);
   });
   it("respects rule: off in the base policy", async () => {
-    write(".agentroastrc.json", JSON.stringify({ rules: { "assertion-weakened": "off" } }));
+    write(".agentroastrc.json", JSON.stringify({ rules: { "assertion-removed": "off" } }));
     write("cart.test.ts", SUITE); base = commit();
     write("cart.test.ts", SUITE.replace("    expect(cart.items).toHaveLength(2);\n", "")); commit();
     const result = await reviewChanges({ cwd: dir, base });
@@ -161,7 +162,7 @@ describe("guard-weakened", () => {
     expect(result.infractions[0].lineSnippet).toBe("no-floating-promises: error → off");
   });
   it("blocks CI tolerating failures or dropping the test step", async () => {
-    const workflow = (extra: string, test: string) => `jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n${test}${extra}`;
+    const workflow = (extra: string, test: string) => `on:\n  pull_request:\njobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n${test}${extra}`;
     write(".github/workflows/ci.yml", workflow("", "      - run: npm test\n")); base = commit();
     write(".github/workflows/ci.yml", workflow("", "      - run: npm test\n        continue-on-error: true\n")); commit();
     expect(types(await reviewChanges({ cwd: dir, base }))).toEqual(["guard-weakened"]);
@@ -204,13 +205,13 @@ describe("parser robustness", () => {
     write("big.test.ts", suite(1)); commit();
     const result = await reviewChanges({ cwd: dir, base });
     expect(result.complete).toBe(true);
-    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-weakened", lineSnippet: "case 19999: 2 → 1 assertions" })]);
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-removed", lineSnippet: "case 19999: 2 → 1 assertions" })]);
   }, 30_000);
   it("does not let unbalanced quotes inside one test swallow the tests after it", async () => {
     const suite = (second: string) => `it("first", () => {\n  run(); // don't panic\n  expect(a).toBe(1);\n  expect(/\`/.test(s)).toBe(true);\n});\nit("second", () => {\n${second}});\nit("third", () => {\n  expect(c).toBe(3);\n});\n`;
     write("quotes.test.ts", suite("  expect(b).toBe(2);\n  expect(b2).toBe(2);\n")); base = commit();
     write("quotes.test.ts", suite("  expect(b).toBe(2);\n")); commit();
     const result = await reviewChanges({ cwd: dir, base });
-    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-weakened", lineSnippet: "second: 2 → 1 assertions" })]);
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "assertion-removed", lineSnippet: "second: 2 → 1 assertions" })]);
   });
 });
