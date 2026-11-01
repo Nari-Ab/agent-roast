@@ -98,6 +98,10 @@ re-labeled.
 It is a **review aid**: it cannot prove who wrote a change or that code is correct, and it
 reads text, not program semantics. A green result is not a quality certificate.
 
+**Want to see what it says about your repository?** [docs/pilot.md](docs/pilot.md) has a
+five-minute look back, an advisory workflow that never fails a pull request, and a feedback form.
+Counts are enough; no code is needed.
+
 ### Quick start
 
 ```bash
@@ -114,8 +118,9 @@ npx agent-roast --all --verbose
 ```
 
 A finding includes its file and line, the evidence, and a concrete next step.
-`--format json|markdown|sarif|github` are available; terminal output shows the first
-20 findings.
+`--format json|markdown|sarif|github` are available; terminal output shows the 20 most
+important findings (rules that block first, then the before/after rules, then the noisier
+line patterns).
 
 ### Context review for pull requests
 
@@ -175,12 +180,12 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-Install 0.10.0: `npx agent-roast@0.10.0 review --base origin/main`. For local development,
+Install 0.10.1: `npx agent-roast@0.10.1 review --base origin/main`. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Precise exceptions (since 0.8.0)
 
-Use `npx agent-roast@0.10.0 check --format json`, or build this checkout with
+Use `npx agent-roast@0.10.1 check --format json`, or build this checkout with
 `npm run build` and run `node dist/cli.js`.
 
 Some skipped integrations or abstract stubs are intentional. In 0.8.0 you can accept
@@ -416,7 +421,7 @@ jobs:
 
 To pilot the Action without blocking on findings, set `advisory: true`. It passes
 an explicit empty fail-on list; invalid configuration, Git errors and incomplete
-scans still fail. The `v1` Action installs 0.10.0. The CLI equivalent is `--fail-on ''`.
+scans still fail. The `v1` Action installs 0.10.1. The CLI equivalent is `--fail-on ''`.
 
 > **Security Note:** `agent-roast` runs in an isolated runner directory (`$RUNNER_TEMP`) with `--ignore-scripts` to neutralize malicious `.npmrc` files in untrusted pull requests. `pull_request_target` is not supported.
 
@@ -504,7 +509,7 @@ node scripts/verify-user-workflows.mjs dist/cli.js
 against current code. Regression tests use disposable Git repositories. The programmatic
 `auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
 use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
-The composite Action installs exactly 0.10.0. For local development, use
+The composite Action installs exactly 0.10.1. For local development, use
 `node dist/cli.js --staged` after building.
 
 ### Author & Support

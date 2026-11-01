@@ -1,0 +1,81 @@
+name: Pilot feedback
+description: Tell us what agent-roast got right and wrong on your repository
+title: "[pilot] "
+labels: ["pilot"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying it. Counts are enough: you do not need to name the repository or paste private code.
+        What to run is in [docs/pilot.md](https://github.com/Nari-Ab/agent-roast/blob/main/docs/pilot.md).
+  - type: dropdown
+    id: language
+    attributes:
+      label: Main language
+      options:
+        - TypeScript or JavaScript
+        - Python
+        - Go
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you ran it
+      options:
+        - One look back over recent commits
+        - Locally on a branch or pull request
+        - GitHub Action in advisory mode
+        - GitHub Action that blocks
+    validations:
+      required: true
+  - type: dropdown
+    id: agents
+    attributes:
+      label: Do AI coding agents change this repository?
+      options:
+        - "No"
+        - Occasionally
+        - Most changes
+  - type: input
+    id: reviewed
+    attributes:
+      label: Roughly how many commits or pull requests did it look at?
+  - type: textarea
+    id: findings
+    attributes:
+      label: What it reported
+      description: For each finding, the rule name and your verdict - real problem, deliberate change, or false alarm. A short list is enough.
+      placeholder: |
+        guard-weakened - deliberate
+        test-removed - false alarm (the test was moved)
+        none - nothing was reported
+    validations:
+      required: true
+  - type: textarea
+    id: missed
+    attributes:
+      label: Anything it missed, or got wrong
+  - type: dropdown
+    id: keep
+    attributes:
+      label: Would you keep it running?
+      options:
+        - Yes, as a blocking check
+        - Yes, as advisory
+        - "No"
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+  - type: dropdown
+    id: scorecard
+    attributes:
+      label: May these counts go into the public pilot scorecard, without names?
+      options:
+        - "Yes"
+        - "No"

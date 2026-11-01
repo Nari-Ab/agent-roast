@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Offline review for AI-assisted changes: catches weakened tests, lowered quality gates, skipped tests and swallowed errors",
   "type": "module",
   "main": "./dist/index.js",
