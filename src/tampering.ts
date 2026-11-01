@@ -274,7 +274,7 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
         return tokens.length > 0 && tokens.every(token => introduced.includes(token));
       };
       if (lost.every(accounted)) continue;
-      result.immediate.push(finding("assertion-weakened", newPath, current.line,
+      result.immediate.push(finding("assertion-removed", newPath, current.line,
         `${old.name}: ${old.assertions.length} → ${current.assertions.length} assertions`,
         "Test checks less than before", commit));
       continue;

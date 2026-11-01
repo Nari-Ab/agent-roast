@@ -22,6 +22,7 @@
           "stub-abandonment",
           "test-focus",
           "assertion-weakened",
+          "assertion-removed",
           "test-removed",
           "expectation-rewritten",
           "guard-weakened"
@@ -121,6 +122,13 @@
           ]
         },
         "guard-weakened": {
+          "enum": [
+            "error",
+            "warn",
+            "off"
+          ]
+        },
+        "assertion-removed": {
           "enum": [
             "error",
             "warn",

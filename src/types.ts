@@ -18,6 +18,7 @@ export type DetectorType =
   | "stub-abandonment"
   | "test-focus"
   | "assertion-weakened"
+  | "assertion-removed"
   | "test-removed"
   | "expectation-rewritten"
   | "guard-weakened";
@@ -31,6 +32,7 @@ export const VALID_DETECTORS: readonly DetectorType[] = [
   "stub-abandonment",
   "test-focus",
   "assertion-weakened",
+  "assertion-removed",
   "test-removed",
   "expectation-rewritten",
   "guard-weakened",

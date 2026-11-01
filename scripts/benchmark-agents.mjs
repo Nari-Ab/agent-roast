@@ -10,6 +10,7 @@
 //   --seed N            sampling seed (default 1)
 //   --concurrency N     parallel reviews (default 4)
 //   --list-only         only count commits per group, run no reviews
+//   --cli FILE          CLI entry to run (default dist/cli.js); point it at a frozen install so a rebuild cannot change a run
 //   --out FILE          write per-commit results as JSON
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -31,9 +32,9 @@ const out = option("--out", "");
 const repos = args;
 if (!repos.length) { console.error("usage: benchmark-agents.mjs <repo-dir>... [options]"); process.exit(2); }
 
-const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+const cli = path.resolve(option("--cli", fileURLToPath(new URL("../dist/cli.js", import.meta.url))));
 const BLOCKING = ["assertion-weakened", "guard-weakened"];
-const RULES = [...BLOCKING, "test-removed", "expectation-rewritten", "test-skip", "test-focus", "trivial-assert"];
+const RULES = [...BLOCKING, "assertion-removed", "test-removed", "expectation-rewritten", "test-skip", "test-focus", "trivial-assert"];
 const RELEVANT = /(?:^|\/)(?:test_[^/]+\.py|conftest\.py|(?:tests?|__tests__|specs?)\/|[^/]*[._-](?:test|spec)\.[a-z]+|[^/]*_test\.go|package\.json|tsconfig[^/]*\.json|(?:jest|vitest|vite)\.config\.[a-z]+|\.eslintrc[^/]*|eslint\.config\.[a-z]+|pyproject\.toml|setup\.cfg|tox\.ini|pytest\.ini|\.coveragerc|codecov\.ya?ml|\.gitlab-ci\.ya?ml|\.github\/workflows\/.*)$/i;
 
 // Signatures an agent or its harness leaves in commit metadata. Matching is on the commit

@@ -15,7 +15,7 @@ const repos = args;
 if (!repos.length) { console.error("usage: benchmark-noise.mjs <repo-dir>... [--commits N] [--out file]"); process.exit(2); }
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
-const RULES = ["assertion-weakened", "test-removed", "expectation-rewritten", "guard-weakened"];
+const RULES = ["assertion-weakened", "assertion-removed", "test-removed", "expectation-rewritten", "guard-weakened"];
 const git = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 const RELEVANT = /(?:^|\/)(?:test_[^/]+\.py|(?:tests?|__tests__|specs?)\/|[^/]*[._-](?:test|spec)\.[a-z]+|package\.json|tsconfig[^/]*\.json|(?:jest|vitest)\.config\.[a-z]+|\.eslintrc[^/]*|eslint\.config\.[a-z]+|pyproject\.toml|setup\.cfg|tox\.ini|\.github\/workflows\/.*)$/i;
 
