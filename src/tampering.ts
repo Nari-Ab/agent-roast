@@ -376,6 +376,13 @@ const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
 
 export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number }
 
+// A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
+const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
+
+function gatingTestLines(file: string, text: string): number {
+  return /\.gitlab-ci/.test(file) || CI_GATE.test(text) ? matchingLines(text, CI_RUNNER) : 0;
+}
+
 function matchingLines(text: string, pattern: RegExp): number {
   return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
 }
@@ -384,7 +391,7 @@ function matchingLines(text: string, pattern: RegExp): number {
 export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
-  return { file, before: matchingLines(was, CI_RUNNER), after: matchingLines(now, CI_RUNNER), reusableAfter: matchingLines(now, CI_REUSABLE) };
+  return { file, before: gatingTestLines(file, was), after: gatingTestLines(file, now), reusableAfter: matchingLines(now, CI_REUSABLE) };
 }
 
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:

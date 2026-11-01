@@ -162,7 +162,7 @@ describe("guard-weakened", () => {
     expect(result.infractions[0].lineSnippet).toBe("no-floating-promises: error → off");
   });
   it("blocks CI tolerating failures or dropping the test step", async () => {
-    const workflow = (extra: string, test: string) => `jobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n${test}${extra}`;
+    const workflow = (extra: string, test: string) => `on:\n  pull_request:\njobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n${test}${extra}`;
     write(".github/workflows/ci.yml", workflow("", "      - run: npm test\n")); base = commit();
     write(".github/workflows/ci.yml", workflow("", "      - run: npm test\n        continue-on-error: true\n")); commit();
     expect(types(await reviewChanges({ cwd: dir, base }))).toEqual(["guard-weakened"]);
