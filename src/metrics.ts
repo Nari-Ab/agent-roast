@@ -5,15 +5,65 @@ import { RULE_GUIDES } from "./rules.js";
 
 const PYTHON_TEST_SKIP_PATTERNS = [
   { regex: /@pytest\s*\.\s*mark\s*\.\s*skip\b/, name: "skipped pytest (@pytest.mark.skip)" },
-  { regex: /(?<![\w.])pytest\s*\.\s*skip\s*\(/, name: "imperative pytest skip (pytest.skip)" },
-  { regex: /@unittest\s*\.\s*skip\s*\(/, name: "skipped unittest (@unittest.skip)" },
-  { regex: /\bself\s*\.\s*skipTest\s*\(/, name: "imperative unittest skip (self.skipTest)" },
+  { regex: /(?<![\w.])pytest\s*\.\s*skip\s*\(/, name: "imperative pytest skip (pytest.skip)", imperative: true },
+  { regex: /@unittest\s*\.\s*skip\s*\(/, name: "skipped unittest (@unittest.skip)", imperative: false },
+  { regex: /\bself\s*\.\s*skipTest\s*\(/, name: "imperative unittest skip (self.skipTest)", imperative: true },
 ];
+
+/** `if not has_gpu(): pytest.skip("no GPU")` gates a test on its environment, and so does a skip in a fixture or
+ * helper that no test name covers. A skip that is a direct statement of a `test*` function disables it, and so does
+ * one under a condition that mentions CI. The last line of `lines` is the skip; a hunk gap or a header too far up
+ * leaves the context unknown and the skip is reported. */
+function isGuardedSkip(lines: { code: string; raw: string; number: number }[]): boolean {
+  const indentOf = (text: string) => text.length - text.trimStart().length;
+  const mentionsCi = (raw: string) => /\bCI\b|\bGITHUB_ACTIONS\b/.test(raw);
+  const own = lines[lines.length - 1];
+  if (/^\s*(?:if|elif|else)\b.*:\s*\S/.test(own.code)) return !mentionsCi(own.raw);
+  let limit = indentOf(own.code);
+  for (let i = lines.length - 2; i >= 0 && lines.length - 1 - i <= 200; i--) {
+    if (lines[i].number !== lines[i + 1].number - 1) return false;
+    const { code, raw } = lines[i];
+    if (!code.trim() || indentOf(code) >= limit) continue;
+    const keyword = /^\s*(async\s+def|def|class|if|elif|else|try|except|finally|with|for|while)\b/.exec(code)?.[1];
+    if (keyword === "def" || keyword === "async def") return !/^\s*(?:async\s+)?def\s+test/.test(code);
+    if (keyword === "class") return false;
+    if (keyword === "if" || keyword === "elif" || keyword === "else" || keyword === "try" || keyword === "except" || keyword === "finally") return !mentionsCi(raw);
+    limit = indentOf(code) + (keyword ? 0 : 1);
+  }
+  return false;
+}
 
 // Familiar test APIs only; this does not resolve imports or custom aliases.
 // Contiguous full-source/diff runs share one matcher. NUL marks hunk gaps;
 // SOH marks a real template opener, so .each`...` is distinguished from a reference.
 const JS_TEST_API = /(?<![\w$.])(?:(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe|failing|sequential))*\s*\.\s*(skip|todo|only)|((?:xit|xtest|xdescribe|fit|fdescribe)))\b((?:\s*\.\s*(?:each|failing|concurrent|serial|parallel|sequential))*)\s*(?=\(|\u0001)/g;
+
+/** `test.skip(browserName === 'webkit', 'reason')` gates a test on its environment, so it is not a disabled test.
+ * A title, a bare `skip()` and `skip(true)` switch a test off; so does a condition that mentions CI, which is how
+ * a failing test gets hidden from the pipeline. `open` is the offset of the call's parenthesis; a hunk gap or an
+ * unclosed call leaves the context unknown and the skip is reported. */
+function isConditionalSkip(source: string, raw: string, open: number): boolean {
+  if (source[open] !== "(") return false;
+  const args: string[] = [];
+  let depth = 0;
+  let start = open + 1;
+  for (let i = start; i < source.length && i - open <= 2000; i++) {
+    const char = source[i];
+    if (char === "\0") return false;
+    if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) {
+      if (depth) { depth--; continue; }
+      if (char !== ")") return false;
+      args.push(raw.slice(start, i).trim());
+      while (args.length && !args.at(-1)) args.pop();
+      const isString = (arg: string) => /^(['"`])[\s\S]*\1$/.test(arg);
+      if (!args.length || isString(args[0]) || args[0] === "true") return false;
+      if (args.length > 1 && !isString(args.at(-1)!)) return false;
+      return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(args[0]);
+    } else if (char === "," && !depth) { args.push(raw.slice(start, i).trim()); start = i + 1; }
+  }
+  return false;
+}
 
 const JS_COMMENT_DIRECTIVE_PATTERNS = [
   { regex: /^\s*\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
@@ -127,6 +177,7 @@ export function auditFileDiffs(
       if (python && !isComment) {
         for (const rule of PYTHON_TEST_SKIP_PATTERNS) {
           if (rule.regex.test(cleanedLine)) {
+            if (rule.imperative && isGuardedSkip(maskedLines)) break;
             infractions.push({
               type: "test-skip",
               file: file.path,
@@ -245,6 +296,7 @@ export function auditFileDiffs(
         if (match[2] && !isTestFile(file.path)) continue;
         if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;
         if (source[match.index + match[0].length] === "\u0001" && !/\.\s*each\s*$/.test(match[3])) continue;
+        if (match[1] === "skip" && !match[3] && isConditionalSkip(source, raw, match.index + match[0].length)) continue;
         const focus = match[1] === "only" || match[2] === "fit" || match[2] === "fdescribe";
         infractions.push({ type: focus ? "test-focus" : "test-skip", file: file.path, ...evidence(match.index, match[0].length),
           commitHash, commitDate, reason: focus ? "focused test or suite excludes other tests from the run" : `skipped, disabled or placeholder test registration (${match[0].replace(/\s/g, "")})`,

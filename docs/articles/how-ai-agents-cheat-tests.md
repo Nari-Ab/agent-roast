@@ -22,7 +22,9 @@ The first test does not execute; the second can limit which tests execute.
 Custom aliases and computed properties are outside the current heuristic's scope.
 Use the runner's own protections too, for example
 [Playwright's forbidOnly setting](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only).
-Intentional conditional skips should have a specific reason and a review plan.
+A skip that depends on the environment, such as `test.skip(isMobile, "desktop only")` or a
+`pytest.skip` under an `if`, is not reported; a skip that names a test is. Either kind should
+have a specific reason and a review plan.
 
 ## Assertions which do not test behavior
 

@@ -28,6 +28,7 @@ review AI-assisted changes, but it cannot tell who wrote a change, and the measu
 show these moves are not specific to AI.
 
 ```bash
+npx agent-roast replay                           # your last 50 commits, one at a time
 npx agent-roast review --base origin/main        # a pull request
 npx agent-roast --staged                         # what you are about to commit
 ```
@@ -42,7 +43,10 @@ npx agent-roast --staged                         # what you are about to commit
 | `test-skip`, `test-focus`, `trivial-assert`, `swallowed-error`, `type-escape`, `stub-abandonment` | the classic shortcuts, compared before/after so old debt does not block | skip, focus and trivial-assert block |
 
 Renames, moved tests, parametrization, assertions moved into a new helper, and formatter
-rewraps (prettier, black) are recognized and not reported. Intentional cases can be accepted
+rewraps (prettier, black) are recognized and not reported. So is a skip that depends on the
+environment: `test.skip(isMobile, 'reason')` and Playwright's other condition forms,
+`if not has_gpu(): pytest.skip(...)`, and a skip inside a fixture or helper. A skip that names a
+test, stands alone in a test body or depends on `CI` is still reported. Intentional cases can be accepted
 one by one with an expiring, reviewed exception (see below). Policy is read from the base
 branch, so a PR cannot switch the rules off for itself.
 
@@ -52,9 +56,9 @@ Measured, not promised; method, corpus and raw numbers are in
 [docs/benchmarks.md](docs/benchmarks.md). **Short version: weakened checks are rare, usually
 deliberate, and not specific to AI. The tool finds them; a person decides.**
 
-- **Labeled changes** (`benchmarks/cases.mjs`): 40 cheating edits across JS/TS, Python, Go and
-  CI/config files are caught and 33 harmless look-alikes (reformat, rename, move, parametrize,
-  helper extraction, raised thresholds, CI restructuring) stay silent. The cases were written
+- **Labeled changes** (`benchmarks/cases.mjs`): 43 cheating edits across JS/TS, Python, Go and
+  CI/config files are caught and 36 harmless look-alikes (reformat, rename, move, parametrize,
+  helper extraction, raised thresholds, CI restructuring, skips that depend on the environment) stay silent. The cases were written
   together with the detector, so they guard against regressions; they do not prove accuracy.
   Three known gaps are listed in the file and still open: mocking the module under test,
   hardcoding the tested value, and vacuous matchers such as `expect.anything()`.
@@ -99,8 +103,8 @@ It is a **review aid**: it cannot prove who wrote a change or that code is corre
 reads text, not program semantics. A green result is not a quality certificate.
 
 **Want to see what it says about your repository?** [docs/pilot.md](docs/pilot.md) has a
-five-minute look back, an advisory workflow that never fails a pull request, and a feedback form.
-Counts are enough; no code is needed.
+two-minute replay of your last commits, an advisory workflow that never fails a pull request, and a
+feedback form. Counts are enough; no code is needed.
 
 ### Quick start
 
@@ -121,6 +125,22 @@ A finding includes its file and line, the evidence, and a concrete next step.
 `--format json|markdown|sarif|github` are available; terminal output shows the 20 most
 important findings (rules that block first, then the before/after rules, then the noisier
 line patterns).
+
+### Replay recent history
+
+```bash
+# Review each of the last 50 commits on its own, as a pull-request check would have seen it
+npx agent-roast replay
+npx agent-roast replay --last 200 --json     # more history, every finding
+npx agent-roast replay --all-rules           # also list line patterns such as `as any`
+```
+
+`replay` answers "what would this have said about our last 50 changes?" before you put it in CI.
+It follows the first-parent history, so a squash, a merge and a direct commit each count as one
+change, reviews each against its parent with the policy at that parent, and lists the commits
+that would have been blocked or drew a warning about a weakened check. It never fails because of a
+finding, and a commit too large to read is reported, not fatal. Line patterns (`type-escape`,
+`swallowed-error`, `stub-abandonment`) are counted and listed only with `--all-rules`.
 
 ### Context review for pull requests
 
@@ -153,7 +173,7 @@ severity but does not enable rules disabled by base policy.
 
 ```bash
 # Advisory pilot: inspect findings before deciding what should block the team
-agent-roast review --base origin/main --fail-on ''
+agent-roast review --base origin/main --advisory
 # Gate the shortcuts the team agrees matter
 agent-roast review --base origin/main --fail-on test-skip,trivial-assert,swallowed-error
 ```
@@ -180,12 +200,12 @@ regressions) may appear in the report/summary rather than as an inline PR annota
 Use a separate SARIF category for introduced-findings review; it does not represent
 a full scan of all outstanding alerts.
 
-Install 0.10.1: `npx agent-roast@0.10.1 review --base origin/main`. For local development,
+Install 0.11.0: `npx agent-roast@0.11.0 review --base origin/main`. For local development,
 run `npm run build` and use `node dist/cli.js`.
 
 ### Precise exceptions (since 0.8.0)
 
-Use `npx agent-roast@0.10.1 check --format json`, or build this checkout with
+Use `npx agent-roast@0.11.0 check --format json`, or build this checkout with
 `npm run build` and run `node dist/cli.js`.
 
 Some skipped integrations or abstract stubs are intentional. In 0.8.0 you can accept
@@ -421,7 +441,9 @@ jobs:
 
 To pilot the Action without blocking on findings, set `advisory: true`. It passes
 an explicit empty fail-on list; invalid configuration, Git errors and incomplete
-scans still fail. The `v1` Action installs 0.10.1. The CLI equivalent is `--fail-on ''`.
+scans still fail. The `v1` Action installs 0.11.0. The CLI equivalent is `--advisory`
+(`--fail-on ''` does the same in POSIX shells, but cmd.exe and Windows PowerShell 5.1 do not pass
+an empty argument through).
 
 > **Security Note:** `agent-roast` runs in an isolated runner directory (`$RUNNER_TEMP`) with `--ignore-scripts` to neutralize malicious `.npmrc` files in untrusted pull requests. `pull_request_target` is not supported.
 
@@ -474,7 +496,10 @@ the added diff in legacy audit modes are not fully parsed. Custom test API alias
 computed property calls and type/import resolution are not handled. Panic loops are an observational history heuristic.
 Test registration options such as Node's `test('name', { skip: true }, fn)` and
 `{ only: true }` are currently not inspected; use explicit `.skip`/`.only` APIs and
-the runner's CI safeguards. Regexp masking is contextual, not a full JavaScript
+the runner's CI safeguards. A skip that depends on the environment (`test.skip(isMobile, 'reason')`,
+`pytest.skip` under an `if`, or in a fixture) is not reported, because such skips are overwhelmingly
+platform or service gates; one that hides a failing test behind a condition is therefore missed unless
+the condition mentions `CI`. Regexp masking is contextual, not a full JavaScript
 parser. Formatting across contiguous lines is supported for casts, empty catches
 and placeholder errors, but legacy added-line audits cannot recover missing hunks.
 The discipline score summarizes added history; it does not certify current code quality.
@@ -509,7 +534,7 @@ node scripts/verify-user-workflows.mjs dist/cli.js
 against current code. Regression tests use disposable Git repositories. The programmatic
 `auditPullRequest({ staged: true })` API retains the legacy added-lines contract;
 use `reviewStagedChanges()` for the new context comparison and `ReviewResult`.
-The composite Action installs exactly 0.10.1. For local development, use
+The composite Action installs exactly 0.11.0. For local development, use
 `node dist/cli.js --staged` after building.
 
 ### Author & Support

@@ -248,6 +248,11 @@ const RULE_PRIORITY: Partial<Record<string, number>> = {
   "assertion-removed": 1, "expectation-rewritten": 1, "test-removed": 1,
 };
 
+/** Rules about the checks themselves (tests, assertions, quality gates), as opposed to line patterns such as `as any`. */
+export function isCheckRule(type: string): boolean {
+  return RULE_PRIORITY[type] !== undefined;
+}
+
 /** Rules that failed the run first (even in advisory mode, where none do), then by priority. */
 function findingRank(type: string, failedRules: readonly string[]): number {
   return failedRules.includes(type) ? -1 : RULE_PRIORITY[type] ?? 2;
@@ -257,7 +262,7 @@ function findingRank(type: string, failedRules: readonly string[]): number {
  * Puts the findings that matter first, so a long list of warnings cannot push them below a
  * display cap. The order inside each rank is unchanged.
  */
-function mostImportantFirst<T extends { type: string }>(findings: readonly T[], failedRules: readonly string[]): T[] {
+export function mostImportantFirst<T extends { type: string }>(findings: readonly T[], failedRules: readonly string[]): T[] {
   return [...findings].sort((a, b) => findingRank(a.type, failedRules) - findingRank(b.type, failedRules));
 }
 

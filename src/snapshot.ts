@@ -71,6 +71,22 @@ async function requireLocalObjects(cwd: string, signal?: AbortSignal): Promise<v
   }
 }
 
+/** A truncated clone and a short history need different fixes, so say which one this is. */
+async function unresolvedRefHint(cwd: string, ref: string, signal?: AbortSignal): Promise<string> {
+  try {
+    const count = async (...args: string[]) => Number((await readGit(cwd, ["rev-list", "--count", ...args, "HEAD"], signal, 64)).toString().trim());
+    if ((await readGit(cwd, ["rev-parse", "--is-shallow-repository"], signal, 64)).toString().trim() === "true") {
+      return `This clone is shallow (commits available: ${await count()}), so the ref may lie outside it. Run 'git fetch --unshallow' (in GitHub Actions: actions/checkout with fetch-depth: 0) or check the name.`;
+    }
+    const back = /^HEAD~(\d+)$/.exec(ref);
+    const depth = back ? await count("--first-parent") : 0;
+    if (back && Number(back[1]) >= depth) return `HEAD has only ${depth} commit${depth === 1 ? "" : "s"} on its main line${depth > 1 ? `; try HEAD~${depth - 1}` : ""}.`;
+  } catch {
+    assertNotAborted(signal);
+  }
+  return "Check that it names a commit, branch or tag of this repository.";
+}
+
 export async function reviewRefs(cwd: string, base: string, head: string, signal?: AbortSignal): Promise<{ baseSha: string; headSha: string; mergeBaseSha: string }> {
   const resolve = async (ref: string) => {
     if (!ref.trim()) throw new ConfigError("Review refs must not be empty.");
@@ -78,7 +94,7 @@ export async function reviewRefs(cwd: string, base: string, head: string, signal
       return (await readGit(cwd, ["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], signal, 1024)).toString().trim();
     } catch (error) {
       assertNotAborted(signal);
-      throw new ConfigError(`Cannot resolve review ref '${ref}'. Use valid commits and fetch complete history (actions/checkout fetch-depth: 0). ${error instanceof Error ? error.message : String(error)}`);
+      throw new ConfigError(`Cannot resolve review ref '${ref}'. ${await unresolvedRefHint(cwd, ref, signal)} ${error instanceof Error ? error.message : String(error)}`);
     }
   };
   await requireLocalObjects(cwd, signal);

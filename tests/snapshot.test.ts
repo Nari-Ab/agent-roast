@@ -3,6 +3,7 @@ import * as fs from "fs";
 import path from "path";
 import { tmpdir } from "os";
 import { execFileSync } from "child_process";
+import { pathToFileURL } from "url";
 import { changedTreeFiles, readBlob, readGit, reviewRefs } from "../src/snapshot.js";
 
 let dir: string;
@@ -46,6 +47,20 @@ describe("immutable, bounded Git source reads", () => {
     const base = git("rev-parse", "HEAD"); git("checkout", "--orphan", "unrelated");
     git("rm", "-rf", "."); fs.writeFileSync(path.join(dir, "other.ts"), "other"); git("add", "."); git("commit", "-m", "unrelated");
     await expect(reviewRefs(dir, base, "HEAD")).rejects.toThrow(/merge-base/);
+  });
+  it("tells a truncated clone from a short history when a ref does not resolve", async () => {
+    for (const n of [2, 3]) { fs.writeFileSync(path.join(dir, "auth.ts"), `const ok = ${n};\n`); git("commit", "-am", `change ${n}`); }
+    const short = await reviewRefs(dir, "HEAD~50", "HEAD").catch(error => error as Error);
+    expect(short.message).toMatch(/HEAD has only 3 commits on its main line; try HEAD~2\./);
+    expect(short.message).not.toMatch(/shallow/);
+    const shallow = fs.mkdtempSync(path.join(tmpdir(), "roast-shallow-"));
+    try {
+      execFileSync("git", ["clone", "-q", "--depth", "1", pathToFileURL(dir).href, shallow], { stdio: "ignore" });
+      const truncated = await reviewRefs(shallow, "HEAD~50", "HEAD").catch(error => error as Error);
+      expect(truncated.message).toMatch(/This clone is shallow \(commits available: 1\).*git fetch --unshallow.*fetch-depth: 0/);
+      const typo = await reviewRefs(dir, "no-such-branch", "HEAD").catch(error => error as Error);
+      expect(typo.message).toMatch(/Cannot resolve review ref 'no-such-branch'\. Check that it names a commit, branch or tag/);
+    } finally { fs.rmSync(shallow, { recursive: true, force: true }); }
   });
   it("refuses ambiguous criss-cross merge ancestry", async () => {
     const root = git("rev-parse", "HEAD"); const tree = git("rev-parse", "HEAD^{tree}");
