@@ -34,6 +34,7 @@ export * from "./init.js";
 export * from "./badge.js";
 export * from "./check.js";
 export * from "./review.js";
+export * from "./replay.js";
 export * from "./sarif.js";
 export * from "./baseline.js";
 export * from "./rules.js";

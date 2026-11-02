@@ -213,6 +213,18 @@ describe("context review of committed code", () => {
     expect(result.stdout).toContain("WARN [assertion-weakened] src/zz.test.ts");
     expect(result.stdout.indexOf("WARN [assertion-weakened]")).toBeLessThan(result.stdout.indexOf("WARN [type-escape]"));
   });
+  it("--advisory reports without failing, like an empty --fail-on, and does not mix with --fail-on", () => {
+    // An empty argument does not survive every shell (cmd.exe and Windows PowerShell mangle it), so --advisory is the portable spelling.
+    const node = process.env.AGENT_ROAST_TEST_NODE || process.execPath;
+    write("auth.test.ts", "it.skip('auth');\n"); commit();
+    expect(run("--base", base).status).toBe(1);
+    const advisory = run("--base", base, "--advisory");
+    expect(advisory.status).toBe(0); expect(advisory.stdout).toContain("WARN [test-skip] auth.test.ts");
+    expect(run("--base", base, "--advisory", "--fail-on", "test-skip").status).toBe(2);
+    expect(spawnSync(node, [cli, "check", dir], { encoding: "utf8", env }).status).toBe(1);
+    expect(spawnSync(node, [cli, "check", dir, "--advisory"], { encoding: "utf8", env }).status).toBe(0);
+    expect(spawnSync(node, [cli, dir, "--advisory"], { encoding: "utf8", env }).status).toBe(2);
+  });
   it("lists blocking findings first in the current-code check as well", () => {
     write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");
     write("src/zz.test.ts", "it.skip('adds', () => {});\n"); commit();

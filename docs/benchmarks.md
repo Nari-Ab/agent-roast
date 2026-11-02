@@ -11,11 +11,12 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 40/40 cheats caught, 33/33 harmless changes left alone, 3 documented gaps open |
+| Labeled regression cases | 43/43 cheats caught, 36/36 harmless changes left alone, 3 documented gaps open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
 | Hand labels on unseen repositories | blocking: 2 unexplained, 7 deliberate, 2 false alarms (n=11) |
+| First run: `replay` of the newest 50 commits, 179 repositories | no commit that would block in 149 of 179; nothing to list in 43 of 179 (section 4) |
 
 ## 1. Labeled changes (regression cases)
 
@@ -28,7 +29,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **40/40 cheats caught, 33/33 harmless changes left alone, 3/3 documented gaps still
+Result: **43/43 cheats caught, 36/36 harmless changes left alone, 3/3 documented gaps still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. Open gaps: mocking the module under test, hardcoding the
@@ -186,6 +187,43 @@ The first round also showed that a lost assertion is mostly a deliberate change,
   the last labeling round and have regression cases but no new labels. The rates above are from the
   shipped build; the round 3 labels are from the build before those fixes.
 
+## 4. The first run: replaying the newest commits
+
+The pilot guide starts with `agent-roast replay`, so its output is measured too: the newest 50
+commits of each of the 179 repositories above (7,905 commits), each reviewed on its own
+against its parent with the build in this release.
+
+| Per repository | Result |
+| --- | --- |
+| Commits that would have been blocked | median 0, at most 12; none in 149 of 179 |
+| Commits with a warning about a weakened check | median 4; none in 46 of 179 |
+| Nothing to list at all | 43 of 179 |
+| Time | median 10 s, p90 28 s, max 106 s |
+
+Of all commits, 0.6% would have been blocked, 12.1% drew a warning about a weakened
+check, 9.4% matched only a line pattern such as `as any`, and 77.7% had nothing to
+report or changed no source, test or CI file. 13 commits could not be compared in full and 5 were too
+large to review; `replay` reports them instead of stopping.
+
+**Why one commit at a time.** The first version of the guide ran `review --base HEAD~50`, one
+comparison over the whole window. On the same repositories that stopped with an error on 44 of 179
+(the history along first parents was shorter than the window on 27, more than 1,000 files changed
+on 11, and files could not be compared on 6) and reported a median of 22 findings on the rest,
+mostly `as any` and tests that were gone by the end of the window. A pull-request check sees one
+change at a time, so that is what `replay` shows.
+
+**What changed because of the first run.** `test-skip` blocks by default, and on this corpus it
+fired on skips that gate a test on its environment: Playwright's `test.skip(testInfo.project.name
+!== 'desktop-chrome', 'desktop only')` (249 of the 829 `skip()` calls in the current code of these
+repositories, 30%), `pytest.skip` under an `if` or `try`, and `pytest.skip` inside a fixture. They
+are no longer reported. Of the 75 non-merge commits whose review under 0.10.1 contained a
+`test-skip` finding, findings fell from 160 to 34 and commits from 75 to 11. The 34 left are skips
+that name a test (27), `test.skip(true, ...)` (4) and `@pytest.mark.skip` or `@unittest.skip` (3).
+This is a reduction against the previous build, judged from the code of the removed findings by one
+reader (a condition on the browser project, the platform or a missing service), not a labeled
+accuracy figure. The cost: a conditional skip that hides a failing test is no longer reported
+unless its condition mentions CI.
+
 ## Reproduce
 
 ```bash
@@ -194,6 +232,7 @@ npm run bench                                                     # labeled case
 npm run bench:noise -- ./commander.js ./execa ./click ./requests ./zod --commits 300
 node scripts/benchmark-agents.mjs ./repo-a ./repo-b \
   --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --out agents.json
+node scripts/benchmark-replay.mjs ./repo-a ./repo-b --last 50 --out replay.json   # the first run, section 4
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For

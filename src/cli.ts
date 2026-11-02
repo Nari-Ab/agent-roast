@@ -8,6 +8,7 @@ import {
   checkProject,
   reviewChanges,
   reviewStagedChanges,
+  replayHistory,
   formatReviewMarkdown,
   writeBaseline,
   RULE_GUIDES,
@@ -31,6 +32,15 @@ const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 const errorMessage = (error: unknown): string => terminalText(error instanceof Error ? error.message : String(error));
 
+/** Detectors that fail the run: none with --advisory, the --fail-on list, or undefined to leave it to the policy. */
+function failOnOption(options: { failOn?: string; advisory?: boolean }): string[] | undefined {
+  if (options.advisory) {
+    if (options.failOn !== undefined) throw new ConfigError("--advisory cannot be combined with --fail-on.");
+    return [];
+  }
+  return options.failOn?.split(",").map(rule => rule.trim()).filter(Boolean);
+}
+
 /** Shared CLI execution for committed and staged source comparison. */
 async function runContextReview(repoPath: string, options: any, staged: boolean): Promise<void> {
   const controller = new AbortController();
@@ -39,7 +49,7 @@ async function runContextReview(repoPath: string, options: any, staged: boolean)
   process.once("SIGTERM", abort);
   try {
     const common = { cwd: repoPath,
-      failOn: options.failOn !== undefined ? options.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+      failOn: failOnOption(options),
       ignoreExceptions: options.ignoreExceptions,
       format: options.json ? "json" : options.format, signal: controller.signal,
     };
@@ -76,6 +86,7 @@ program
   .option("--head <ref>", "Head git ref/SHA for PR mode audit (default: HEAD)", "HEAD")
   .option("--ignore-exceptions", "Report findings even when accepted by reviewed, unexpired exceptions", false)
   .option("--fail-on <rules>", "Comma-separated detectors that trigger CI failure")
+  .option("--advisory", "Report findings without failing the run, the same as an empty --fail-on (setup errors and incomplete scans still fail)", false)
   .option("--fail-under <score>", "Fail CI if agent score is below threshold (0-100)")
   .option("--format <format>", "Output format: terminal, json, github, markdown (check/review also support sarif)", "terminal")
   .option("--authors", "Display author names and emails in report", false)
@@ -103,8 +114,8 @@ program
           (options.failUnder.trim() === "" || !Number.isFinite(Number(options.failUnder)) || Number(options.failUnder) < 0 || Number(options.failUnder) > 100)) {
         throw new ConfigError("--fail-under must be a number between 0 and 100.");
       }
-      if (!options.base && !options.staged && options.failOn !== undefined) {
-        throw new ConfigError("--fail-on requires --base or --staged.");
+      if (!options.base && !options.staged && (options.failOn !== undefined || options.advisory)) {
+        throw new ConfigError(`${options.advisory ? "--advisory" : "--fail-on"} requires --base or --staged.`);
       }
       if (!options.base && !options.staged && !options.json && !["terminal", "json"].includes(options.format)) {
         throw new ConfigError("Repository audits support terminal or json format; use --base or --staged for github/markdown.");
@@ -115,9 +126,7 @@ program
       const config = loadConfig(configRoot);
 
       if (options.base || options.staged) {
-        const failOnRules = options.failOn !== undefined
-          ? options.failOn.split(",").map((s: string) => s.trim()).filter(Boolean)
-          : config.failOn;
+        const failOnRules = failOnOption(options) ?? config.failOn;
 
         const chosenFormat = options.json ? "json" : options.format || "terminal";
 
@@ -217,7 +226,7 @@ program
   .command("review")
   .description("Compare full changed source at merge-base and head; gate only new findings")
   .argument("[path]", "Path to the Git repository", ".")
-  .addHelpText("after", "\nRequired: --base <trusted-ref>  Optional: --head <ref> (default HEAD), or use --staged for HEAD/index\nOutput: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExample: agent-roast review --base origin/main --format markdown")
+  .addHelpText("after", "\nRequired: --base <trusted-ref>  Optional: --head <ref> (default HEAD), or use --staged for HEAD/index\nOutput: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>, --advisory\nExamples:\n  agent-roast review --base origin/main --format markdown\n  agent-roast review --base HEAD~50 --advisory")
   .action(async (repoPath: string) => {
     try {
       const options = program.opts();
@@ -235,12 +244,51 @@ program
   });
 
 program
+  .command("replay")
+  .description("Review each of the newest commits on its own, to see what a pull-request check would have said")
+  .argument("[path]", "Path to the Git repository", ".")
+  .option("--last <n>", "How many of the newest commits to review (default 50, at most 1000)")
+  .option("--all-rules", "List line-pattern warnings (type-escape, swallowed-error, stub-abandonment) as well", false)
+  .addHelpText("after", "\nOutput: --format terminal|json, --json\nExamples:\n  agent-roast replay\n  agent-roast replay --last 200 --json")
+  .action(async (repoPath: string, opts: { last?: string; allRules?: boolean }) => {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    process.once("SIGINT", abort);
+    process.once("SIGTERM", abort);
+    try {
+      const global = program.opts();
+      if (global.base || global.staged || global.failOn !== undefined || global.advisory || global.failUnder !== undefined || global.all || global.ignoreExceptions ||
+          program.getOptionValueSource("head") === "cli" || program.getOptionValueSource("since") === "cli") {
+        throw new ConfigError("replay reviews each commit on its own; --base, --head, --staged, --fail-on, --advisory, --fail-under, --all, --since and --ignore-exceptions do not apply.");
+      }
+      const format = global.json ? "json" : global.format;
+      if (format !== "terminal" && format !== "json") throw new ConfigError("replay supports --format terminal or json.");
+      const last = opts.last === undefined ? 50 : Number(opts.last);
+      if (!/^\d+$/.test(opts.last ?? "50") || last < 1 || last > 1000) throw new ConfigError("--last must be a whole number between 1 and 1000.");
+      const progress = process.stderr.isTTY && format === "terminal";
+      const result = await replayHistory({
+        cwd: repoPath, last, allRules: opts.allRules, format, signal: controller.signal,
+        onProgress: progress ? (done, total) => process.stderr.write(`\r  reviewed ${done}/${total} commits`) : undefined,
+      });
+      if (progress) process.stderr.write("\r\x1b[K");
+      console.log(result.output);
+      process.exitCode = result.exitCode;
+    } catch (error) {
+      console.error(`agent-roast replay error: ${errorMessage(error)}`);
+      process.exitCode = 2;
+    } finally {
+      process.removeListener("SIGINT", abort);
+      process.removeListener("SIGTERM", abort);
+    }
+  });
+
+program
   .command("check")
   .description("Check current tracked and non-ignored untracked source files")
   .argument("[path]", "Path to a git repository", ".")
   .option("--baseline <file>", "Report only findings not accepted in this baseline")
   .option("--write-baseline <file>", "Save current findings for adoption (refuses to overwrite)")
-  .addHelpText("after", "\nOutput options: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>\nExamples:\n  agent-roast check\n  agent-roast check --write-baseline .agentroast-baseline.json\n  agent-roast check --baseline .agentroast-baseline.json --format json")
+  .addHelpText("after", "\nOutput options: --format terminal|json|github|markdown|sarif, --json, --fail-on <rules>, --advisory\nExamples:\n  agent-roast check\n  agent-roast check --write-baseline .agentroast-baseline.json\n  agent-roast check --baseline .agentroast-baseline.json --format json")
   .action(async (repoPath: string, opts: { baseline?: string; writeBaseline?: string }) => {
     try {
       const global = program.opts();
@@ -253,7 +301,7 @@ program
         cwd: repoPath,
         baseline: opts.baseline,
         ignoreExceptions: global.ignoreExceptions,
-        failOn: global.failOn !== undefined ? global.failOn.split(",").map((rule: string) => rule.trim()).filter(Boolean) : undefined,
+        failOn: failOnOption(global),
         format: global.json ? "json" : global.format,
       });
       if (opts.writeBaseline) {

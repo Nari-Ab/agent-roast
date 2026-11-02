@@ -47,6 +47,12 @@ func TestDiscount(t *testing.T) {
 }
 `;
 const VITEST = (n) => `export default { test: { coverage: { thresholds: { lines: ${n}, branches: 70 } } } };\n`;
+const PW_TEST = `import { test, expect } from "@playwright/test";
+test("renders the cart", async ({ page, browserName }) => {
+  await page.goto("/cart");
+  await expect(page.locator(".total")).toHaveText("42");
+});
+`;
 const WORKFLOW = (steps) => `on:\n  push:\n  pull_request:\njobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n${steps.map((s) => `      - run: ${s}\n`).join("")}`;
 const COMMON = `describe("api", () => {
   it("first", () => {
@@ -80,12 +86,15 @@ export const cases = [
   { name: "js: test commented out", expect: "test-removed", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('  it("applies discount"', '  // it("applies discount"') } },
   { name: "js: whole test file deleted", expect: "test-removed", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": null } },
   { name: "js: it.skip added", expect: "test-skip", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('it("applies discount"', 'it.skip("applies discount"') } },
+  { name: "js: test.skip(true) added inside a test", expect: "test-skip", before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", '  test.skip(true, "flaky");\n  await page.goto') } },
+  { name: "js: test.skip gated on CI added inside a test", expect: "test-skip", before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", '  test.skip(!!process.env.CI, "flaky on CI");\n  await page.goto') } },
   { name: "js: it.only added", expect: "test-focus", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('it("applies discount"', 'it.only("applies discount"') } },
   { name: "js: expected value edited to match new output", expect: "expectation-rewritten", before: { "cart.test.ts": JS_TEST, "price.ts": JS_SRC(42) }, after: { "cart.test.ts": JS_TEST.replace("toBe(42)", "toBe(41)"), "price.ts": JS_SRC(41) } },
   { name: "py: assert deleted", expect: "assertion-removed", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": without(PY_TEST, "    assert len(cart) == 2\n") } },
   { name: "py: assert x == 42 -> assert x", expect: "assertion-weakened", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("assert total == 42", "assert total") } },
   { name: "py: test function deleted", expect: "test-removed", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace(/\n\ndef test_discount[\s\S]*$/, "\n") } },
   { name: "py: pytest.mark.skip added", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", "@pytest.mark.skip\ndef test_discount") } },
+  { name: "py: pytest.skip() added as a statement of the test", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount():\n", 'def test_discount():\n    pytest.skip("flaky")\n') } },
   { name: "py: assert wrapped in try/except pass", expect: "swallowed-error", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("    assert total == 42\n", "    try:\n        assert total == 42\n    except AssertionError:\n        pass\n") } },
   { name: "go: check deleted", expect: "assertion-removed", before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST.replace('\tif len(cart.Items) != 2 {\n\t\tt.Fatalf("items")\n\t}\n', "") } },
   { name: "go: test function deleted", expect: "test-removed", before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST.replace(/\nfunc TestDiscount[\s\S]*$/, "") } },
@@ -103,6 +112,9 @@ export const cases = [
   // ---- harmless changes that must stay silent ----
   { name: "control: prettier re-wrap of long assertion", expect: null, before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('expect(price(cart, "SAVE")).toBe(40);', 'expect(\n      price(cart, "SAVE"),\n    ).toBe(40);') } },
   { name: "control: test renamed", expect: null, before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("applies discount", "applies a coupon") } },
+  { name: "control: test.skip gated on the browser", expect: null, before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", '  test.skip(browserName === "webkit", "no webkit support");\n  await page.goto') } },
+  { name: "control: test.skip with an environment callback", expect: null, before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace('test("renders', 'test.skip(({ isMobile }) => isMobile, "desktop only");\ntest("renders') } },
+  { name: "control: pytest.skip under a platform condition", expect: null, before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount():\n", 'def test_discount():\n    if sys.platform == "win32":\n        pytest.skip("no windows support")\n') } },
   { name: "control: assertion added", expect: null, before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("toHaveLength(2);", "toHaveLength(2);\n    expect(cart.owner).toBe(\"ann\");") } },
   { name: "control: two assertions folded into one inline snapshot", expect: null, before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("    expect(total).toBe(42);\n    expect(cart.items).toHaveLength(2);", "    expect({ total, items: cart.items }).toMatchInlineSnapshot(`{ total: 42 }`);") } },
   { name: "control: test moved to another file", expect: null, before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace(/  it\("applies discount"[\s\S]*?\n  \}\);\n/, ""), "discount.test.ts": 'it("applies discount", () => {\n    expect(price(cart, "SAVE")).toBe(40);\n  });\n' } },

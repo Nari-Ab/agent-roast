@@ -11,10 +11,13 @@ out. You can stop after any step.
 
 ## What to expect
 
-Findings are rare. Across 12,645 commits that touch tests or CI/config, the blocking rules fired
-on 0.3%, and about one finding in five was a false alarm. For most repositories a quiet trial is
-a normal result, and "nothing it said was worth my time" is as useful an answer as "it caught
-something".
+Blocking findings are rare, warnings are not. Replaying the newest 50 commits of 179 public
+repositories that use AI coding agents, 149 of 179 had no commit that would have been blocked, and
+43 of 179 had nothing at all to list. Across 7,905 commits, 0.6% would have been blocked and
+12.1% drew a warning, mostly a test that was removed or whose expected value changed, which is
+usually deliberate. About one blocking finding in five is a false alarm. For most repositories a
+quiet trial is a normal result, and "nothing it said was worth my time" is as useful an answer as
+"it caught something".
 
 ## Where it works
 
@@ -30,24 +33,28 @@ Config and CI checks read `package.json`, `tsconfig*.json`, ESLint, Jest and Vit
 workflows and `.gitlab-ci.yml`. Build files such as `Cargo.toml`, `pom.xml` and `build.gradle`
 are not read.
 
-## Step 1: look back (five minutes)
+## Step 1: replay your last commits (two minutes)
 
 You need Node.js 18+ and Git 2.30+, in a clone with full history (`git fetch --unshallow` if the
 clone is shallow).
 
 ```bash
-# The last 50 commits, compared as one before/after change. Reports; never fails.
-npx agent-roast@latest review --base HEAD~50 --fail-on ''
+npx agent-roast@latest replay
 ```
 
-Use a smaller number if the repository has fewer commits, or if the output says `INCOMPLETE`
-(the change was too large to read in full).
+It reviews each of the last 50 commits on its own against its parent, the way a pull-request
+check would have seen it, and prints how many commits would have been blocked and which ones drew
+a warning, with the evidence. It never fails because of a finding. A typical repository takes
+about 10 seconds; the slowest of the 179 took 106 seconds (measured with three repositories
+replayed at once on a busy laptop). A repository with fewer than 50 commits is replayed as far
+back as it goes.
 
-The findings that matter most are listed first: checks that got weaker (`assertion-weakened`,
-`guard-weakened`), skipped, focused and trivial tests, then removed or rewritten tests, then the
-noisier line patterns such as `as any`. For each finding, decide whether it was a real problem,
-a deliberate change, or a false alarm. `npx agent-roast@latest explain <rule>` says what a rule
-means and what to do about it.
+Use `--last 200` for more history, `--all-rules` to list line patterns such as `as any`, and
+`--json` for every finding. The findings that matter most come first: checks that got weaker
+(`assertion-weakened`, `guard-weakened`), skipped, focused and trivial tests, then removed or
+rewritten tests. For each one, decide whether it was a real problem, a deliberate change, or a
+false alarm. `npx agent-roast@latest explain <rule>` says what a rule means and what to do about
+it.
 
 ## Step 2: watch real pull requests (optional, about two weeks)
 
@@ -77,14 +84,14 @@ jobs:
 In advisory mode findings never fail a pull request; they appear as annotations and in the job
 summary. A broken setup or an incomplete scan still fails the job. The tool makes no network
 requests; the Action only downloads its pinned package from npm. The same check runs locally
-with `npx agent-roast@latest review --base origin/main --fail-on ''`.
+with `npx agent-roast@latest review --base origin/main --advisory`.
 
 ## Step 3: say what happened
 
 Open a [pilot feedback issue](https://github.com/Nari-Ab/agent-roast/issues/new?template=pilot-feedback.yml).
-Counts are enough: you do not need to name the repository or paste code. For each finding, give
-the rule name and your verdict (real problem, deliberate change, false alarm), and say whether
-you would keep the tool running.
+Counts are enough: you do not need to name the repository or paste code. Paste the summary line of
+the replay (it holds counts only), and for each finding give the rule name and your verdict (real
+problem, deliberate change, false alarm). Say whether you would keep the tool running.
 
 If you agree in the form, the counts go into [the scorecard](product/pilot-scorecard.csv): no
 names, no code and no private repository content. The CLI has no telemetry, so nothing is

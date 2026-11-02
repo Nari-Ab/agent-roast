@@ -24,7 +24,7 @@ body:
     attributes:
       label: How you ran it
       options:
-        - One look back over recent commits
+        - Replay of recent commits (agent-roast replay)
         - Locally on a branch or pull request
         - GitHub Action in advisory mode
         - GitHub Action that blocks
@@ -38,6 +38,11 @@ body:
         - "No"
         - Occasionally
         - Most changes
+  - type: input
+    id: summary
+    attributes:
+      label: The summary line of the replay, if you ran it
+      description: It holds counts only, for example "Would have blocked - 0 commits - warnings on 3 - line patterns only on 2 - nothing to report on 45".
   - type: input
     id: reviewed
     attributes:

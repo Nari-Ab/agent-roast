@@ -1,5 +1,5 @@
 name: "agent-roast"
-description: "Zero-telemetry audit for AI coding shortcuts, skipped tests, and panic loops."
+description: "Offline review that flags pull requests weakening tests, coverage or CI instead of fixing the code. No telemetry."
 author: "Nariman Abdukarimov"
 branding:
   icon: "shield"

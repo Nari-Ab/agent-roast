@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+Found by running the first command of the pilot guide on the 179 repositories of the benchmark
+corpus: `review --base HEAD~50` stopped with an error on 44 of them and reported a median of 22
+findings on the rest, mostly `as any` and removed tests.
+
+- New `agent-roast replay`: reviews each of the newest commits (50 by default, `--last N`) on its
+  own against its parent, the way a pull-request check would have seen it, and lists the commits
+  that would have been blocked or drew a warning about a weakened check. It follows the first-parent
+  history, never fails because of a finding, and reports a commit that is too large to read instead
+  of stopping. Line patterns such as `as any` are counted and listed with `--all-rules`; `--json`
+  returns every finding.
+- New `--advisory` option for `review`, `check` and `--staged`: report without failing, the same as
+  an empty `--fail-on`. cmd.exe and Windows PowerShell 5.1 do not pass the empty argument, so the
+  documented advisory command failed there.
+- Fewer false alarms in `test-skip`, which blocks by default. A skip that depends on the
+  environment is no longer reported: Playwright's `test.skip(condition, 'reason')`, a `pytest.skip`
+  or `self.skipTest` under `if`/`try`, and a `pytest.skip` inside a fixture or helper. Skips that
+  name a test, stand alone in a test body, are `skip(true)` or depend on `CI` are still reported. On
+  the 75 commits of the corpus that carried a `test-skip` finding, findings fell from 160 to 34.
+- A review ref that does not resolve now says why: a shallow clone (run `git fetch --unshallow`) or
+  a history shorter than the requested `HEAD~N` (with the number that works).
+- Six more labeled cases (three cheats, three harmless): 43 cheats, 36 harmless changes, 3
+  documented gaps.
+- The Action description no longer presents the tool as an audit of AI shortcuts and panic loops.
+
 ## 0.10.1 — 2026-11-01
 
 - Fix: a blocking finding could be hidden. The terminal report shows at most 20 findings, in file

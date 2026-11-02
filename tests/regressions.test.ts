@@ -141,6 +141,44 @@ describe("useful findings without false claims", () => {
     expect(auditFileDiffs(code(["expect(true).toBe(true);"], "auth.test.ts")).infractions).toHaveLength(1);
   });
 
+  it("does not report a skip that gates a test on its environment, but keeps titles, bare, unconditional and CI skips", () => {
+    const skips = (...lines: string[]) => auditFileDiffs(code(lines, "layout.spec.ts")).infractions.filter(inf => inf.type === "test-skip");
+    // Playwright's runtime form: the first argument is a condition, the optional second one a reason.
+    expect(skips("test.skip(testInfo.project.name !== 'desktop-chrome', 'desktop only');")).toEqual([]);
+    expect(skips("test.skip(({ browserName }) => browserName === 'webkit', 'no webkit');")).toEqual([]);
+    expect(skips("test.skip(!(await featureEnabled('oauth')),", "  'flag off');")).toEqual([]);
+    expect(skips("test.skip(isMobile);")).toEqual([]);
+    // These switch a test off.
+    expect(skips("test.skip('checkout', async () => {});")).toHaveLength(1);
+    expect(skips("test.skip(`checkout ${name}`, async () => {});")).toHaveLength(1);
+    expect(skips("test.describe.skip('suite', () => {});")).toHaveLength(1);
+    expect(skips("it.skip(name, handler);")).toHaveLength(1);
+    expect(skips("it.skip.each([1, 2])('adds', () => {});")).toHaveLength(1);
+    expect(skips("xit('old', () => {});")).toHaveLength(1);
+    expect(skips("test.skip();")).toHaveLength(1);
+    expect(skips("test.skip(true, 'flaky');")).toHaveLength(1);
+    expect(skips("test.skip(!!process.env.CI, 'flaky on CI');")).toHaveLength(1);
+    // A call cut by a diff hunk has unknown context and is still reported.
+    expect(auditFileDiffs([{ path: "layout.spec.ts", addedLines: [{ line: "test.skip(isMobile,", lineNumber: 1 }, { line: "'x');", lineNumber: 5 }] }]).infractions).toHaveLength(1);
+  });
+
+  it("does not report an imperative Python skip under a condition, but keeps direct, CI and unknown-context skips", () => {
+    const skips = (lines: string[]) => auditFileDiffs(code(lines, "test_gpu.py")).infractions.filter(inf => inf.type === "test-skip");
+    expect(skips(["def test_a():", "    if not has_gpu():", "        pytest.skip(\"no GPU\")", "    assert run()"])).toEqual([]);
+    expect(skips(["def test_b():", "    if sys.platform == 'win32' and (", "        not shutil.which('x')", "    ):", "        pytest.skip('no x')"])).toEqual([]);
+    expect(skips(["def test_c(self):", "    try:", "        import torch", "    except ImportError:", "        self.skipTest('no torch')"])).toEqual([]);
+    expect(skips(["def test_d():", "    if no_cache: pytest.skip('x')"])).toEqual([]);
+    expect(skips(["def test_e():", "    with open(path) as handle:", "        if not handle.readable():", "            pytest.skip('unreadable')"])).toEqual([]);
+    expect(skips(["@pytest.fixture", "def warehouse():", "    for w in list_all():", "        return w", "    pytest.skip('none running')"])).toEqual([]);
+    expect(skips(["def test_f():", "    pytest.skip('flaky')"])).toHaveLength(1);
+    expect(skips(["def test_g():", "    value = compute()", "    pytest.skip('flaky')"])).toHaveLength(1);
+    expect(skips(["def test_h(", "    a,", "):", "    pytest.skip('flaky')"])).toHaveLength(1);
+    expect(skips(["def test_i():", "    if os.environ.get('CI'):", "        pytest.skip('flaky on CI')"])).toHaveLength(1);
+    expect(skips(["@pytest.mark.skip", "def test_j():", "    pass"])).toHaveLength(1);
+    // The header is not part of the diff, so the skip has unknown context.
+    expect(auditFileDiffs([{ path: "test_k.py", addedLines: [{ line: "        pytest.skip('x')", lineNumber: 9 }] }]).infractions).toHaveLength(1);
+  });
+
   it("recognizes conventional Python test filenames and respects identifier boundaries", () => {
     expect(auditFileDiffs(code(["assert True"], "test_auth.py")).infractions[0].type).toBe("trivial-assert");
     expect(auditFileDiffs(code(["credit.skip();"], "auth.ts")).infractions).toEqual([]);
