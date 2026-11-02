@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-11-02
 
 Found by running the first command of the pilot guide on the 179 repositories of the benchmark
 corpus: `review --base HEAD~50` stopped with an error on 44 of them and reported a median of 22
