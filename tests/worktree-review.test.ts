@@ -101,6 +101,25 @@ describe("review of the working tree against HEAD", () => {
     expect(result.infractions[0]).toMatchObject({ type: "test-focus", file: "auth.test.ts" });
   });
 
+  it("sees an edit of the same size made in the second the index was written (racily clean stat data)", async () => {
+    // Git cannot tell such an edit from stat data alone, so it re-reads files that are not older than the index file. A copy of
+    // the index has a new modification time, which used to hide the edit. The times are set by hand to make the second
+    // boundary deterministic: the file and the index are both stamped a minute in the past.
+    git("config", "core.trustctime", "false");
+    const config = (lines: number) => `export default { test: { coverage: { thresholds: { lines: ${lines} } } } };\n`;
+    const file = path.join(dir, "vitest.config.ts");
+    const past = new Date(Date.now() - 60_000);
+    write("vitest.config.ts", config(90)); fs.utimesSync(file, past, past);
+    commit();
+    write("vitest.config.ts", config(50)); fs.utimesSync(file, past, past);
+    fs.utimesSync(path.join(dir, ".git/index"), past, past);
+    expect(git("diff-index", "--raw", "HEAD", "--")).toContain("vitest.config.ts");
+
+    const result = await reviewWorktreeChanges({ cwd: dir });
+
+    expect(result.infractions).toEqual([expect.objectContaining({ type: "guard-weakened", file: "vitest.config.ts" })]);
+  });
+
   it("passes when nothing changed", async () => {
     write("calc.test.ts", CALC_TEST); commit();
     const result = await reviewWorktreeChanges({ cwd: dir });

@@ -253,13 +253,25 @@ export async function worktreeSnapshot(cwd: string, signal?: AbortSignal): Promi
   const indexFile = path.join(gitDirectory, `agent-roast-${process.pid}-${randomBytes(6).toString("hex")}.index`);
   const dispose = async () => { await Promise.all([indexFile, indexFile + ".lock"].map(file => fs.rm(file, { force: true }))); };
   try {
-    try { await fs.copyFile(realIndex, indexFile, fsConstants.COPYFILE_EXCL); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } // no index yet: Git reads a missing file as empty
+    // Git cannot tell an edit of the same size made in the same second from unchanged stat data, so it re-reads every file that
+    // is not older than the index file. The copy must therefore keep the original's modification time, and get it back after
+    // each command that rewrites the copy; otherwise such an edit is silently missed. (Rounded down: an earlier stamp only
+    // makes Git re-read more files.)
+    let restoreIndexTime = async () => {};
+    try {
+      const original = await fs.stat(realIndex);
+      await fs.copyFile(realIndex, indexFile, fsConstants.COPYFILE_EXCL);
+      const seconds = Math.floor(original.mtimeMs) / 1000;
+      restoreIndexTime = () => fs.utimes(indexFile, seconds, seconds);
+      await restoreIndexTime();
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } // no index yet: Git reads a missing file as empty
     const conflicts = await readGit(root, ["ls-files", "--unmerged", "-z", "--full-name"], signal, 8 * 1024 * 1024, indexFile);
     if (conflicts.length) throw new ConfigError("Resolve unmerged index entries before reviewing the working tree.");
     // -q: stat-dirty entries are refreshed instead of failing; --intent-to-add makes untracked files visible to the comparison.
     await readGit(root, ["update-index", "-q", "--refresh"], signal, 1024 * 1024, indexFile);
+    await restoreIndexTime();
     await readGit(root, ["add", "--intent-to-add", "--", "."], signal, 1024 * 1024, indexFile);
+    await restoreIndexTime();
     // A repository before its first commit compares against the (always available) empty tree of its object format.
     const tree = baseSha === "EMPTY"
       ? (await readGit(root, ["hash-object", "-t", "tree", "--stdin"], signal, 256, undefined, Buffer.alloc(0))).toString().trim()
