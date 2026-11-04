@@ -19,6 +19,7 @@ import {
   uninstallHooks,
   installInstructions,
   hookStatus,
+  repositoryRoot,
   hookPausedUntil,
   pauseHook,
   resumeHook,
@@ -150,6 +151,14 @@ async function runDefault(repoPath: string, options: any): Promise<void> {
     process.removeListener("SIGINT", abort);
     process.removeListener("SIGTERM", abort);
   }
+}
+
+/** Agent names from the command line, validated. */
+function parseAgents(names: string[]): (typeof HOOK_AGENTS)[number][] {
+  return names.map(name => {
+    if (!HOOK_AGENTS.includes(name.toLowerCase() as never)) throw new ConfigError(`Unknown agent '${name}'. Use ${HOOK_AGENTS.join(", ")}.`);
+    return name.toLowerCase() as (typeof HOOK_AGENTS)[number];
+  });
 }
 
 async function readStdin(timeoutMs = 5000): Promise<string> {
@@ -597,16 +606,19 @@ hook
   .description("Run by the agent when it is about to finish; reads the agent's JSON on stdin and answers in its dialect")
   .option("--agent <agent>", `${HOOK_AGENTS.join(", ")} (detected from the input when omitted)`)
   .action(async (opts: { agent?: string }) => {
+    // Exit status 2 tells an agent to block, so only a misspelled --agent (a setup mistake) is non-zero.
+    let agent: (typeof HOOK_AGENTS)[number] | undefined;
+    try { agent = opts.agent === undefined ? undefined : parseAgents([opts.agent])[0]; }
+    catch (error) { console.error(`agent-roast hook: ${errorMessage(error)}`); process.exitCode = 1; return; }
     try {
-      if (opts.agent !== undefined && !HOOK_AGENTS.includes(opts.agent as never)) throw new ConfigError(`Unknown agent '${opts.agent}'. Use ${HOOK_AGENTS.join(", ")}.`);
-      const outcome = await runHook(await readStdin(), { agent: opts.agent as (typeof HOOK_AGENTS)[number] | undefined });
+      const outcome = await runHook(await readStdin(), { agent });
       if (outcome.stdout) process.stdout.write(outcome.stdout);
       if (outcome.stderr) process.stderr.write(outcome.stderr);
       process.exitCode = outcome.exitCode;
     } catch (error) {
       // The agent must never be blocked by a problem in this tool.
       console.error(`agent-roast hook: ${errorMessage(error)}`);
-      process.exitCode = error instanceof ConfigError ? 2 : 0;
+      process.exitCode = 0;
     }
   });
 
@@ -622,11 +634,9 @@ hook
   .action((names: string[], opts: { global: boolean; local: boolean; command?: string; instructions: boolean; dryRun: boolean }) => {
     try {
       if (opts.global && opts.local) throw new ConfigError("Choose --global or --local, not both.");
-      let agents = names.map(name => {
-        if (!HOOK_AGENTS.includes(name.toLowerCase() as never)) throw new ConfigError(`Unknown agent '${name}'. Use ${HOOK_AGENTS.join(", ")}.`);
-        return name.toLowerCase() as (typeof HOOK_AGENTS)[number];
-      });
-      if (!agents.length) agents = HOOK_AGENTS.filter(agent => fs.existsSync(path.join(process.cwd(), { claude: ".claude", codex: ".codex", cursor: ".cursor" }[agent])));
+      let agents = parseAgents(names);
+      const root = repositoryRoot(process.cwd());
+      if (!agents.length) agents = HOOK_AGENTS.filter(agent => fs.existsSync(path.join(root, { claude: ".claude", codex: ".codex", cursor: ".cursor" }[agent])));
       if (!agents.length) throw new ConfigError("Name the agent to guard: agent-roast hook install claude (or codex, cursor).");
       const scope = opts.global ? "global" : opts.local ? "local" : "project";
       const changes = installHooks({ cwd: process.cwd(), agents, scope, command: opts.command, dryRun: opts.dryRun });
@@ -653,10 +663,7 @@ hook
   .action((names: string[], opts: { global: boolean; local: boolean; dryRun: boolean }) => {
     try {
       if (opts.global && opts.local) throw new ConfigError("Choose --global or --local, not both.");
-      const agents = names.length ? names.map(name => {
-        if (!HOOK_AGENTS.includes(name.toLowerCase() as never)) throw new ConfigError(`Unknown agent '${name}'. Use ${HOOK_AGENTS.join(", ")}.`);
-        return name.toLowerCase() as (typeof HOOK_AGENTS)[number];
-      }) : [...HOOK_AGENTS].filter(agent => !(opts.local && agent !== "claude"));
+      const agents = names.length ? parseAgents(names) : [...HOOK_AGENTS].filter(agent => !(opts.local && agent !== "claude"));
       const scope = opts.global ? "global" : opts.local ? "local" : "project";
       for (const change of uninstallHooks({ cwd: process.cwd(), agents, scope, dryRun: opts.dryRun })) {
         console.log(`  ${change.action === "removed" ? "-" : "="} ${AGENT_LABELS[change.agent]}: ${displayPath(change.file)} (${change.action === "removed" ? (opts.dryRun ? "would be removed" : "removed") : "no agent-roast hook there"})`);

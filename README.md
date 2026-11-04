@@ -110,7 +110,7 @@ old debt with a baseline: [docs/reference.md](docs/reference.md#configuration).
 Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/benchmarks.md). **Weakened checks are rare, mostly
 deliberate, and not specific to AI. agent-roast is a tripwire that stays silent until a check gets weaker.**
 
-- **64 of 64** hand-labeled cheating edits are caught and **43 of 43** harmless look-alikes (reformats, moves, raised
+- **64 of 64** hand-labeled cheating edits are caught and **44 of 44** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. Three gaps are documented and still open.
 - **12,645 commits** that touch tests or CI/config in 166 public repositories: blocking rules fired on 0.3% of AI-signed commits

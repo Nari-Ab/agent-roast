@@ -102,7 +102,8 @@ const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
     { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:False|IsFalse)\s*\(\s*false\s*\)/, name: "trivial assert (Assert.False(false))" },
     { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:AreEqual|Equal)\s*\(\s*(\d+|true|false|null)\s*,\s*\1\s*\)/, name: "trivial assert (Assert.Equal(1, 1))" },
   ] },
-  { files: /\.rb$/i, rules: [
+  // Ruby has no file-name convention as strict as the others, and `skip`/`pending` are ordinary method names: only spec and test files.
+  { files: /(?:^|\/)(?:spec|test)\/.*\.rb$|_(?:spec|test)\.rb$/i, rules: [
     { type: "test-focus", regex: /^\s*(?:fit|fdescribe|fcontext|fspecify|fexample|fscenario)\b/, name: "focused RSpec example (fit / fdescribe)" },
     { type: "test-focus", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::focus\b|focus:\s*true\b)/, name: "focused RSpec example (focus: true)" },
     { type: "test-skip", regex: /^\s*(?:xit|xdescribe|xcontext|xspecify|xexample|xscenario|xfeature)\b/, name: "disabled RSpec example (xit / xdescribe)" },

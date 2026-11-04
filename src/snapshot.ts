@@ -243,10 +243,13 @@ const outside = (relative: string) => !relative || relative === ".." || relative
 export async function worktreeSnapshot(cwd: string, signal?: AbortSignal): Promise<WorktreeSnapshot> {
   await requireLocalObjects(cwd, signal);
   const text = async (...args: string[]) => gitOutputPath((await readGit(cwd, args, signal, 8192)).toString());
-  const root = await fs.realpath(await text("rev-parse", "--show-toplevel"));
-  const gitDirectory = await fs.realpath(await text("rev-parse", "--absolute-git-dir"));
-  const realIndex = path.resolve(cwd, await text("rev-parse", "--git-path", "index"));
-  const baseSha = await resolveHead(cwd, signal);
+  const [root, gitDirectory, indexPath, baseSha] = await Promise.all([
+    text("rev-parse", "--show-toplevel").then(file => fs.realpath(file)),
+    text("rev-parse", "--absolute-git-dir").then(file => fs.realpath(file)),
+    text("rev-parse", "--git-path", "index"),
+    resolveHead(cwd, signal),
+  ]);
+  const realIndex = path.resolve(cwd, indexPath);
   const indexFile = path.join(gitDirectory, `agent-roast-${process.pid}-${randomBytes(6).toString("hex")}.index`);
   const dispose = async () => { await Promise.all([indexFile, indexFile + ".lock"].map(file => fs.rm(file, { force: true }))); };
   try {

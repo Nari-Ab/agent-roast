@@ -133,7 +133,8 @@ describe("the Stop hook", () => {
     expect(JSON.parse(blocked.stdout).decision).toBe("block");
     const detected = run(cursorStop());
     expect(JSON.parse(detected.stdout)).toHaveProperty("followup_message");
-    expect(run("{}", "--agent", "nobody").status).toBe(2);
+    // Exit status 2 would tell an agent to block, so a setup mistake must not use it.
+    expect(run("{}", "--agent", "nobody").status).toBe(1);
     git("checkout", "--", "calc.test.ts");
     expect(run(stop(), "--agent", "claude")).toMatchObject({ status: 0, stdout: "" });
   });

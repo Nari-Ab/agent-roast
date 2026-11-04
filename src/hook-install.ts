@@ -48,7 +48,8 @@ export function hookCommand(agent: HookAgent, command = `npx --yes agent-roast@$
 
 const isOurs = (command: unknown): boolean => typeof command === "string" && /\bagent-roast\b.*\bhook\s+run\b/.test(command);
 
-function repositoryRoot(cwd: string): string {
+/** The top level of the repository containing `cwd`, or `cwd` itself outside a repository. */
+export function repositoryRoot(cwd: string): string {
   const absolute = fs.realpathSync(path.resolve(cwd));
   const run = spawnSync("git", [...HERMETIC_GIT_FLAGS, "rev-parse", "--show-toplevel"], {
     cwd: absolute, env: { ...getHermeticGitEnv(), LC_ALL: "C" }, encoding: "utf8", timeout: 30_000, maxBuffer: 8192, windowsHide: true,
@@ -86,7 +87,9 @@ function readJsonFile(file: string): JsonFile {
   return { data: data as Record<string, any>, indent, mode, existed: true };
 }
 
-function writeJsonFile(file: string, json: JsonFile): void {
+function writeJsonFile(link: string, json: JsonFile): void {
+  // A settings file kept as a symlink into a dotfiles repository must stay a link: write through it.
+  const file = json.existed ? fs.realpathSync(link) : link;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = path.join(path.dirname(file), `.agent-roast-${randomUUID()}.tmp`);
   try {

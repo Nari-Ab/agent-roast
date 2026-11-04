@@ -142,6 +142,23 @@ describe("hook commands", () => {
     expect(run("status").stdout).toContain("Install it with: agent-roast hook install");
   });
 
+  it("finds the agent folders at the repository root when run from a subdirectory", () => {
+    fs.mkdirSync(path.join(dir, ".cursor")); fs.mkdirSync(path.join(dir, "packages/app"), { recursive: true });
+    const result = spawnSync(node, [cli, "hook", "install"], { cwd: path.join(dir, "packages/app"), encoding: "utf8", env: { ...env, HOME: home, USERPROFILE: home, NO_COLOR: "1" } });
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(path.join(dir, ".cursor/hooks.json"))).toBe(true);
+  });
+
+  it("writes through a symlinked settings file instead of replacing the link", () => {
+    if (process.platform === "win32") return;
+    const real = path.join(home, "dotfiles-settings.json");
+    fs.writeFileSync(real, JSON.stringify({ model: "x" }));
+    fs.mkdirSync(path.join(home, ".claude")); fs.symlinkSync(real, path.join(home, ".claude/settings.json"));
+    installHooks({ cwd: dir, agents: ["claude"], scope: "global", home });
+    expect(fs.lstatSync(path.join(home, ".claude/settings.json")).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(fs.readFileSync(real, "utf8"))).toMatchObject({ model: "x", hooks: { Stop: [expect.anything()] } });
+  });
+
   it("asks which agent when it cannot tell, and rejects unknown ones", () => {
     expect(run("install")).toMatchObject({ status: 2 });
     expect(run("install").stderr).toMatch(/Name the agent to guard/);

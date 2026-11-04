@@ -32,7 +32,7 @@ is still being made, where an agent can still fix it, and makes the first run sh
 **More languages.** `test-skip`, `test-focus` and `trivial-assert` now cover Go, Rust, Java, Kotlin,
 C#, Ruby, PHP and Swift, with skips that depend on the environment left alone (`testing.Short()`,
 `@DisabledOnOs`, `skip ... unless`, `XCTSkipUnless`, `#[cfg_attr(..., ignore)]`). 29 labeled cases
-were added: 64 of 64 cheats caught and 43 of 43 look-alikes silent.
+were added: 64 of 64 cheats caught and 44 of 44 look-alikes silent.
 
 **Pipelines and project.**
 
