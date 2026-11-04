@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1 — 2026-11-04
+
+The GitHub Action is renamed **"Agent Roast: weakened-test guard"** so that it can be listed on GitHub
+Marketplace: the plain name `agent-roast` belongs to a GitHub organization, and Marketplace rejects a
+name that matches a user or an organization. `uses: Nari-Ab/agent-roast@v1` is unchanged. The CLI is
+the same as in 0.12.0.
+
 ## 0.12.0 — 2026-11-04
 
 Until now agent-roast looked at a change after it was committed. This release looks at it while it
