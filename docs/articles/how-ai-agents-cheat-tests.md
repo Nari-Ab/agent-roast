@@ -99,6 +99,15 @@ code, and needs no API key. npm/npx installation can access the registry. JSON a
 Markdown reports can contain source snippets; share them according to your source
 policy. SARIF omits snippets; uploading it is a separate optional action.
 
+## Catch it while it can still be fixed
+
+Since 0.12.0 the same review runs on uncommitted work, so it can act at the moment a shortcut is
+made instead of after a commit. `npx agent-roast` reviews what you have not committed yet, and
+`npx agent-roast hook install` adds a Stop hook to Claude Code, Codex or Cursor: when the agent is
+about to finish with a weakened check, it is sent back once to fix the code, and a second attempt
+produces a warning for you instead of a loop. `npx agent-roast demo` shows the output on a scripted
+example. See [the integration guide](../integrations.md).
+
 These are heuristic checks with false positives and missed findings. They do not
 replace compilers, language-aware linters, tests or human review. Complex syntax,
 imports, custom aliases and template interpolation are not fully parsed. Scan limits
