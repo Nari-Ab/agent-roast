@@ -7,8 +7,9 @@ const html = readFileSync("site/index.html", "utf8");
 const decode = (text: string) => text.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
 describe("public adoption examples", () => {
-  it("offers current-code checking as the copyable first step", () => {
-    expect(html).toContain('data-copy="npx agent-roast check"');
+  it("offers the scripted demo as the copyable first step, and the agent hook next", () => {
+    expect(html).toContain('data-copy="npx agent-roast demo"');
+    expect(html).toContain('data-copy="npx agent-roast hook install"');
     expect(html).not.toContain('data-copy="npx agent-roast"');
     expect(html).not.toMatch(/range:|v0\.2\.1|200ms|zero-dependency/);
   });

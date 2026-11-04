@@ -28,3 +28,32 @@ jobs:
       - run: npm test
       - name: Verify CLI user workflows on the selected runtime
         run: PATH="$(dirname "$AGENT_ROAST_TEST_NODE"):$PATH" "$AGENT_ROAST_TEST_NODE" scripts/verify-user-workflows.mjs dist/cli.js
+
+  macos:
+    name: Full suite on macOS (Node 22)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+
+  smoke:
+    name: First-run smoke on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: node scripts/smoke.mjs dist/cli.js

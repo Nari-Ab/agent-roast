@@ -11,7 +11,7 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 43/43 cheats caught, 36/36 harmless changes left alone, 3 documented gaps open |
+| Labeled regression cases | 64/64 cheats caught, 44/44 harmless changes left alone, 3 documented gaps open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -29,11 +29,15 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **43/43 cheats caught, 36/36 harmless changes left alone, 3/3 documented gaps still
+Result: **64/64 cheats caught, 44/44 harmless changes left alone, 3/3 documented gaps still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. Open gaps: mocking the module under test, hardcoding the
 tested value in production code, and vacuous matchers such as `expect.anything()`.
+
+29 of the cases cover disabled tests and placeholder assertions in Go, Rust, Java, Kotlin, C#,
+Ruby, PHP and Swift, added in 0.12.0. The measurements in sections 2 to 4 were taken with 0.10.1
+and 0.11.0, before those rules existed, and do not include them.
 
 ## 2. Five mature open-source projects
 

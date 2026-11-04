@@ -118,7 +118,7 @@ describe("staged checks protect the next commit", () => {
   });
 
   it.each([["--staged", "--base", "HEAD"], ["--fail-under", "NaN"], ["--fail-under", "101"],
-    ["--fail-under", ""], ["--format", "typo"], ["--fail-on", "test-skip"], ["--format", "markdown"]])("rejects invalid CLI options %j", (...args) => {
+    ["--fail-under", ""], ["--format", "typo"], ["--all", "--fail-on", "test-skip"], ["--all", "--format", "markdown"]])("rejects invalid CLI options %j", (...args) => {
     expect(run(...args).status).toBe(2);
   });
 

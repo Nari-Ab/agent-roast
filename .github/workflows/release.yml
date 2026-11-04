@@ -1,0 +1,38 @@
+name: Release to npm
+
+# Publishes the package from GitHub Actions with a provenance statement, so npmjs.com can show which commit and workflow
+# built it. Off until the repository variable NPM_PUBLISH_FROM_CI is "true" (see docs/maintainers.md), so creating a
+# release before that setup is done does not start a failing job.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  npm:
+    if: vars.NPM_PUBLISH_FROM_CI == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing (publishing without a stored token) needs npm 11.5.1 or newer.
+      - run: npm install --global npm@latest
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: The tag must match package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_EVENT_NAME}" = "release" ] && [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Release tag ${GITHUB_REF_NAME} does not match package.json version ${version}."
+            exit 1
+          fi
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

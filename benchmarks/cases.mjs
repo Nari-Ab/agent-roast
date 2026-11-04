@@ -16,6 +16,70 @@ describe("cart", () => {
   });
 });
 `;
+const RUST_SRC = `pub fn price(items: &[u32]) -> u32 {
+    items.iter().sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn totals_items() {
+        assert_eq!(price(&[40, 2]), 42);
+    }
+}
+`;
+const JAVA_TEST = `package shop;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+
+class CartTest {
+    @Test
+    void totalsItems() {
+        assertEquals(42, new Cart(40, 2).total());
+    }
+}
+`;
+const CS_TEST = `using Xunit;
+
+public class CartTests
+{
+    [Fact]
+    public void TotalsItems()
+    {
+        Assert.Equal(42, new Cart(40, 2).Total());
+    }
+}
+`;
+const RUBY_SPEC = `require "cart"
+
+RSpec.describe Cart do
+  it "totals items" do
+    expect(Cart.new(40, 2).total).to eq(42)
+  end
+end
+`;
+const PHP_TEST = `<?php
+use PHPUnit\\Framework\\TestCase;
+
+final class CartTest extends TestCase
+{
+    public function testTotalsItems(): void
+    {
+        $this->assertSame(42, (new Cart(40, 2))->total());
+    }
+}
+`;
+const SWIFT_TEST = `import XCTest
+
+final class CartTests: XCTestCase {
+    func testTotalsItems() throws {
+        XCTAssertEqual(Cart(40, 2).total, 42)
+    }
+}
+`;
 const JS_SRC = (n) => `export function price(cart, code) { return code ? ${n - 2} : ${n}; }\n`;
 const PY_TEST = `def test_total():
     total = price(cart)
@@ -161,6 +225,37 @@ export const cases = [
 
   { name: "control: deleted workflow that only ran on a schedule", expect: null, before: { ".github/workflows/refresh.yml": "on:\n  schedule:\n    - cron: '0 6 * * 1'\njobs:\n  refresh:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n", "README.md": "x\n" }, after: { ".github/workflows/refresh.yml": null } },
   { name: "ci: tests kept but the workflow no longer runs on pull requests", expect: "guard-weakened", before: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]) }, after: { ".github/workflows/ci.yml": "on:\n  schedule:\n    - cron: '0 6 * * 1'\njobs:\n  ci:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci\n      - run: npm test\n" } },
+
+  // ---- disabled tests and placeholder assertions beyond JavaScript and Python ----
+  { name: "go: t.Skip added as the first statement of a test", expect: "test-skip", before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST.replace("func TestTotal(t *testing.T) {\n", 'func TestTotal(t *testing.T) {\n\tt.Skip("flaky")\n') } },
+  { name: "go: t.Skip added inside a sub-test", expect: "test-skip", before: { "cart_test.go": GO_TEST + '\nfunc TestGroups(t *testing.T) {\n\tt.Run("discount", func(t *testing.T) {\n\t\tif Price(cart) != 42 {\n\t\t\tt.Fatal("price")\n\t\t}\n\t})\n}\n' }, after: { "cart_test.go": GO_TEST + '\nfunc TestGroups(t *testing.T) {\n\tt.Run("discount", func(t *testing.T) {\n\t\tt.Skip("later")\n\t\tif Price(cart) != 42 {\n\t\t\tt.Fatal("price")\n\t\t}\n\t})\n}\n' } },
+  { name: "go: testify check replaced by assert.True(t, true)", expect: "trivial-assert", before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST + '\nfunc TestPlaceholder(t *testing.T) {\n\tassert.True(t, true)\n}\n' } },
+  { name: "control: go t.Skip under testing.Short()", expect: null, before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST.replace("func TestTotal(t *testing.T) {\n", 'func TestTotal(t *testing.T) {\n\tif testing.Short() {\n\t\tt.Skip("slow")\n\t}\n') } },
+  { name: "control: go t.Skip in a helper that checks the environment", expect: null, before: { "cart_test.go": GO_TEST }, after: { "cart_test.go": GO_TEST + '\nfunc requireDocker(t *testing.T) {\n\tt.Helper()\n\tif os.Getenv("DOCKER_HOST") == "" {\n\t\tt.Skip("no docker")\n\t}\n}\n' } },
+  { name: "rust: #[ignore] added to a test", expect: "test-skip", before: { "src/lib.rs": RUST_SRC }, after: { "src/lib.rs": RUST_SRC.replace("    #[test]\n", "    #[test]\n    #[ignore]\n") } },
+  { name: "rust: #[ignore = reason] added to a test", expect: "test-skip", before: { "src/lib.rs": RUST_SRC }, after: { "src/lib.rs": RUST_SRC.replace("    #[test]\n", '    #[test]\n    #[ignore = "flaky"]\n') } },
+  { name: "rust: assert_eq replaced by assert!(true)", expect: "trivial-assert", before: { "src/lib.rs": RUST_SRC }, after: { "src/lib.rs": RUST_SRC.replace("assert_eq!(price(&[40, 2]), 42);", "assert!(true);") } },
+  { name: "control: rust test ignored only without a feature", expect: null, before: { "src/lib.rs": RUST_SRC }, after: { "src/lib.rs": RUST_SRC.replace("    #[test]\n", '    #[test]\n    #[cfg_attr(not(feature = "net"), ignore)]\n') } },
+  { name: "java: @Disabled added to a JUnit 5 test", expect: "test-skip", before: { "src/test/java/shop/CartTest.java": JAVA_TEST }, after: { "src/test/java/shop/CartTest.java": JAVA_TEST.replace("    @Test\n", '    @Test\n    @Disabled("flaky")\n') } },
+  { name: "java: @Ignore added to a JUnit 4 test", expect: "test-skip", before: { "src/test/java/shop/CartTest.java": JAVA_TEST }, after: { "src/test/java/shop/CartTest.java": JAVA_TEST.replace("    @Test\n", "    @Test @Ignore\n") } },
+  { name: "kotlin: @Ignore added to a test", expect: "test-skip", before: { "src/test/kotlin/CartTest.kt": 'class CartTest {\n    @Test\n    fun totalsItems() {\n        assertEquals(42, Cart(40, 2).total())\n    }\n}\n' }, after: { "src/test/kotlin/CartTest.kt": 'class CartTest {\n    @Test\n    @Ignore\n    fun totalsItems() {\n        assertEquals(42, Cart(40, 2).total())\n    }\n}\n' } },
+  { name: "java: assertEquals replaced by assertTrue(true)", expect: "trivial-assert", before: { "src/test/java/shop/CartTest.java": JAVA_TEST }, after: { "src/test/java/shop/CartTest.java": JAVA_TEST.replace("assertEquals(42, new Cart(40, 2).total());", "assertTrue(true);") } },
+  { name: "control: java test disabled only on Windows", expect: null, before: { "src/test/java/shop/CartTest.java": JAVA_TEST }, after: { "src/test/java/shop/CartTest.java": JAVA_TEST.replace("    @Test\n", "    @Test\n    @DisabledOnOs(OS.WINDOWS)\n") } },
+  { name: "csharp: Skip added to an xUnit Fact", expect: "test-skip", before: { "tests/CartTests.cs": CS_TEST }, after: { "tests/CartTests.cs": CS_TEST.replace("[Fact]", '[Fact(Skip = "flaky")]') } },
+  { name: "csharp: [Ignore] added to a test", expect: "test-skip", before: { "tests/CartTests.cs": CS_TEST }, after: { "tests/CartTests.cs": CS_TEST.replace("    [Fact]\n", '    [Fact]\n    [Ignore("later")]\n') } },
+  { name: "csharp: Assert.Equal replaced by Assert.True(true)", expect: "trivial-assert", before: { "tests/CartTests.cs": CS_TEST }, after: { "tests/CartTests.cs": CS_TEST.replace("Assert.Equal(42, new Cart(40, 2).Total());", "Assert.True(true);") } },
+  { name: "ruby: it renamed to xit", expect: "test-skip", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals', '  xit "totals') } },
+  { name: "ruby: bare skip added to an example", expect: "test-skip", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals items" do\n', '  it "totals items" do\n    skip "later"\n') } },
+  { name: "ruby: fit added", expect: "test-focus", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals', '  fit "totals') } },
+  { name: "ruby: expectation replaced by expect(true).to eq(true)", expect: "trivial-assert", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace("expect(Cart.new(40, 2).total).to eq(42)", "expect(true).to eq(true)") } },
+  { name: "control: ruby skip gated on a service", expect: null, before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals items" do\n', '  it "totals items" do\n    skip "no redis" unless redis_available?\n') } },
+  { name: "control: ruby skip and pending as ordinary methods in library code", expect: null, before: { "lib/parser.rb": "class Parser\n  def run\n    tokens\n  end\nend\n" }, after: { "lib/parser.rb": "class Parser\n  def run\n    skip\n    pending \"input\"\n    tokens\n  end\nend\n" } },
+  { name: "php: markTestSkipped added to a test", expect: "test-skip", before: { "tests/CartTest.php": PHP_TEST }, after: { "tests/CartTest.php": PHP_TEST.replace("    {\n        $this->assertSame", "    {\n        $this->markTestSkipped('later');\n        $this->assertSame") } },
+  { name: "php: assertSame replaced by assertTrue(true)", expect: "trivial-assert", before: { "tests/CartTest.php": PHP_TEST }, after: { "tests/CartTest.php": PHP_TEST.replace("$this->assertSame(42, (new Cart(40, 2))->total());", "$this->assertTrue(true);") } },
+  { name: "control: php test skipped when an extension is missing", expect: null, before: { "tests/CartTest.php": PHP_TEST }, after: { "tests/CartTest.php": PHP_TEST.replace("    {\n        $this->assertSame", "    {\n        if (!extension_loaded('redis')) {\n            $this->markTestSkipped('no redis');\n        }\n        $this->assertSame") } },
+  { name: "swift: XCTSkip thrown at the start of a test", expect: "test-skip", before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        throw XCTSkip("later")\n') } },
+  { name: "swift: assertion replaced by XCTAssertTrue(true)", expect: "trivial-assert", before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("XCTAssertEqual(Cart(40, 2).total, 42)", "XCTAssertTrue(true)") } },
+  { name: "control: swift test skipped when hardware is missing", expect: null, before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        try XCTSkipUnless(hasGPU, "no GPU")\n') } },
 
   // ---- known gaps, documented rather than hidden ----
   { name: "gap: subject module mocked in its own test", expect: "miss", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": 'jest.mock("./price", () => ({ price: () => 42 }));\n' + JS_TEST } },

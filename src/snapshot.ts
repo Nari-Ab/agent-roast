@@ -1,8 +1,10 @@
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import * as fs from "fs/promises";
+import { constants as fsConstants } from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
+import { readRegularFile } from "./file-read.js";
 import { getHermeticGitEnv, HERMETIC_GIT_FLAGS, GitError, gitOutputPath } from "./git.js";
 import type { AgentRoastConfig } from "./config.js";
 
@@ -21,15 +23,18 @@ export function assertNotAborted(signal?: AbortSignal): void {
 }
 
 /** Bounded async Git reads. Never check out code, run project hooks or lazily fetch objects. */
-export async function readGit(cwd: string, args: string[], signal?: AbortSignal, limit = 8 * 1024 * 1024, indexFile?: string): Promise<Buffer> {
+export async function readGit(cwd: string, args: string[], signal?: AbortSignal, limit = 8 * 1024 * 1024, indexFile?: string, input?: Buffer): Promise<Buffer> {
   assertNotAborted(signal);
   const env = getHermeticGitEnv({ GIT_NO_REPLACE_OBJECTS: "1", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" });
   if (indexFile) env.GIT_INDEX_FILE = indexFile;
   return new Promise((resolve, reject) => {
     const child = spawn("git", [...HERMETIC_GIT_FLAGS, ...args], {
       cwd, env,
-      stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
     });
+    // Closed at once unless the caller supplies input, which is the same as no input for commands that never read it.
+    child.stdin.on("error", () => { /* git may exit before reading; its status is reported on close */ });
+    child.stdin.end(input);
     const chunks: Buffer[] = [];
     let bytes = 0;
     let stderr = "";
@@ -157,6 +162,20 @@ export async function reviewPolicy(cwd: string, baseSha: string, signal?: AbortS
   return { config: configFromText("{}", "default review policy"), filename: null };
 }
 
+/** The HEAD commit, or "EMPTY" on a genuinely unborn branch (a repository before its first commit). */
+async function resolveHead(cwd: string, signal?: AbortSignal): Promise<string> {
+  try {
+    return (await readGit(cwd, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], signal, 1024)).toString().trim();
+  } catch (error) {
+    if (!(error instanceof GitError && error.code === 1)) throw error;
+    // Only a genuine unborn branch can use an empty baseline.
+    const ref = (await readGit(cwd, ["symbolic-ref", "--quiet", "HEAD"], signal, 1024)).toString().trim();
+    try { await readGit(cwd, ["show-ref", "--verify", "--quiet", ref], signal, 1024); }
+    catch (missing) { if (missing instanceof GitError && missing.code === 1) return "EMPTY"; throw missing; }
+    throw new ConfigError("HEAD exists but cannot be resolved to a commit.");
+  }
+}
+
 /** Pin cached diff blob IDs. Git loads one index snapshot per invocation; no
  * checkout, write-tree, index refresh, filter or project hook is needed. */
 export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise<{
@@ -180,18 +199,7 @@ export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise
     }
     indexFile = resolved;
   }
-  const head = async (): Promise<string> => {
-    try {
-      return (await readGit(cwd, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], signal, 1024)).toString().trim();
-    } catch (error) {
-      if (!(error instanceof GitError && error.code === 1)) throw error;
-      // Only a genuine unborn branch can use an empty baseline.
-      const ref = (await readGit(cwd, ["symbolic-ref", "--quiet", "HEAD"], signal, 1024)).toString().trim();
-      try { await readGit(cwd, ["show-ref", "--verify", "--quiet", ref], signal, 1024); }
-      catch (missing) { if (missing instanceof GitError && missing.code === 1) return "EMPTY"; throw missing; }
-      throw new ConfigError("HEAD exists but cannot be resolved to a commit.");
-    }
-  };
+  const head = () => resolveHead(cwd, signal);
   const baseSha = await head();
   const inventory = () => readGit(cwd, ["diff", "--cached", "--raw", "-z", "--no-relative", "--no-abbrev", "--no-ext-diff", "--no-textconv",
     "--ignore-submodules=none", "--ita-invisible-in-index", "--find-renames=50%", "-l1000", "--end-of-options",
@@ -210,4 +218,103 @@ export async function stagedSnapshot(cwd: string, signal?: AbortSignal): Promise
       }
     },
   };
+}
+
+export interface WorktreeSnapshot {
+  baseSha: string;
+  headSha: string;
+  mergeBaseSha: string;
+  changes: TreeChange[];
+  /** The working-tree version of a changed file, read with the same limits and link checks as `check`. */
+  readWorktree: (relative: string) => Promise<Buffer>;
+  verify: () => Promise<void>;
+  /** Removes the private index copy. Safe to call more than once. */
+  dispose: () => Promise<void>;
+}
+
+const MAX_WORKTREE_FILE = 2 * 1024 * 1024;
+const outside = (relative: string) => !relative || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative);
+
+/**
+ * Everything that differs between HEAD and the working tree: staged and unstaged edits, deletions and untracked files that
+ * are not ignored. Git compares against a private copy of the index, so the real index, the working tree and HEAD are left
+ * alone, and new files still take part in rename detection. Changed files are read from disk, not from Git objects.
+ */
+export async function worktreeSnapshot(cwd: string, signal?: AbortSignal): Promise<WorktreeSnapshot> {
+  await requireLocalObjects(cwd, signal);
+  const text = async (...args: string[]) => gitOutputPath((await readGit(cwd, args, signal, 8192)).toString());
+  const [root, gitDirectory, indexPath, baseSha] = await Promise.all([
+    text("rev-parse", "--show-toplevel").then(file => fs.realpath(file)),
+    text("rev-parse", "--absolute-git-dir").then(file => fs.realpath(file)),
+    text("rev-parse", "--git-path", "index"),
+    resolveHead(cwd, signal),
+  ]);
+  const realIndex = path.resolve(cwd, indexPath);
+  const indexFile = path.join(gitDirectory, `agent-roast-${process.pid}-${randomBytes(6).toString("hex")}.index`);
+  const dispose = async () => { await Promise.all([indexFile, indexFile + ".lock"].map(file => fs.rm(file, { force: true }))); };
+  try {
+    // Git cannot tell an edit of the same size made in the same second from unchanged stat data, so it re-reads every file that
+    // is not older than the index file. The copy must therefore keep the original's modification time, and get it back after
+    // each command that rewrites the copy; otherwise such an edit is silently missed. (Rounded down: an earlier stamp only
+    // makes Git re-read more files.)
+    let restoreIndexTime = async () => {};
+    try {
+      const original = await fs.stat(realIndex);
+      await fs.copyFile(realIndex, indexFile, fsConstants.COPYFILE_EXCL);
+      const seconds = Math.floor(original.mtimeMs) / 1000;
+      restoreIndexTime = () => fs.utimes(indexFile, seconds, seconds);
+      await restoreIndexTime();
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } // no index yet: Git reads a missing file as empty
+    const conflicts = await readGit(root, ["ls-files", "--unmerged", "-z", "--full-name"], signal, 8 * 1024 * 1024, indexFile);
+    if (conflicts.length) throw new ConfigError("Resolve unmerged index entries before reviewing the working tree.");
+    // -q: stat-dirty entries are refreshed instead of failing; --intent-to-add makes untracked files visible to the comparison.
+    await readGit(root, ["update-index", "-q", "--refresh"], signal, 1024 * 1024, indexFile);
+    await restoreIndexTime();
+    await readGit(root, ["add", "--intent-to-add", "--", "."], signal, 1024 * 1024, indexFile);
+    await restoreIndexTime();
+    // A repository before its first commit compares against the (always available) empty tree of its object format.
+    const tree = baseSha === "EMPTY"
+      ? (await readGit(root, ["hash-object", "-t", "tree", "--stdin"], signal, 256, undefined, Buffer.alloc(0))).toString().trim()
+      : baseSha;
+    const inventory = () => readGit(root, ["diff-index", "--raw", "-z", "--no-abbrev", "--no-ext-diff", "--no-textconv",
+      "--ignore-submodules=none", "--find-renames=50%", "-l1000", "--end-of-options", tree, "--"], signal, 8 * 1024 * 1024, indexFile);
+    const pinned = await inventory();
+    const changes = parseTreeChanges(pinned);
+    const headSha = "WORKTREE:" + createHash("sha256").update(baseSha).update(pinned).digest("hex");
+    const stamps = new Map<string, string>();
+    const stamp = (stat: { size: number; mtimeMs: number; ino: number }) => `${stat.size}:${stat.mtimeMs}:${stat.ino}`;
+    return {
+      baseSha, headSha, mergeBaseSha: baseSha, changes,
+      readWorktree: async relative => {
+        const filename = path.resolve(root, relative);
+        if (outside(path.relative(root, filename))) throw new ConfigError("A changed path escapes the repository.");
+        let stat;
+        try { stat = await fs.lstat(filename); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ConfigError("A changed file disappeared during the review; rerun it.");
+          throw error;
+        }
+        if (!stat.isFile()) throw new ConfigError("Changed source is a symlink or special file; comparison is incomplete.");
+        if (stat.size > MAX_WORKTREE_FILE) throw new ConfigError(`Source file exceeds the ${MAX_WORKTREE_FILE} byte limit.`);
+        if (outside(path.relative(root, await fs.realpath(filename)))) throw new ConfigError("A changed file resolves outside the repository.");
+        const content = readRegularFile(filename, MAX_WORKTREE_FILE);
+        stamps.set(filename, stamp(stat));
+        return content;
+      },
+      verify: async () => {
+        assertNotAborted(signal);
+        if (await resolveHead(cwd, signal) !== baseSha || !(await inventory()).equals(pinned)) {
+          throw new ConfigError("HEAD or the working tree changed during review; rerun it. No complete result was produced.");
+        }
+        for (const [filename, before] of stamps) {
+          const now = await fs.lstat(filename).catch(() => null);
+          if (!now || stamp(now) !== before) throw new ConfigError("A changed file was modified during review; rerun it. No complete result was produced.");
+        }
+      },
+      dispose,
+    };
+  } catch (error) {
+    await dispose();
+    throw error;
+  }
 }

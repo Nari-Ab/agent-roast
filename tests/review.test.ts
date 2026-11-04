@@ -223,7 +223,8 @@ describe("context review of committed code", () => {
     expect(run("--base", base, "--advisory", "--fail-on", "test-skip").status).toBe(2);
     expect(spawnSync(node, [cli, "check", dir], { encoding: "utf8", env }).status).toBe(1);
     expect(spawnSync(node, [cli, "check", dir, "--advisory"], { encoding: "utf8", env }).status).toBe(0);
-    expect(spawnSync(node, [cli, dir, "--advisory"], { encoding: "utf8", env }).status).toBe(2);
+    // The history score has no pull request to advise on; the bare command and --worktree review uncommitted work instead.
+    expect(spawnSync(node, [cli, dir, "--all", "--advisory"], { encoding: "utf8", env }).status).toBe(2);
   });
   it("lists blocking findings first in the current-code check as well", () => {
     write("src/aaa.ts", Array.from({ length: 25 }, (_, i) => `export const v${i} = (globalThis as any).x${i};`).join("\n") + "\n");

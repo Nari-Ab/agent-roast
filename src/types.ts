@@ -169,7 +169,7 @@ export type StagedReviewOptions = Omit<ReviewOptions, "base" | "head">;
 export interface ReviewResult {
   schemaVersion: string;
   mode: "review";
-  source?: "commits" | "index";
+  source?: "commits" | "index" | "worktree";
   baseSha: string;
   headSha: string;
   mergeBaseSha: string;

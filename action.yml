@@ -30,6 +30,10 @@ inputs:
     description: "Output format: github, terminal, json, markdown (review also supports sarif)"
     required: false
     default: "github"
+  comment:
+    description: "Post one pull request comment with the findings and keep it up to date. Needs 'pull-requests: write'; on forks the token is read-only and only the job summary is written"
+    required: false
+    default: "false"
 
 outputs:
   complete:
@@ -64,6 +68,9 @@ runs:
         ROAST_FAIL_ON: ${{ inputs.fail-on }}
         ROAST_ADVISORY: ${{ inputs.advisory }}
         ROAST_FORMAT: ${{ inputs.format }}
+        ROAST_COMMENT: ${{ inputs.comment }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ github.token }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         EVENT_BEFORE_SHA: ${{ github.event.before }}
@@ -81,6 +88,10 @@ runs:
           true|false) ;;
           *) echo "::error::advisory must be true or false"; exit 2 ;;
         esac
+        case "${ROAST_COMMENT:-false}" in
+          true|false) ;;
+          *) echo "::error::comment must be true or false"; exit 2 ;;
+        esac
         ROAST_BASE="${INPUT_BASE:-${PR_BASE_SHA:-${EVENT_BEFORE_SHA}}}"
         ROAST_HEAD="${INPUT_HEAD:-${PR_HEAD_SHA:-${HEAD_SHA}}}"
 
@@ -92,7 +103,7 @@ runs:
         REPO_DIR="$PWD"
         INSTALL_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/agent-roast.XXXXXX")"
         trap 'rm -rf "$INSTALL_DIR"' EXIT
-        (cd "$INSTALL_DIR" && npm install --prefix "$INSTALL_DIR" agent-roast@0.11.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org) > /dev/null
+        (cd "$INSTALL_DIR" && npm install --prefix "$INSTALL_DIR" agent-roast@0.12.0 --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org) > /dev/null
 
         COMMAND_ARGS=()
         if [ "$ROAST_MODE" = "review" ]; then
@@ -106,8 +117,19 @@ runs:
           EXTRA_ARGS+=(--fail-on "$ROAST_FAIL_ON")
         fi
 
-        "$INSTALL_DIR/node_modules/.bin/agent-roast" "${COMMAND_ARGS[@]}" "$REPO_DIR" \
+        BIN="$INSTALL_DIR/node_modules/.bin/agent-roast"
+        status=0
+        "$BIN" "${COMMAND_ARGS[@]}" "$REPO_DIR" \
           --base "$ROAST_BASE" \
           --head "$ROAST_HEAD" \
           "${EXTRA_ARGS[@]}" \
-          --format "$ROAST_FORMAT"
+          --format "$ROAST_FORMAT" || status=$?
+
+        # The optional comment never changes the result of the check.
+        if [ "${ROAST_COMMENT:-false}" = "true" ] && [ "$ROAST_MODE" = "review" ] && [ -n "${PR_NUMBER:-}" ]; then
+          COMMENT_FILE="$INSTALL_DIR/comment.md"
+          if "$BIN" review "$REPO_DIR" --base "$ROAST_BASE" --head "$ROAST_HEAD" --advisory --format markdown > "$COMMENT_FILE" 2>/dev/null; then
+            bash "${GITHUB_ACTION_PATH:-.}/action/comment.sh" "$COMMENT_FILE" || true
+          fi
+        fi
+        exit "$status"

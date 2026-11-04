@@ -507,30 +507,37 @@ export function formatCheckMarkdown(result: import("./types.js").CheckResult): s
   return lines.join("\n");
 }
 
+const REVIEW_TITLES = { commits: "context review", index: "staged context review", worktree: "working tree review" } as const;
+const reviewTitle = (result: Pick<import("./types.js").ReviewResult, "source">): string => REVIEW_TITLES[result.source ?? "commits"];
+/** A commit shows as 7 characters; a staged or working-tree snapshot digest keeps its prefix and a few more. */
+const reviewHead = (result: Pick<import("./types.js").ReviewResult, "source" | "headSha">): string => result.headSha.slice(0, (result.source ?? "commits") === "commits" ? 7 : 18);
+
 export function formatReviewTerminal(result: import("./types.js").ReviewResult): string {
   const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
-  const lines = ["", pc.bold(`agent-roast — ${result.source === "index" ? "staged context review" : "context review"}: ${status}`),
-    `  ${result.mergeBaseSha.slice(0, 7)} → ${result.headSha.slice(0, result.source === "index" ? 18 : 7)} · policy: ${result.policySha === "EMPTY" ? "built-in first-commit defaults" : "base " + result.policySha.slice(0, 7)}`,
+  const lines = ["", pc.bold(`agent-roast — ${reviewTitle(result)}: ${status}`),
+    `  ${result.mergeBaseSha.slice(0, 7)} → ${reviewHead(result)} · policy: ${result.policySha === "EMPTY" ? "built-in first-commit defaults" : "base " + result.policySha.slice(0, 7)}`,
     `  ${result.filesInspected} changed files compared · ${result.linesInspected} source lines inspected across both versions`,
     `  ${result.infractions.length} new · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected`];
   lines.push(...exceptionTerminal(result));
   if (result.policyChanges.length) lines.push("  Candidate policy changes were ignored; adopt them separately after review.");
   if (result.excludedFiles || result.unsupportedFiles) lines.push(`  ${result.excludedFiles} excluded · ${result.unsupportedFiles} unsupported/non-source changes`);
   for (const finding of mostImportantFirst(result.infractions, result.failedRules).slice(0, 20)) {
-    lines.push("", `  ${result.failedRules.includes(finding.type) ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`,
-      `    ${terminalText(finding.lineSnippet || finding.reason)}`, `    Next: ${terminalText(finding.suggestion || "Review this occurrence.")}`);
+    const failing = result.failedRules.includes(finding.type);
+    // Each colored span is one whole phrase, so the text stays contiguous when colors are on.
+    lines.push("", (failing ? pc.red : pc.yellow)(`  ${failing ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`),
+      `    ${terminalText(finding.lineSnippet || finding.reason)}`, pc.dim(`    Next: ${terminalText(finding.suggestion || "Review this occurrence.")}`));
   }
   if (result.infractions.length > 20) lines.push(`  ${result.infractions.length - 20} more new findings; use --format json for all results.`);
   for (const skipped of result.skippedFiles) lines.push(`  NOT COMPARED ${terminalText(skipped.file)}: ${terminalText(skipped.reason)}`);
-  lines.push("", !result.complete ? "  INCOMPLETE: some changed source was not compared (exit 2)." : result.passed ? "  PASSED: no new blocking findings." : `  BLOCKED: ${result.failedRules.join(", ")}.`, "");
+  lines.push("", !result.complete ? pc.red("  INCOMPLETE: some changed source was not compared (exit 2).") : result.passed ? pc.green("  PASSED: no new blocking findings.") : pc.red(`  BLOCKED: ${result.failedRules.join(", ")}.`), "");
   if (!result.filesInspected) lines.push("  No supported changed source files compared.", "");
   return lines.join("\n");
 }
 
 export function formatReviewMarkdown(result: import("./types.js").ReviewResult): string {
   const status = !result.complete ? "INCOMPLETE" : result.passed ? "PASSED" : "BLOCKED";
-  const lines = [`## agent-roast ${result.source === "index" ? "staged context review" : "context review"}: ${status}`, "",
-    `Compared ${result.filesInspected} changed files at \`${result.mergeBaseSha.slice(0, 7)}\` → \`${result.headSha.slice(0, result.source === "index" ? 18 : 7)}\`. Policy: \`${result.policySha === "EMPTY" ? "built-in first-commit defaults" : result.policySha.slice(0, 7)}\`.`, "",
+  const lines = [`## agent-roast ${reviewTitle(result)}: ${status}`, "",
+    `Compared ${result.filesInspected} changed files at \`${result.mergeBaseSha.slice(0, 7)}\` → \`${reviewHead(result)}\`. Policy: \`${result.policySha === "EMPTY" ? "built-in first-commit defaults" : result.policySha.slice(0, 7)}\`.`, "",
     `**${result.infractions.length} new** · ${result.unchangedCount} existing · ${result.removedFindings.length} no longer detected.`, ""];
   if (result.policyChanges.length) lines.push("Candidate policy changes were ignored. This review uses the supplied base commit's policy.", "");
   lines.push("| New finding | Head location | Evidence | Next step |", "| --- | --- | --- | --- |");
