@@ -33,9 +33,11 @@ The version appears in several places that must agree; `tests/distribution.test.
 `.github/workflows/release.yml` publishes with `npm publish --provenance`, which makes npmjs.com show the commit and workflow
 that built the package. It stays idle until you enable it:
 
-1. On npmjs.com open the package, **Settings**, **Trusted Publisher**, choose GitHub Actions and enter owner `Nari-Ab`,
-   repository `agent-roast`, workflow `release.yml`. (Alternatively create an automation token and store it as the repository
-   secret `NPM_TOKEN`.)
+1. Allow this workflow to publish the package. In a terminal, signed in to npm (it asks for a second factor):
+   `npx -y npm@latest trust github agent-roast --repo Nari-Ab/agent-roast --file release.yml --allow-publish`
+   (or on npmjs.com: the package, **Settings**, **Trusted Publisher**, GitHub Actions, owner `Nari-Ab`, repository
+   `agent-roast`, workflow `release.yml`, no environment). `npm trust list agent-roast` shows what is configured. The
+   workflow carries no token; to publish with a token instead, add `NODE_AUTH_TOKEN` to the publish step.
 2. In the repository settings add the variable `NPM_PUBLISH_FROM_CI` with the value `true`.
 3. Create a GitHub release; the workflow checks that the tag matches `package.json`, runs the tests and publishes.
 
