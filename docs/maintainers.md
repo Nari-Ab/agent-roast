@@ -17,8 +17,12 @@ The version appears in several places that must agree; `tests/distribution.test.
 2. `npm ci && npm run typecheck && npm test && node scripts/smoke.mjs`; check `npm pack --dry-run` lists only `dist`, `README.md`,
    `LICENSE` and `schema.json`.
 3. Open a pull request, wait for CI (Linux on Node 18/20/22, macOS, smoke on three systems), merge it.
-4. Tag the merge commit `vX.Y.Z` (annotated) and create the GitHub release from it. Tick **Publish this Action to the GitHub
-   Marketplace** the first time, and keep the category on "Code quality" or "Continuous integration".
+4. Tag the merge commit `vX.Y.Z` (annotated) and create the GitHub release from it. To list the Action on GitHub Marketplace,
+   edit the release in the web UI (there is no API) and tick **Publish this Action to the GitHub Marketplace**, choose
+   "Code quality" or "Testing" as the primary category, and press **Update release**. Needed once: the account accepts the
+   Marketplace Developer Agreement (the checkbox is locked until then), and the `name` in `action.yml` must not match any
+   user, organization or existing action. `agent-roast` is a GitHub organization, which is why the Action is named
+   "Agent Roast: weakened-test guard". GitHub asks for two-factor confirmation when publishing.
 5. Publish to npm: automatically (below) or by hand with `npm publish`.
 6. Move the `v1` tag to the release commit so `uses: Nari-Ab/agent-roast@v1` picks it up:
    `git tag -fa v1 -m "v1" <sha> && git push --force origin refs/tags/v1`.

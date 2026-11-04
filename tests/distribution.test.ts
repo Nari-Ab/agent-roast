@@ -19,6 +19,11 @@ describe("every place that names the version agrees with package.json", () => {
     expect(json("plugin/.claude-plugin/plugin.json").name).toBe(entry.name);
     expect(read("plugin/hooks/hooks.json")).toContain(`npx --yes agent-roast@${version} hook run --agent claude`);
   });
+  it("the Action has a name Marketplace accepts: it may not match a user or an organization, and `agent-roast` is one", () => {
+    const name = /^name:\s*"?([^"\n]+)"?/m.exec(read("action.yml"))![1];
+    expect(name.toLowerCase()).not.toBe("agent-roast");
+    expect(name.length).toBeLessThanOrEqual(80);
+  });
   it("the package lock agrees", () => {
     const lock = json("package-lock.json");
     expect(lock.version).toBe(version);
