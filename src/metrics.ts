@@ -33,6 +33,121 @@ function isGuardedSkip(lines: { code: string; raw: string; number: number }[]): 
   return false;
 }
 
+/** How a language marks where an imperative skip sits: under a condition (the skip depends on the environment), in a
+ * test or sub-test (the skip disables it) or in a helper that no test name covers. */
+interface GuardProfile {
+  /** A trailing `if`/`unless` on the skip's own line. */
+  modifier?: RegExp;
+  conditional: RegExp;
+  test: RegExp;
+  helper: RegExp;
+}
+
+interface LineRule {
+  type: "test-skip" | "test-focus" | "trivial-assert";
+  regex: RegExp;
+  name: string;
+  /** Imperative skips are looked up in their surroundings; annotations and `xit` are always switched-off tests. */
+  guard?: GuardProfile;
+}
+
+const GO_GUARD: GuardProfile = {
+  conditional: /^\s*(?:\}\s*)?(?:if|else|switch|case|select|for)\b/,
+  test: /^\s*func\s+(?:\([^)]*\)\s*)?(?:Test|Benchmark|Fuzz|Example)\w*\s*\(|\.Run\s*\(|\bfunc\s*\(\s*\w+\s+\*testing\.[TB]\s*\)/,
+  helper: /^\s*func\s+(?:\([^)]*\)\s*)?\w+\s*\(/,
+};
+const RUBY_GUARD: GuardProfile = {
+  modifier: /^\s*(?:skip|pending)\b.*\b(?:if|unless)\b/,
+  conditional: /^\s*(?:if|unless|else|elsif|case|when|begin|rescue|ensure|while|until)\b/,
+  test: /^\s*(?:it|specify|example|scenario|test|before|after|around)\b|^\s*def\s+test_/,
+  helper: /^\s*def\s+\w+/,
+};
+const PHP_GUARD: GuardProfile = {
+  modifier: /\b(?:or|and)\b.*markTest|(?:&&|\|\||\?).*markTest/,
+  conditional: /^\s*(?:\}\s*)?(?:if|else|elseif|switch|case|foreach|for|while|try|catch)\b/,
+  test: /^\s*(?:(?:public|protected|private|static)\s+)*function\s+test\w*\s*\(/,
+  helper: /^\s*(?:(?:public|protected|private|static)\s+)*function\s+\w+\s*\(/,
+};
+const SWIFT_GUARD: GuardProfile = {
+  conditional: /^\s*(?:\}\s*)?(?:if|else|guard|switch|case|for|while|do|catch)\b/,
+  test: /^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|static)\s+)*func\s+test\w*\s*\(/,
+  helper: /^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|static)\s+)*func\s+\w+\s*\(/,
+};
+
+/** Disabled tests and placeholder assertions in the test ecosystems other than JavaScript and Python. Matching is per line
+ * on masked code (strings and comments blanked), so an example in a comment or string is not a skip. */
+const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
+  { files: /_test\.go$/i, rules: [
+    { type: "test-skip", regex: /\b(?:t|tb|b)\s*\.\s*(?:Skip|Skipf|SkipNow)\s*\(|\.T\(\)\s*\.\s*(?:Skip|Skipf|SkipNow)\s*\(/, name: "skipped Go test (t.Skip)", guard: GO_GUARD },
+    { type: "trivial-assert", regex: /\b(?:assert|require)\s*\.\s*True\s*\(\s*\w+\s*,\s*true\s*\)/, name: "trivial assert (assert.True(t, true))" },
+    { type: "trivial-assert", regex: /\b(?:assert|require)\s*\.\s*False\s*\(\s*\w+\s*,\s*false\s*\)/, name: "trivial assert (assert.False(t, false))" },
+    { type: "trivial-assert", regex: /\b(?:assert|require)\s*\.\s*Equal\s*\(\s*\w+\s*,\s*(\d+|true|false|nil)\s*,\s*\1\s*\)/, name: "trivial assert (assert.Equal(t, 1, 1))" },
+  ] },
+  { files: /\.rs$/i, rules: [
+    { type: "test-skip", regex: /^\s*#\[\s*ignore\b/, name: "ignored Rust test (#[ignore])" },
+    { type: "trivial-assert", regex: /(?<![\w!])assert!\s*\(\s*true\s*\)/, name: "trivial assert (assert!(true))" },
+    { type: "trivial-assert", regex: /(?<![\w!])assert_eq!\s*\(\s*(\d+|true|false)\s*,\s*\1\s*\)/, name: "trivial assert (assert_eq!(1, 1))" },
+  ] },
+  { files: /\.(?:java|kt)$/i, rules: [
+    { type: "test-skip", regex: /(?:^|\s)@(?:Ignore|Disabled)\b/, name: "ignored JUnit test (@Ignore / @Disabled)" },
+    { type: "test-skip", regex: /@Test\s*\([^)]*\benabled\s*=\s*false\b/, name: "disabled TestNG test (enabled = false)" },
+    { type: "trivial-assert", regex: /\bassertTrue\s*\(\s*true\s*\)/, name: "trivial assert (assertTrue(true))" },
+    { type: "trivial-assert", regex: /\bassertFalse\s*\(\s*false\s*\)/, name: "trivial assert (assertFalse(false))" },
+    { type: "trivial-assert", regex: /\bassertEquals\s*\(\s*(\d+|true|false|null)\s*,\s*\1\s*\)/, name: "trivial assert (assertEquals(1, 1))" },
+    { type: "trivial-assert", regex: /\bassertThat\s*\(\s*true\s*\)\s*\.\s*isTrue\s*\(/, name: "trivial assert (assertThat(true).isTrue())" },
+  ] },
+  { files: /\.cs$/i, rules: [
+    { type: "test-skip", regex: /\[\s*Ignore\b|\b(?:Fact|Theory)\s*\(\s*(?:[^)]*,\s*)?Skip\s*=/, name: "ignored .NET test ([Ignore] / Skip =)" },
+    { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:True|IsTrue)\s*\(\s*true\s*\)/, name: "trivial assert (Assert.True(true))" },
+    { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:False|IsFalse)\s*\(\s*false\s*\)/, name: "trivial assert (Assert.False(false))" },
+    { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:AreEqual|Equal)\s*\(\s*(\d+|true|false|null)\s*,\s*\1\s*\)/, name: "trivial assert (Assert.Equal(1, 1))" },
+  ] },
+  { files: /\.rb$/i, rules: [
+    { type: "test-focus", regex: /^\s*(?:fit|fdescribe|fcontext|fspecify|fexample|fscenario)\b/, name: "focused RSpec example (fit / fdescribe)" },
+    { type: "test-focus", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::focus\b|focus:\s*true\b)/, name: "focused RSpec example (focus: true)" },
+    { type: "test-skip", regex: /^\s*(?:xit|xdescribe|xcontext|xspecify|xexample|xscenario|xfeature)\b/, name: "disabled RSpec example (xit / xdescribe)" },
+    { type: "test-skip", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::skip\b|skip:\s*(?:true\b|["']))/, name: "disabled RSpec example (skip: true)" },
+    { type: "test-skip", regex: /^\s*skip(?:\s|\(|$)/, name: "skipped Ruby test (skip)", guard: RUBY_GUARD },
+    { type: "test-skip", regex: /^\s*pending(?:\s+["'(]|\s*$)/, name: "pending Ruby example (pending)", guard: RUBY_GUARD },
+    { type: "trivial-assert", regex: /\bexpect\s*\(\s*(true|false|1|0|nil)\s*\)\s*\.\s*to\s+(?:eq|eql|be|equal)\b\s*\(?\s*\1\b/, name: "trivial expectation (expect(true).to eq(true))" },
+    { type: "trivial-assert", regex: /^\s*assert\s*\(?\s*true\s*\)?\s*$/, name: "trivial assert (assert true)" },
+    { type: "trivial-assert", regex: /\bassert_equal\s*\(?\s*(\d+|true|false|nil)\s*,\s*\1\s*\)?\s*$/, name: "trivial assert (assert_equal 1, 1)" },
+  ] },
+  { files: /\.php$/i, rules: [
+    { type: "test-skip", regex: /\$this\s*->\s*markTest(?:Skipped|Incomplete)\s*\(/, name: "skipped PHPUnit test (markTestSkipped)", guard: PHP_GUARD },
+    { type: "trivial-assert", regex: /\$this\s*->\s*assertTrue\s*\(\s*true\s*\)/, name: "trivial assert ($this->assertTrue(true))" },
+    { type: "trivial-assert", regex: /\$this\s*->\s*assertFalse\s*\(\s*false\s*\)/, name: "trivial assert ($this->assertFalse(false))" },
+    { type: "trivial-assert", regex: /\$this\s*->\s*assert(?:Equals|Same)\s*\(\s*(\d+|true|false|null)\s*,\s*\1\s*\)/, name: "trivial assert ($this->assertEquals(1, 1))" },
+  ] },
+  { files: /\.swift$/i, rules: [
+    { type: "test-skip", regex: /\bthrow\s+XCTSkip\s*\(/, name: "skipped XCTest (XCTSkip)", guard: SWIFT_GUARD },
+    { type: "test-skip", regex: /@(?:Test|Suite)\s*\([^)]*\.disabled\b/, name: "disabled Swift Testing test (.disabled)" },
+    { type: "trivial-assert", regex: /\bXCTAssertTrue\s*\(\s*true\s*\)/, name: "trivial assert (XCTAssertTrue(true))" },
+    { type: "trivial-assert", regex: /\bXCTAssertFalse\s*\(\s*false\s*\)/, name: "trivial assert (XCTAssertFalse(false))" },
+    { type: "trivial-assert", regex: /\bXCTAssertEqual\s*\(\s*(\d+|true|false|nil)\s*,\s*\1\s*\)/, name: "trivial assert (XCTAssertEqual(1, 1))" },
+    { type: "trivial-assert", regex: /#expect\s*\(\s*true\s*\)/, name: "trivial expectation (#expect(true))" },
+  ] },
+];
+
+/** The same question as isGuardedSkip for brace and `end` languages: is the skip under a condition or in a helper? */
+function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }[], profile: GuardProfile): boolean {
+  const indentOf = (text: string) => text.length - text.trimStart().length;
+  const mentionsCi = (raw: string) => /\bCI\b|\bGITHUB_ACTIONS\b/.test(raw);
+  const own = lines[lines.length - 1];
+  if (profile.modifier?.test(own.code) || profile.conditional.test(own.code)) return !mentionsCi(own.raw);
+  let limit = indentOf(own.code);
+  for (let i = lines.length - 2; i >= 0 && lines.length - 1 - i <= 200; i--) {
+    if (lines[i].number !== lines[i + 1].number - 1) return false;
+    const { code, raw } = lines[i];
+    if (!code.trim() || indentOf(code) >= limit) continue;
+    if (profile.conditional.test(code)) return !mentionsCi(raw);
+    if (profile.test.test(code)) return false;
+    if (profile.helper.test(code)) return true;
+    limit = indentOf(code);
+  }
+  return false;
+}
+
 // Familiar test APIs only; this does not resolve imports or custom aliases.
 // Contiguous full-source/diff runs share one matcher. NUL marks hunk gaps;
 // SOH marks a real template opener, so .each`...` is distinguished from a reference.
@@ -106,7 +221,7 @@ import { matchIgnorePath } from "./config.js";
 
 const CODE_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-  ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c"
+  ".py", ".go", ".rs", ".java", ".kt", ".vue", ".svelte", ".php", ".rb", ".cs", ".cpp", ".c", ".swift"
 ]);
 
 const IGNORED_PATH_REGEX = /(?:^|\/)(?:fixtures|__fixtures__|testdata|mocks|test_data|__snapshots__|sample[s]?)\//i;
@@ -162,6 +277,7 @@ export function auditFileDiffs(
     const directives = javascript ? JS_COMMENT_DIRECTIVE_PATTERNS : python ? PYTHON_COMMENT_DIRECTIVE_PATTERNS : [];
     const stubs = javascript ? JS_STUB_PATTERNS : python ? PYTHON_STUB_PATTERNS : rust ? RUST_STUB_PATTERNS : [];
     const firstFinding = infractions.length;
+    const languageRules = LANGUAGE_LINE_RULES.find(entry => entry.files.test(file.path))?.rules;
     const masker = new SourceMasker(file.path);
     const maskedLines: { code: string; testCode: string; raw: string; number: number }[] = [];
     for (const added of file.addedLines) {
@@ -189,6 +305,16 @@ export function auditFileDiffs(
             });
             break;
           }
+        }
+      }
+
+      // A2. Disabled tests, focused tests and placeholder assertions in the other test ecosystems
+      if (languageRules && !isComment) {
+        for (const rule of languageRules) {
+          if (!rule.regex.test(cleanedLine)) continue;
+          if (rule.guard && isGuardedBlockSkip(maskedLines, rule.guard)) break;
+          infractions.push({ type: rule.type, file: file.path, lineNumber: added.lineNumber, lineSnippet: rawLine.trim(), commitHash, commitDate, reason: rule.name });
+          break;
         }
       }
 

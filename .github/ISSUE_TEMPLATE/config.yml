@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Tried it on your repository? Share the counts
+    url: https://github.com/Nari-Ab/agent-roast/blob/main/docs/pilot.md
+    about: A two-minute replay of your last commits and a short feedback form. Counts are enough; no code is needed.
