@@ -5,7 +5,8 @@ import { analyzeGuardFile, analyzeTestFile, ciTestSteps, isGuardFile, resolveCiT
 import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
-import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot } from "./snapshot.js";
+import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot, worktreeSnapshot } from "./snapshot.js";
+import type { TreeChange, WorktreeSnapshot } from "./snapshot.js";
 import { formatReviewMarkdown, formatReviewTerminal, formatGithubAnnotations } from "./renderer.js";
 import { formatSarif } from "./sarif.js";
 import { VALID_DETECTORS } from "./types.js";
@@ -38,30 +39,44 @@ export function compareFindings(before: Infraction[], after: Infraction[], newPa
 
 /** Compare full source blobs in changed files without executing or checking out the candidate. */
 export function reviewChanges(options: ReviewOptions): Promise<ReviewResult> {
-  return compareSourceChanges({ ...options, staged: false });
+  return compareSourceChanges({ ...options, source: "commits" });
 }
 
 export function reviewStagedChanges(options: StagedReviewOptions = {}): Promise<ReviewResult> {
-  return compareSourceChanges({ ...options, staged: true });
+  return compareSourceChanges({ ...options, source: "index" });
 }
 
-async function compareSourceChanges(options: (ReviewOptions & { staged: false }) | (StagedReviewOptions & { staged: true })): Promise<ReviewResult> {
+/** Everything uncommitted (staged, unstaged and untracked files) against HEAD, under the policy committed at HEAD. */
+export function reviewWorktreeChanges(options: StagedReviewOptions = {}): Promise<ReviewResult> {
+  return compareSourceChanges({ ...options, source: "worktree" });
+}
+
+type SourceReview = (ReviewOptions & { source: "commits" }) | (StagedReviewOptions & { source: "index" | "worktree" });
+type Snapshot = Awaited<ReturnType<typeof stagedSnapshot>> | WorktreeSnapshot;
+
+async function compareSourceChanges(options: SourceReview): Promise<ReviewResult> {
   assertNotAborted(options.signal);
   const cwd = path.resolve(options.cwd || process.cwd());
-  const staged = options.staged ? await stagedSnapshot(cwd, options.signal) : undefined;
-  const refs = options.staged ? { baseSha: staged!.baseSha, headSha: staged!.headSha, mergeBaseSha: staged!.mergeBaseSha }
-    : await reviewRefs(cwd, options.base, options.head ?? "HEAD", options.signal);
+  const snapshot = options.source === "index" ? await stagedSnapshot(cwd, options.signal)
+    : options.source === "worktree" ? await worktreeSnapshot(cwd, options.signal) : undefined;
+  try { return await compareSnapshot(options, cwd, snapshot); }
+  finally { await (snapshot as Partial<WorktreeSnapshot> | undefined)?.dispose?.(); }
+}
+
+async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Snapshot): Promise<ReviewResult> {
+  const refs = options.source === "commits" ? await reviewRefs(cwd, options.base, options.head ?? "HEAD", options.signal)
+    : { baseSha: snapshot!.baseSha, headSha: snapshot!.headSha, mergeBaseSha: snapshot!.mergeBaseSha };
   const policy = refs.baseSha === "EMPTY" ? { config: configFromText("{}", "default first-commit policy"), filename: null }
     : await reviewPolicy(cwd, refs.baseSha, options.signal);
   const format = options.format ?? "terminal";
   if (!["terminal", "json", "github", "markdown", "sarif"].includes(format)) throw new ConfigError("Unsupported review format.");
   const failOn = options.failOn ?? policy.config.failOn ?? ["test-skip", "trivial-assert", "test-focus", "assertion-weakened", "guard-weakened"];
   for (const rule of failOn) if (!VALID_DETECTORS.includes(rule as DetectorType)) throw new ConfigError(`Unknown review rule '${rule}'.`);
-  const changes = staged?.changes ?? await changedTreeFiles(cwd, refs.mergeBaseSha, refs.headSha, options.signal);
+  const changes = snapshot?.changes ?? await changedTreeFiles(cwd, refs.mergeBaseSha, refs.headSha, options.signal);
   const policyChanges = changes.filter(change => CONFIG_FILENAMES.includes(change.oldPath) || CONFIG_FILENAMES.includes(change.newPath)).map(change => change.newPath);
   const ignores = [...GENERATED_PATHS, ...(policy.config.ignorePaths || [])];
   const result: ReviewResult = {
-    schemaVersion: "1.1.0", mode: "review", source: staged ? "index" : "commits", ...refs,
+    schemaVersion: "1.2.0", mode: "review", source: options.source, ...refs,
     policySha: refs.baseSha, policyFile: policy.filename, policyChanges,
     filesChanged: changes.length, filesInspected: 0, unsupportedFiles: 0, excludedFiles: 0,
     renamedFiles: changes.filter(change => change.status.startsWith("R")).length,
@@ -74,14 +89,26 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
   const guardFindings: Infraction[] = [];
   const ciCounts: CiTestCount[] = [];
   let productionChanged = false;
-  const readText = async (mode: string, oid: string): Promise<string | null> => {
-    if (mode === "000000") return null;
-    if (!["100644", "100755"].includes(mode)) throw new ConfigError("Changed source is a symlink, submodule or unsupported Git mode; comparison is incomplete.");
-    const content = await readBlob(cwd, oid, options.signal);
+  const decode = (content: Buffer): string => {
     totalBytes += content.length;
     if (totalBytes > MAX_SCAN_BYTES) throw new ConfigError("Review exceeds the 50 MiB source comparison limit.");
     if (content.includes(0)) throw new ConfigError("Binary content in a source comparison.");
     return new TextDecoder("utf-8", { fatal: true }).decode(content);
+  };
+  const regularMode = (mode: string): void => {
+    if (!["100644", "100755"].includes(mode)) throw new ConfigError("Changed source is a symlink, submodule or unsupported Git mode; comparison is incomplete.");
+  };
+  const readText = async (mode: string, oid: string): Promise<string | null> => {
+    if (mode === "000000") return null;
+    regularMode(mode);
+    return decode(await readBlob(cwd, oid, options.signal));
+  };
+  /** The changed side: a Git object, or the file on disk when reviewing the working tree. */
+  const readNew = async (change: TreeChange): Promise<string | null> => {
+    if (options.source !== "worktree") return readText(change.newMode, change.newOid);
+    if (change.newMode === "000000") return null;
+    regularMode(change.newMode);
+    return decode(await (snapshot as WorktreeSnapshot).readWorktree(change.newPath));
   };
   const existingCounts = new Map<string, number>();
   for (const change of changes) {
@@ -93,7 +120,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
       if (!guarded) { result.unsupportedFiles++; continue; }
       try {
         const oldText = await readText(change.oldMode, change.oldOid);
-        const newText = await readText(change.newMode, change.newOid);
+        const newText = await readNew(change);
         guardFindings.push(...analyzeGuardFile(change.newPath, oldText, newText, refs.headSha));
         const ci = ciTestSteps(change.newPath, oldText, newText);
         if (ci) ciCounts.push(ci);
@@ -123,7 +150,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
         throw new ConfigError("Source moved to an unsupported extension; cannot claim its findings were resolved.");
       }
       const oldText = await readText(change.oldMode, change.oldOid);
-      const newText = await readText(change.newMode, change.newOid);
+      const newText = await readNew(change);
       const before = scan(oldText, change.oldPath, refs.mergeBaseSha);
       const after = scan(newText, change.newPath, refs.headSha);
       if (isTestFile(change.oldPath) || isTestFile(change.newPath)) tamperingFiles.push(analyzeTestFile(change.oldPath, change.newPath, oldText, newText, refs.headSha));
@@ -150,7 +177,7 @@ async function compareSourceChanges(options: (ReviewOptions & { staged: false })
     }
   }
   assertNotAborted(options.signal);
-  await staged?.verify();
+  await snapshot?.verify();
   result.complete = result.skippedFiles.length === 0;
   const rules = policy.config.rules ?? {};
   result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings, ...resolveCiTestSteps(ciCounts, refs.headSha)].filter(finding => rules[finding.type] !== "off"));

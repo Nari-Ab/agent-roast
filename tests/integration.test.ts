@@ -212,7 +212,7 @@ describe("Real Git Integration with Hostile Environment", () => {
       const elapsed = Date.now() - start;
       expect(exitCode).toBe(2);
       expect(elapsed).toBeLessThan(4000);
-      expect(output).toMatch(/git exited with code 128/i);
+      expect(output).toMatch(/is not inside one|git exited with code 128/i);
     } finally {
       fs.rmSync(emptyDir, { recursive: true, force: true });
     }

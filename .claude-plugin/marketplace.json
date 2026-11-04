@@ -1,0 +1,24 @@
+{
+  "name": "agent-roast",
+  "description": "Guardrails for AI coding agents: stop them from making a build green by weakening tests, coverage gates or CI.",
+  "owner": {
+    "name": "Nari-Ab",
+    "url": "https://github.com/Nari-Ab"
+  },
+  "plugins": [
+    {
+      "name": "agent-roast",
+      "source": "./plugin",
+      "description": "Sends Claude back to fix the code when it tries to finish with tests, assertions, coverage gates or CI steps weakened instead. Offline, no tokens.",
+      "version": "0.12.0",
+      "category": "quality",
+      "tags": [
+        "testing",
+        "guardrails",
+        "hooks",
+        "ci",
+        "code-review"
+      ]
+    }
+  ]
+}

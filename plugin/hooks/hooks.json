@@ -1,0 +1,16 @@
+{
+  "description": "When Claude is about to finish, review the uncommitted changes and send it back once if they weaken tests, assertions, coverage gates or CI instead of fixing the code.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx --yes agent-roast@0.12.0 hook run --agent claude",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
