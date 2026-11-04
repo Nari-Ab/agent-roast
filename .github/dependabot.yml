@@ -8,6 +8,11 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    # The CLI supports Node.js 18 and up, and the toolchain majors (TypeScript, Vitest, tsup, @types/node) need a deliberate
+    # migration, so major versions are bumped by hand. Minor and patch updates and security fixes still arrive.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
