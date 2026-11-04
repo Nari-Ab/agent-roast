@@ -33,6 +33,6 @@ jobs:
             echo "::error::Release tag ${GITHUB_REF_NAME} does not match package.json version ${version}."
             exit 1
           fi
+      # No token: npm exchanges this job's OIDC identity for a short-lived publish credential, which is what the
+      # trusted publisher configured on the package allows (`npm trust github`, see docs/maintainers.md).
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
