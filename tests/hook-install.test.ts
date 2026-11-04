@@ -129,7 +129,7 @@ describe("the keep-the-checks-honest paragraph", () => {
 });
 
 describe("hook commands", () => {
-  const run = (...args: string[]) => spawnSync(node, [cli, "hook", ...args], { cwd: dir, encoding: "utf8", env: { ...env, HOME: home, USERPROFILE: home } });
+  const run = (...args: string[]) => spawnSync(node, [cli, "hook", ...args], { cwd: dir, encoding: "utf8", env: { ...env, HOME: home, USERPROFILE: home, NO_COLOR: "1" } });
 
   it("installs for the agents that already have a folder, reports it, and uninstalls", () => {
     fs.mkdirSync(path.join(dir, ".claude"));

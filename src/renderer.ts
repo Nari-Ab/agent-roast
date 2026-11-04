@@ -522,12 +522,14 @@ export function formatReviewTerminal(result: import("./types.js").ReviewResult):
   if (result.policyChanges.length) lines.push("  Candidate policy changes were ignored; adopt them separately after review.");
   if (result.excludedFiles || result.unsupportedFiles) lines.push(`  ${result.excludedFiles} excluded · ${result.unsupportedFiles} unsupported/non-source changes`);
   for (const finding of mostImportantFirst(result.infractions, result.failedRules).slice(0, 20)) {
-    lines.push("", `  ${result.failedRules.includes(finding.type) ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`,
-      `    ${terminalText(finding.lineSnippet || finding.reason)}`, `    Next: ${terminalText(finding.suggestion || "Review this occurrence.")}`);
+    const failing = result.failedRules.includes(finding.type);
+    // Each colored span is one whole phrase, so the text stays contiguous when colors are on.
+    lines.push("", (failing ? pc.red : pc.yellow)(`  ${failing ? "FAIL" : "WARN"} [${finding.type}] ${terminalText(finding.file || "unknown")}:${finding.lineNumber}`),
+      `    ${terminalText(finding.lineSnippet || finding.reason)}`, pc.dim(`    Next: ${terminalText(finding.suggestion || "Review this occurrence.")}`));
   }
   if (result.infractions.length > 20) lines.push(`  ${result.infractions.length - 20} more new findings; use --format json for all results.`);
   for (const skipped of result.skippedFiles) lines.push(`  NOT COMPARED ${terminalText(skipped.file)}: ${terminalText(skipped.reason)}`);
-  lines.push("", !result.complete ? "  INCOMPLETE: some changed source was not compared (exit 2)." : result.passed ? "  PASSED: no new blocking findings." : `  BLOCKED: ${result.failedRules.join(", ")}.`, "");
+  lines.push("", !result.complete ? pc.red("  INCOMPLETE: some changed source was not compared (exit 2).") : result.passed ? pc.green("  PASSED: no new blocking findings.") : pc.red(`  BLOCKED: ${result.failedRules.join(", ")}.`), "");
   if (!result.filesInspected) lines.push("  No supported changed source files compared.", "");
   return lines.join("\n");
 }

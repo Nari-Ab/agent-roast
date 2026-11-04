@@ -25,8 +25,9 @@ quiet trial is a normal result, and "nothing it said was worth my time" is as us
 | --- | --- |
 | TypeScript, JavaScript | all rules |
 | Python | all rules |
-| Go | the before/after rules on `_test.go` files; tested less than the two above |
-| Java, Kotlin, Rust, C#, PHP, Ruby, C/C++ | a few line rules only (for example an empty `catch`, Rust `todo!()`); their tests are not read by the before/after rules |
+| Go | disabled tests (`t.Skip`) and placeholder assertions, plus the before/after rules `assertion-removed`, `test-removed` and `expectation-rewritten` on `_test.go` files; tested less than the two above |
+| Rust, Java, Kotlin, C#, Ruby, PHP, Swift | disabled tests (`#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, `markTestSkipped`, `XCTSkip`) and placeholder assertions (new in 0.12.0, tested on labeled cases only), plus a few line rules such as an empty `catch` or Rust `todo!()`; their tests are not read by the before/after rules |
+| C/C++ | a few line rules only |
 
 Config and CI checks read `package.json`, `tsconfig*.json`, ESLint, Jest and Vitest config,
 `pyproject.toml`, `setup.cfg`, `pytest.ini`, `tox.ini`, `.coveragerc`, `codecov.yml`, GitHub
@@ -34,6 +35,9 @@ workflows and `.gitlab-ci.yml`. Build files such as `Cargo.toml`, `pom.xml` and 
 are not read.
 
 ## Step 1: replay your last commits (two minutes)
+
+On a clean checkout, a bare `npx agent-roast` runs the same replay. `npx agent-roast demo` first shows a
+scripted example in a temporary repository, if you would like to see the output before you point it at your code.
 
 You need Node.js 18+ and Git 2.30+, in a clone with full history (`git fetch --unshallow` if the
 clone is shallow).

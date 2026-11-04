@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.12.0 — 2026-11-04
+
+Until now agent-roast looked at a change after it was committed. This release looks at it while it
+is still being made, where an agent can still fix it, and makes the first run show something useful.
+
+**Guard a coding agent.**
+
+- New `agent-roast hook install` adds a Stop hook to Claude Code, Codex and Cursor. When the agent
+  is about to finish, everything it changed since `HEAD` is reviewed, and if a check got weaker the
+  agent is sent back once with the file, the line and the before and after. A second attempt is not
+  blocked again; the person gets a warning instead, so the two never loop. Anything that cannot be
+  checked lets the agent finish. `hook status`, `hook uninstall`, `hook pause` and `hook resume`
+  manage it, and the hook pins the version that installed it. `--instructions` also writes a short
+  paragraph into `AGENTS.md` and `CLAUDE.md`.
+- New Claude Code plugin and marketplace entry: `/plugin install agent-roast --marketplace Nari-Ab/agent-roast`.
+- New `review --worktree` compares `HEAD` with everything not committed yet (staged, unstaged and
+  untracked files). Git compares against a private copy of the index, so the repository is never
+  touched; the policy still comes from `HEAD`. Context reviews report `schemaVersion` `1.2.0` and
+  `source: "worktree"`.
+
+**A first run that says something.**
+
+- `agent-roast` without arguments now reviews what you have not committed yet, and on a clean tree
+  replays your recent commits. It used to print the history score, which moved to `agent-roast audit`
+  (`--all`, `--since`, `--base` and the other old options still work as before). `--json`,
+  `--format`, `--fail-on` and `--advisory` apply to the new default.
+- New `agent-roast demo` shows a scripted example in a temporary repository, with the real review.
+- The terminal review colors `FAIL` and `WARN` findings and the verdict.
+
+**More languages.** `test-skip`, `test-focus` and `trivial-assert` now cover Go, Rust, Java, Kotlin,
+C#, Ruby, PHP and Swift, with skips that depend on the environment left alone (`testing.Short()`,
+`@DisabledOnOs`, `skip ... unless`, `XCTSkipUnless`, `#[cfg_attr(..., ignore)]`). 29 labeled cases
+were added: 64 of 64 cheats caught and 43 of 43 look-alikes silent.
+
+**Pipelines and project.**
+
+- The Action takes `comment: true` to keep one pull request comment up to date, and stays quiet
+  on a clean pull request.
+- CI runs the full suite on macOS and a first-run smoke test on Linux, macOS and Windows. A release
+  workflow can publish with npm provenance once it is enabled (`docs/maintainers.md`).
+- README rewritten as a landing page; the long reference moved to `docs/` (rules, integrations,
+  reference, comparison). Added CONTRIBUTING, SECURITY, a code of conduct, pull request and issue
+  templates for false positives and missed shortcuts, and dependabot. Internal plans and evidence
+  moved to `docs/archive`.
+
+Known limits: the agent hooks follow each agent's documented protocol and are tested with simulated
+hook input, not yet in long live sessions. `assertion-weakened` is still JavaScript, TypeScript and
+Python only.
+
 ## 0.11.0 — 2026-11-02
 
 Found by running the first command of the pilot guide on the 179 repositories of the benchmark

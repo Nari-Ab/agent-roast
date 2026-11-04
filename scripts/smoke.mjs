@@ -9,7 +9,10 @@ import { spawnSync } from "node:child_process";
 
 const cli = path.resolve(process.argv[2] || "dist/cli.js");
 const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "agent-roast-smoke-")));
-const env = { ...process.env, HOME: workspace, USERPROFILE: workspace, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1", NO_COLOR: "1" };
+// An empty file is a portable "no global Git configuration" (a device name is not, on every system).
+const gitConfig = path.join(workspace, "empty-gitconfig");
+fs.writeFileSync(gitConfig, "");
+const env = { ...process.env, HOME: workspace, USERPROFILE: workspace, GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: "1", NO_COLOR: "1" };
 for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM"].includes(key)) delete env[key];
 
 const run = (command, args, options = {}) => {

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://nari-ab.github.io/agent-roast/sitemap.xml
