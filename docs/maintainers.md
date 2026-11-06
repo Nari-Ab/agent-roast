@@ -41,7 +41,18 @@ that built the package. It stays idle until you enable it:
 2. In the repository settings add the variable `NPM_PUBLISH_FROM_CI` with the value `true`.
 3. Create a GitHub release; the workflow checks that the tag matches `package.json`, runs the tests and publishes.
 
-This workflow has not run yet. Expect to adjust it on the first real release.
+The workflow ran for the first time on the 0.12.2 release: it took under a minute, published without a token and signed a
+provenance statement. Watch a run with `gh run watch <id> --exit-status`; the registry can answer 404 for a few minutes after.
+
+## Claude plugin directory
+
+`plugin/` is the plugin folder: `.claude-plugin/plugin.json`, `hooks/hooks.json`, `README.md` and `LICENSE`. To list it in
+Anthropic's directory, submit it at claude.ai/directory/manage (Submit new, Plugin bundle, repository `Nari-Ab/agent-roast`,
+plugin path `plugin`) from a paid Claude plan with GitHub connected. The portal's Validate step runs more checks than
+`claude plugin validate ./plugin`; the README must stay at 40 words or more and keep describing everything the plugin runs,
+reads, writes and sends, because the security scan compares the behavior with it. The hook runs a pinned `npx` package, which
+the directory always holds for a reviewer to read. The directory follows the default branch, so a release that bumps
+`plugin/.claude-plugin/plugin.json` (it is one of the version pins) reaches it without a new submission.
 
 ## Repository settings worth having
 
