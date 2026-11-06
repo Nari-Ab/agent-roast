@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "description": "Stops AI coding agents (and rushed humans) from turning a build green by weakening tests, coverage gates or CI. Hook for Claude Code, Codex and Cursor, pre-commit, GitHub Action. Offline.",
   "type": "module",
   "main": "./dist/index.js",

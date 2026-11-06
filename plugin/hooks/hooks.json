@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx --yes agent-roast@0.12.1 hook run --agent claude",
+            "command": "npx --yes agent-roast@0.12.2 hook run --agent claude",
             "timeout": 60
           }
         ]

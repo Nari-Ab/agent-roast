@@ -26,7 +26,7 @@ quiet trial is a normal result, and "nothing it said was worth my time" is as us
 | TypeScript, JavaScript | all rules |
 | Python | all rules |
 | Go | disabled tests (`t.Skip`) and placeholder assertions, plus the before/after rules `assertion-removed`, `test-removed` and `expectation-rewritten` on `_test.go` files; tested less than the two above |
-| Rust, Java, Kotlin, C#, Ruby, PHP, Swift | disabled tests (`#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, `markTestSkipped`, `XCTSkip`) and placeholder assertions (new in 0.12.0, tested on labeled cases only), plus a few line rules such as an empty `catch` or Rust `todo!()`; their tests are not read by the before/after rules |
+| Rust, Java, Kotlin, C#, Ruby, PHP, Swift | disabled tests (`#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, `markTestSkipped`, `XCTSkip`) and placeholder assertions (new in 0.12.0; labeled cases, and the newest commits of 39 public repositories read by hand, `docs/benchmarks.md` section 5), plus a few line rules such as an empty `catch` or Rust `todo!()`; their tests are not read by the before/after rules |
 | C/C++ | a few line rules only |
 
 Config and CI checks read `package.json`, `tsconfig*.json`, ESLint, Jest and Vitest config,
