@@ -110,7 +110,7 @@ old debt with a baseline: [docs/reference.md](docs/reference.md#configuration).
 Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/benchmarks.md). **Weakened checks are rare, mostly
 deliberate, and not specific to AI. agent-roast is a tripwire that stays silent until a check gets weaker.**
 
-- **64 of 64** hand-labeled cheating edits are caught and **44 of 44** harmless look-alikes (reformats, moves, raised
+- **71 of 71** hand-labeled cheating edits are caught and **51 of 51** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. Three gaps are documented and still open.
 - **12,645 commits** that touch tests or CI/config in 166 public repositories: blocking rules fired on 0.3% of AI-signed commits
@@ -120,6 +120,10 @@ deliberate, and not specific to AI. agent-roast is a tripwire that stays silent 
 - **About one finding in five was a false alarm**, and most of the rest were deliberate, explained changes a reviewer should
   see rather than mistakes. The labels come from one reader (an AI assistant), so treat them as a first estimate.
 - `replay` ran on 179 public repositories that use coding agents: no commit would have been blocked in 149 of them.
+- The rules for **eight more languages** (Go, Rust, Java, Kotlin, C#, Ruby, PHP, Swift) ran on the newest 300 commits of 39
+  repositories and every finding was read: 26 of 99 were skips that depend on the environment, now fixed; of the 73 left, 56 are
+  tests that really are switched off and 17 are deliberate test data. One reader, and the fixes were made on the same
+  repositories, so expect a few new false alarms elsewhere.
 
 ## How it compares
 

@@ -83,14 +83,17 @@ A test was switched off. The runner reports success without executing the behavi
 | Go | `t.Skip`, `t.Skipf`, `t.SkipNow` as a statement of a test or sub-test |
 | Rust | `#[ignore]`, `#[ignore = "reason"]` |
 | Java, Kotlin | `@Ignore`, `@Disabled`, `@Test(enabled = false)` |
-| C# | `[Ignore]`, `[Fact(Skip = "...")]`, `[Theory(Skip = "...")]` |
-| Ruby | `xit`, `xdescribe`, `skip`, `pending`, `skip: true` |
+| C# | `[Ignore]` next to a test attribute (NUnit, MSTest), `[Fact(Skip = "...")]`, `[Theory(Skip = "...")]` |
+| Ruby | `xit`, `xdescribe`, `skip`, `pending`, `skip: true`, `:skip => true`, `skip: "reason"` |
 | PHP | `$this->markTestSkipped()`, `markTestIncomplete()` |
-| Swift | `throw XCTSkip(...)`, `@Test(.disabled(...))` |
+| Swift | `throw XCTSkip(...)`, `@Test(.disabled())`, `@Test(.disabled("reason"))` |
 
 A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
-`@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. A skip whose condition mentions
+`@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
+`#if os(Windows)` around a `throw XCTSkip(...)` and `@Test(.disabled(if: condition))`, a Ruby `it "...", :skip => !feature?`, and
+xUnit `Skip = "..."` together with `SkipUnless`, `SkipWhen` or `SkipType`. A C# `[Ignore]` that is not next to a test attribute
+(AutoMapper and Json.NET use it on properties) is not a skip. A skip whose condition mentions
 `CI`, or one that names a test or stands alone in a test body, is reported. The price of that trade-off: a conditional skip
 that hides a real failure is missed unless its condition mentions `CI`.
 **Fix:** re-enable the test and fix its failure. If the skip is intentional, say why and when it ends.

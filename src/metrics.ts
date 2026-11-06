@@ -41,6 +41,8 @@ interface GuardProfile {
   conditional: RegExp;
   test: RegExp;
   helper: RegExp;
+  /** Conditional compilation (`#if` ... `#endif`) gates a skip without indenting it. */
+  preprocessor?: { open: RegExp; close: RegExp; other: RegExp };
 }
 
 interface LineRule {
@@ -59,7 +61,8 @@ const GO_GUARD: GuardProfile = {
 const RUBY_GUARD: GuardProfile = {
   modifier: /^\s*(?:skip|pending)\b.*\b(?:if|unless)\b/,
   conditional: /^\s*(?:if|unless|else|elsif|case|when|begin|rescue|ensure|while|until)\b/,
-  test: /^\s*(?:it|specify|example|scenario|test|before|after|around)\b|^\s*def\s+test_/,
+  // Hooks (before, after, around) are not listed: a hook declared under `elsif RUBY_VERSION ...` gates its skip like an example does.
+  test: /^\s*(?:it|specify|example|scenario|test)\b|^\s*def\s+test_/,
   helper: /^\s*def\s+\w+/,
 };
 const PHP_GUARD: GuardProfile = {
@@ -69,9 +72,10 @@ const PHP_GUARD: GuardProfile = {
   helper: /^\s*(?:(?:public|protected|private|static)\s+)*function\s+\w+\s*\(/,
 };
 const SWIFT_GUARD: GuardProfile = {
+  preprocessor: { open: /^\s*#if\b/, close: /^\s*#endif\b/, other: /^\s*#else(?:if)?\b/ },
   conditional: /^\s*(?:\}\s*)?(?:if|else|guard|switch|case|for|while|do|catch)\b/,
-  test: /^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|static)\s+)*func\s+test\w*\s*\(/,
-  helper: /^\s*(?:@\w+\s+)*(?:(?:private|fileprivate|static)\s+)*func\s+\w+\s*\(/,
+  test: /^\s*(?:@\w+\s+)*(?:(?:public|open|internal|private|fileprivate|static|final|override|class|nonisolated)\s+)*func\s+test\w*\s*\(/,
+  helper: /^\s*(?:@\w+\s+)*(?:(?:public|open|internal|private|fileprivate|static|final|override|class|nonisolated)\s+)*func\s+\w+\s*\(/,
 };
 
 /** Disabled tests and placeholder assertions in the test ecosystems other than JavaScript and Python. Matching is per line
@@ -97,7 +101,9 @@ const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
     { type: "trivial-assert", regex: /\bassertThat\s*\(\s*true\s*\)\s*\.\s*isTrue\s*\(/, name: "trivial assert (assertThat(true).isTrue())" },
   ] },
   { files: /\.cs$/i, rules: [
-    { type: "test-skip", regex: /\[\s*Ignore\b|\b(?:Fact|Theory)\s*\(\s*(?:[^)]*,\s*)?Skip\s*=/, name: "ignored .NET test ([Ignore] / Skip =)" },
+    // `[Ignore]` is checked separately: it also names a mapping attribute (AutoMapper) and must sit next to a test attribute.
+    // Skip = with SkipUnless, SkipWhen or SkipType depends on the environment.
+    { type: "test-skip", regex: /\b(?:Fact|Theory)\s*\(\s*(?:[^)]*,\s*)?Skip\s*=(?![^\]]*\bSkip(?:Unless|When|Type)\b)/, name: "ignored .NET test (Skip =)" },
     { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:True|IsTrue)\s*\(\s*true\s*\)/, name: "trivial assert (Assert.True(true))" },
     { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:False|IsFalse)\s*\(\s*false\s*\)/, name: "trivial assert (Assert.False(false))" },
     { type: "trivial-assert", regex: /\bAssert\s*\.\s*(?:AreEqual|Equal)\s*\(\s*(\d+|true|false|null)\s*,\s*\1\s*\)/, name: "trivial assert (Assert.Equal(1, 1))" },
@@ -107,7 +113,9 @@ const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
     { type: "test-focus", regex: /^\s*(?:fit|fdescribe|fcontext|fspecify|fexample|fscenario)\b/, name: "focused RSpec example (fit / fdescribe)" },
     { type: "test-focus", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::focus\b|focus:\s*true\b)/, name: "focused RSpec example (focus: true)" },
     { type: "test-skip", regex: /^\s*(?:xit|xdescribe|xcontext|xspecify|xexample|xscenario|xfeature)\b/, name: "disabled RSpec example (xit / xdescribe)" },
-    { type: "test-skip", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::skip\b|skip:\s*(?:true\b|["']))/, name: "disabled RSpec example (skip: true)" },
+    // `:skip => !feature?` or `skip: RUBY_VERSION < "3"` gates the example on its environment; only a bare flag, true or a reason
+    // disables it. The line is matched with its strings blanked, so a reason shows as nothing between `skip:` and `do`, `{`, `,` or `)`.
+    { type: "test-skip", regex: /\b(?:it|describe|context|specify|scenario)\b[^\n]*[,(]\s*(?::skip\b(?!\s*=>)|(?::skip\s*=>|skip:)\s*(?:true\b|(?=do\b|\{|,|\)|$)))/, name: "disabled RSpec example (skip: true)" },
     { type: "test-skip", regex: /^\s*skip(?:\s|\(|$)/, name: "skipped Ruby test (skip)", guard: RUBY_GUARD },
     { type: "test-skip", regex: /^\s*pending(?:\s+["'(]|\s*$)/, name: "pending Ruby example (pending)", guard: RUBY_GUARD },
     { type: "trivial-assert", regex: /\bexpect\s*\(\s*(true|false|1|0|nil)\s*\)\s*\.\s*to\s+(?:eq|eql|be|equal)\b\s*\(?\s*\1\b/, name: "trivial expectation (expect(true).to eq(true))" },
@@ -122,7 +130,8 @@ const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
   ] },
   { files: /\.swift$/i, rules: [
     { type: "test-skip", regex: /\bthrow\s+XCTSkip\s*\(/, name: "skipped XCTest (XCTSkip)", guard: SWIFT_GUARD },
-    { type: "test-skip", regex: /@(?:Test|Suite)\s*\([^)]*\.disabled\b/, name: "disabled Swift Testing test (.disabled)" },
+    // `.disabled(if: condition)` depends on the environment; `.disabled()` and `.disabled("reason")` switch the test off.
+    { type: "test-skip", regex: /@(?:Test|Suite)\s*\([^)]*\.disabled\s*\((?!\s*if\b)/, name: "disabled Swift Testing test (.disabled)" },
     { type: "trivial-assert", regex: /\bXCTAssertTrue\s*\(\s*true\s*\)/, name: "trivial assert (XCTAssertTrue(true))" },
     { type: "trivial-assert", regex: /\bXCTAssertFalse\s*\(\s*false\s*\)/, name: "trivial assert (XCTAssertFalse(false))" },
     { type: "trivial-assert", regex: /\bXCTAssertEqual\s*\(\s*(\d+|true|false|nil)\s*,\s*\1\s*\)/, name: "trivial assert (XCTAssertEqual(1, 1))" },
@@ -130,23 +139,52 @@ const LANGUAGE_LINE_RULES: { files: RegExp; rules: LineRule[] }[] = [
   ] },
 ];
 
+/** `[Ignore]` also names a mapping or serialization attribute (AutoMapper, Json.NET), so it disables a test only inside a
+ * test's attribute list: the contiguous attribute lines around it must include a test attribute. */
+function inTestAttributeList(lines: { code: string; number: number }[], index: number): boolean {
+  const marker = /\[\s*(?:Test|TestCase|TestCaseSource|TestMethod|DataTestMethod|TestFixture|TestClass|Fact|Theory)\b/;
+  if (marker.test(lines[index].code)) return true;
+  for (const step of [-1, 1]) {
+    for (let i = index + step, seen = 0; i >= 0 && i < lines.length && seen < 6; i += step, seen++) {
+      if (lines[i].number !== lines[i - step].number + step || !/^\s*\[/.test(lines[i].code)) break;
+      if (marker.test(lines[i].code)) return true;
+    }
+  }
+  return false;
+}
+
 /** The same question as isGuardedSkip for brace and `end` languages: is the skip under a condition or in a helper? */
 function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }[], profile: GuardProfile): boolean {
   const indentOf = (text: string) => text.length - text.trimStart().length;
   const mentionsCi = (raw: string) => /\bCI\b|\bGITHUB_ACTIONS\b/.test(raw);
   const own = lines[lines.length - 1];
   if (profile.modifier?.test(own.code) || profile.conditional.test(own.code)) return !mentionsCi(own.raw);
+  // `#if os(Windows)` then `throw XCTSkip(...)` at the same indentation: still inside an unclosed `#if` opened since `from`.
+  // Counting starts at the enclosing function, so a test file wrapped in `#if canImport(XCTest)` still reports its skips.
+  const compiledConditionally = (from: number) => {
+    const directives = profile.preprocessor;
+    if (!directives) return false;
+    let depth = 0;
+    for (let i = from; i < lines.length - 1; i++) {
+      if (directives.open.test(lines[i].code)) depth++;
+      else if (directives.close.test(lines[i].code)) depth = Math.max(0, depth - 1);
+    }
+    return depth > 0;
+  };
   let limit = indentOf(own.code);
-  for (let i = lines.length - 2; i >= 0 && lines.length - 1 - i <= 200; i--) {
-    if (lines[i].number !== lines[i + 1].number - 1) return false;
+  let i = lines.length - 2;
+  for (; i >= 0 && lines.length - 1 - i <= 200; i--) {
+    if (lines[i].number !== lines[i + 1].number - 1) return compiledConditionally(i + 1);
     const { code, raw } = lines[i];
     if (!code.trim() || indentOf(code) >= limit) continue;
+    // A directive at column 0 inside a function must not look like the end of that function.
+    if (profile.preprocessor && (profile.preprocessor.open.test(code) || profile.preprocessor.close.test(code) || profile.preprocessor.other.test(code))) continue;
     if (profile.conditional.test(code)) return !mentionsCi(raw);
-    if (profile.test.test(code)) return false;
+    if (profile.test.test(code)) return compiledConditionally(i + 1);
     if (profile.helper.test(code)) return true;
     limit = indentOf(code);
   }
-  return false;
+  return compiledConditionally(i + 1);
 }
 
 // Familiar test APIs only; this does not resolve imports or custom aliases.
@@ -360,6 +398,14 @@ export function auditFileDiffs(
         }
       }
 
+    }
+
+    if (/\.cs$/i.test(file.path)) {
+      maskedLines.forEach((line, index) => {
+        if (/\[\s*Ignore\b/.test(line.code) && inTestAttributeList(maskedLines, index)) {
+          infractions.push({ type: "test-skip", file: file.path, lineNumber: line.number, lineSnippet: line.raw.trim(), commitHash, commitDate, reason: "ignored .NET test ([Ignore])" });
+        }
+      });
     }
 
     let source = "";

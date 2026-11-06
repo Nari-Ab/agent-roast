@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.12.2 — 2026-11-06
+
+The skip, focus and placeholder-assertion rules added in 0.12.0 for Go, Rust, Java, Kotlin, C#, Ruby, PHP and
+Swift had only been tested on labeled cases. They were run on the newest 300 commits of 39 public repositories
+and every finding was read in its source (`docs/benchmarks.md`, section 5). 26 of the 99 findings were skips that
+depend on the environment, which the rules are meant to leave alone. Those are fixed, and nothing new is reported:
+
+- **Swift.** `throw XCTSkip(...)` between `#if os(Windows)` and `#endif`, and `@Test(.disabled(if: condition))`,
+  are no longer reported. A test file wrapped in `#if canImport(XCTest)` still reports its skips. Functions
+  declared `public`, `open`, `final` or `override` are recognized as helpers and tests.
+- **Ruby.** `it "...", :skip => condition` and `skip: condition` are no longer reported; a bare flag, `true`
+  and a reason still are. A `skip` or `pending` in a hook under `if` / `elsif` counts as guarded.
+- **C#.** `[Ignore]` is reported only next to a test attribute (`[Test]`, `[TestMethod]`, `[Fact]`, ...), so
+  AutoMapper's `[Ignore]` mapping attribute is no longer a skip. `Skip = "..."` together with `SkipUnless`,
+  `SkipWhen` or `SkipType` depends on the environment and is not reported.
+
+14 labeled cases were added: 71 of 71 cheats caught and 51 of 51 look-alikes silent. `scripts/benchmark-languages.mjs`
+repeats the run on real repositories (`benchmarks/language-corpus.tsv` lists them). Known limit: the
+labels come from one reader, and they were made on the same repositories the fixes were made on.
+
 ## 0.12.1 — 2026-11-04
 
 The GitHub Action is renamed **"Agent Roast: weakened-test guard"** so that it can be listed on GitHub

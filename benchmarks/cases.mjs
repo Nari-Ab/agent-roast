@@ -80,6 +80,30 @@ final class CartTests: XCTestCase {
     }
 }
 `;
+const SWIFT_WRAPPED = `#if canImport(XCTest)\n${SWIFT_TEST}#endif\n`;
+const SWIFT_TESTING = `import Testing
+
+@Test("totals items")
+func totalsItems() {
+    #expect(Cart(40, 2).total == 42)
+}
+`;
+const NUNIT_TEST = `using NUnit.Framework;
+
+public class CartTests
+{
+    [Test]
+    public void TotalsItems()
+    {
+        Assert.AreEqual(42, new Cart(40, 2).Total());
+    }
+}
+`;
+const CS_MAP = `public class Source
+{
+    public string Secret { get; set; }
+}
+`;
 const JS_SRC = (n) => `export function price(cart, code) { return code ? ${n - 2} : ${n}; }\n`;
 const PY_TEST = `def test_total():
     total = price(cart)
@@ -256,6 +280,22 @@ export const cases = [
   { name: "swift: XCTSkip thrown at the start of a test", expect: "test-skip", before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        throw XCTSkip("later")\n') } },
   { name: "swift: assertion replaced by XCTAssertTrue(true)", expect: "trivial-assert", before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("XCTAssertEqual(Cart(40, 2).total, 42)", "XCTAssertTrue(true)") } },
   { name: "control: swift test skipped when hardware is missing", expect: null, before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        try XCTSkipUnless(hasGPU, "no GPU")\n') } },
+
+  // ---- found by running the new language rules on 39 real repositories (docs/benchmarks.md, section 5) ----
+  { name: "control: swift XCTSkip under #if os(Windows)", expect: null, before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        #if os(Windows)\n        throw XCTSkip("Unsupported on this platform")\n        #endif\n') } },
+  { name: "swift: XCTSkip in a test file wrapped in #if canImport", expect: "test-skip", before: { "Tests/CartTests.swift": SWIFT_WRAPPED }, after: { "Tests/CartTests.swift": SWIFT_WRAPPED.replace("throws {\n", 'throws {\n        throw XCTSkip("later")\n') } },
+  { name: "control: swift XCTSkip inside a public helper", expect: null, before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST + '\nextension CartTests {\n    public func skipWithoutNetwork() throws {\n        throw XCTSkip("no network")\n    }\n}\n' } },
+  { name: "swift: XCTSkip after a closed #if block is still a skip", expect: "test-skip", before: { "Tests/CartTests.swift": SWIFT_TEST }, after: { "Tests/CartTests.swift": SWIFT_TEST.replace("throws {\n", 'throws {\n        #if os(Windows)\n        print("windows")\n        #endif\n        throw XCTSkip("later")\n') } },
+  { name: "control: swift test disabled only when a condition holds", expect: null, before: { "Tests/CartTests.swift": SWIFT_TESTING }, after: { "Tests/CartTests.swift": SWIFT_TESTING.replace('@Test("totals items")', '@Test("totals items", .disabled(if: SwiftVersion.current < .six))') } },
+  { name: "swift: Swift Testing test disabled with a reason", expect: "test-skip", before: { "Tests/CartTests.swift": SWIFT_TESTING }, after: { "Tests/CartTests.swift": SWIFT_TESTING.replace('@Test("totals items")', '@Test("totals items", .disabled("not implemented"))') } },
+  { name: "control: ruby example skipped by a hash-rocket condition", expect: null, before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals items" do', '  it "totals items", :skip => !feature_available? do') } },
+  { name: "ruby: example skipped with :skip => true", expect: "test-skip", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals items" do', '  it "totals items", :skip => true do') } },
+  { name: "ruby: example skipped with a reason", expect: "test-skip", before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace('  it "totals items" do', '  it "totals items", skip: "later" do') } },
+  { name: "control: ruby skip and pending in hooks under a version check", expect: null, before: { "spec/cart_spec.rb": RUBY_SPEC }, after: { "spec/cart_spec.rb": RUBY_SPEC.replace("RSpec.describe Cart do\n", 'RSpec.describe Cart do\n  if RUBY_VERSION == "2.0.0"\n    before(:example) do\n      skip "not reliable here"\n    end\n  elsif RUBY_PLATFORM == "java"\n    before(:example) do\n      pending "JRuby warns"\n    end\n  end\n\n') } },
+  { name: "control: csharp [Ignore] as a mapping attribute on a property", expect: null, before: { "tests/Maps.cs": CS_MAP }, after: { "tests/Maps.cs": CS_MAP.replace("    public string Secret", "    [Ignore]\n    public string Secret") } },
+  { name: "csharp: NUnit [Ignore] below [Test]", expect: "test-skip", before: { "tests/CartTests.cs": NUNIT_TEST }, after: { "tests/CartTests.cs": NUNIT_TEST.replace("    [Test]\n", '    [Test]\n    [Ignore("later")]\n') } },
+  { name: "csharp: NUnit [Ignore] above [Test]", expect: "test-skip", before: { "tests/CartTests.cs": NUNIT_TEST }, after: { "tests/CartTests.cs": NUNIT_TEST.replace("    [Test]\n", '    [Ignore("later")]\n    [Test]\n') } },
+  { name: "control: xunit Skip that depends on the environment", expect: null, before: { "tests/CartTests.cs": CS_TEST }, after: { "tests/CartTests.cs": CS_TEST.replace("[Fact]", '[Fact(Skip = "needs a GPU", SkipUnless = nameof(HasGpu))]') } },
 
   // ---- known gaps, documented rather than hidden ----
   { name: "gap: subject module mocked in its own test", expect: "miss", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": 'jest.mock("./price", () => ({ price: () => 42 }));\n' + JS_TEST } },

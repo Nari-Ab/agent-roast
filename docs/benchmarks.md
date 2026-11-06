@@ -11,12 +11,13 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 64/64 cheats caught, 44/44 harmless changes left alone, 3 documented gaps open |
+| Labeled regression cases | 71/71 cheats caught, 51/51 harmless changes left alone, 3 documented gaps open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
 | Hand labels on unseen repositories | blocking: 2 unexplained, 7 deliberate, 2 false alarms (n=11) |
 | First run: `replay` of the newest 50 commits, 179 repositories | no commit that would block in 149 of 179; nothing to list in 43 of 179 (section 4) |
+| Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
 
@@ -29,15 +30,16 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **64/64 cheats caught, 44/44 harmless changes left alone, 3/3 documented gaps still
+Result: **71/71 cheats caught, 51/51 harmless changes left alone, 3/3 documented gaps still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. Open gaps: mocking the module under test, hardcoding the
 tested value in production code, and vacuous matchers such as `expect.anything()`.
 
-29 of the cases cover disabled tests and placeholder assertions in Go, Rust, Java, Kotlin, C#,
-Ruby, PHP and Swift, added in 0.12.0. The measurements in sections 2 to 4 were taken with 0.10.1
-and 0.11.0, before those rules existed, and do not include them.
+43 of the cases cover disabled tests and placeholder assertions in Go, Rust, Java, Kotlin, C#,
+Ruby, PHP and Swift: 29 were added in 0.12.0 and 14 in 0.12.2, after the run on real repositories in
+section 5. The measurements in sections 2 to 4 were taken with 0.10.1 and 0.11.0, before those
+rules existed, and do not include them.
 
 ## 2. Five mature open-source projects
 
@@ -228,6 +230,63 @@ reader (a condition on the browser project, the platform or a missing service), 
 accuracy figure. The cost: a conditional skip that hides a failing test is no longer reported
 unless its condition mentions CI.
 
+## 5. The eight added languages on real repositories
+
+The `test-skip`, `test-focus` and `trivial-assert` rules for Go, Rust, Java, Kotlin, C#, Ruby, PHP and Swift were first
+tested on labeled cases only (section 1). To see what they report on code nobody wrote them for, `replay` reviewed the
+newest 300 commits of 39 public repositories, each commit on its own against its parent: 11,681 commits, 5 repositories
+per language and 4 for PHP, well-known and test-heavy, picked by hand (`benchmarks/language-corpus.tsv`; `phpunit/phpunit`
+was dropped because its clone failed). The build was 0.12.1. One reader (an AI assistant) then read every finding in its
+source and put it into one of three groups.
+
+| Group | 0.12.1 | 0.12.2 |
+| --- | --- | --- |
+| A skip that depends on the environment, or not a skip at all: the rules should stay silent | 26 | 0 |
+| Deliberate test data: a testing framework's own fixtures, documentation examples | 17 | 17 |
+| A test that is switched off, or a placeholder assertion | 56 | 56 |
+| **Findings** | **99** | **73** |
+| Commits with a finding | 39 | 28 |
+
+| Language | Repositories | Commits | Findings, 0.12.1 → 0.12.2 | Commits with a finding | Switched off or placeholder | Test data |
+| --- | --- | --- | --- | --- | --- | --- |
+| Go | 5 | 1,497 | 1 → 1 | 1 → 1 | 1 | 0 |
+| Rust | 5 | 1,498 | 0 → 0 | 0 → 0 | 0 | 0 |
+| Java | 5 | 1,495 | 6 → 6 | 5 → 5 | 2 | 4 |
+| Kotlin | 5 | 1,498 | 32 → 32 | 16 → 16 | 32 | 0 |
+| C# | 5 | 1,498 | 26 → 14 | 4 → 2 | 4 | 10 |
+| Ruby | 5 | 1,499 | 8 → 3 | 5 → 1 | 0 | 3 |
+| PHP | 4 | 1,200 | 2 → 2 | 1 → 1 | 2 | 0 |
+| Swift | 5 | 1,496 | 24 → 15 | 7 → 2 | 15 | 0 |
+
+**The 26 false alarms** were skips that depend on the environment, which the rules are meant to leave alone, or were not
+skips at all:
+Swift `throw XCTSkip(...)` between `#if os(Windows)` and `#endif` (7) and `@Test(.disabled(if: condition))` (2); Ruby
+`it "...", :skip => condition` (4) and a `pending` in a hook under an `elsif` that checks the JRuby version (1); C# `[Ignore]` as a
+mapping attribute on a property, which AutoMapper uses (4), and xUnit `Skip = "..."` together with `SkipWhen`, `SkipUnless`
+or `SkipType` (8). All 26 are fixed in 0.12.2, and the new build reports nothing the old one did not.
+
+**The 73 left.** 56 are tests that are switched off: `@Ignore` or `@Disabled` in Kotlin (32: Exposed 17, koin 9, ktor 5,
+okhttp 1), `.disabled(...)` in vapor's Swift Testing rewrite (15), xUnit's own `[Fact(Skip = "Appears to be flaky,
+temporarily disabling")]` (4), `@Ignore` in gson (2), `assertTrue(true)` in monolog (2) and one `t.Skip` in testify. Most
+carry a reason, which is what a reviewer needs to see; whether each is a good decision is not the tool's call. 17 are test
+data: xUnit's acceptance fixtures, which exist to be skipped when xUnit runs them (10), JUnit 5's documentation examples (4)
+and RSpec's own bisect resources (3). A project that keeps fixtures like these lists them under `ignorePaths`.
+
+**Limits.**
+
+- One reader labeled the findings, and the fixes were made from those same findings. "0" in the first row means the known
+  false alarms are gone, not that the rate is zero on other code; expect new ones in projects not on this list.
+- This run counts what is reported, not what is missed. The rules deliberately leave conditional skips alone, so a test
+  disabled behind a condition is not found, and nothing here measures that beyond the labeled cases.
+- No `test-focus` finding appeared in any language, and none for Rust (`#[ignore]`), so those rules still rest on the
+  labeled cases alone.
+- Merge commits are reviewed against their first parent: 15 of the 73 findings are in merge commits, where a test
+  disabled on a release branch is reported again when that branch is merged (koin, ktor, testify, RSpec).
+- The repositories are a convenience sample of well-known projects, not a random one, and framework repositories keep
+  skipped tests on purpose. 13 commits (all in JetBrains/Exposed) could not be compared in full; `replay` reports
+  them as failed and no findings are counted for them.
+- Reviewing the 11,681 commits took 10 minutes on a Mac, with four repositories in parallel.
+
 ## Reproduce
 
 ```bash
@@ -237,9 +296,14 @@ npm run bench:noise -- ./commander.js ./execa ./click ./requests ./zod --commits
 node scripts/benchmark-agents.mjs ./repo-a ./repo-b \
   --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --out agents.json
 node scripts/benchmark-replay.mjs ./repo-a ./repo-b --last 50 --out replay.json   # the first run, section 4
+node scripts/benchmark-languages.mjs ./language-benchmark                         # eight more languages, section 5
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For
 an exact rerun, clone each with `git clone --no-tags`, then `git fetch origin <revision>` (with
 `--depth 1500`) and check it out. Search results change over time, so a fresh search will find
 different repositories.
+
+`benchmarks/language-corpus.tsv` (section 5) lists each repository with the revision it was measured at,
+and the script fetches the 300 commits up to that revision, so a rerun reads the same commits. An
+existing clone in the work directory is reused, which makes it easy to compare two builds on the same history.
