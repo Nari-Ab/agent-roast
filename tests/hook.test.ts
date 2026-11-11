@@ -69,6 +69,30 @@ describe("the Stop hook", () => {
     expect((await runHook(cursorStop(), { env: {} })).stdout).toBe("{}\n");
   });
 
+  it("in advisory mode only tells the person: the agent is never sent back, on the option or the environment", async () => {
+    weaken();
+    for (const outcome of [await runHook(stop(), { env: {}, advisory: true }), await runHook(stop(), { env: { AGENT_ROAST_HOOK: "advisory" } }), await runHook(stop(), { env: { AGENT_ROAST_HOOK: "Advisory" } })]) {
+      expect(outcome).toMatchObject({ action: "warn", exitCode: 0, stderr: "" });
+      const answer = JSON.parse(outcome.stdout);
+      expect(answer.decision).toBeUndefined();
+      expect(answer.systemMessage).toMatch(/finished with 1 change that weakens checks \(assertion-weakened\).*calc\.test\.ts:2/);
+    }
+    expect((await runHook(stop(), { env: {}, advisory: true })).result?.failedRules).toEqual(["assertion-weakened"]);
+  });
+
+  it("in advisory mode says nothing when the checks are intact, and still honors the off switch", async () => {
+    expect(await runHook(stop(), { env: {}, advisory: true })).toMatchObject({ action: "pass", stdout: "" });
+    weaken();
+    expect((await runHook(stop(), { env: { AGENT_ROAST_HOOK: "off" }, advisory: true })).action).toBe("skip");
+  });
+
+  it("in advisory mode Cursor gets an empty answer and the warning goes to the hook's log", async () => {
+    weaken();
+    const outcome = await runHook(cursorStop(), { env: {}, advisory: true });
+    expect(outcome).toMatchObject({ action: "warn", stdout: "{}\n", exitCode: 0 });
+    expect(outcome.stderr).toMatch(/agent-roast: the agent finished with 1 change that weakens checks.*calc\.test\.ts:2/);
+  });
+
   it("only blocks on rules that block by default; warnings alone let the agent finish", async () => {
     write("calc.test.ts", "import { add } from './calc';\ntest('adds', () => {\n  expect(add(1, 2)).toBe(3);\n});\n");
     const outcome = await runHook(stop(), { env: {} });
@@ -137,5 +161,14 @@ describe("the Stop hook", () => {
     expect(run("{}", "--agent", "nobody").status).toBe(1);
     git("checkout", "--", "calc.test.ts");
     expect(run(stop(), "--agent", "claude")).toMatchObject({ status: 0, stdout: "" });
+  });
+
+  it("works as a command in advisory mode: a warning for the person and exit 0", () => {
+    weaken();
+    const advisory = spawnSync(node, [cli, "hook", "run", "--agent", "claude", "--advisory"], { input: stop(), encoding: "utf8", env, cwd: dir });
+    expect(advisory.status).toBe(0);
+    expect(JSON.parse(advisory.stdout)).toEqual({ systemMessage: expect.stringContaining("weakens checks (assertion-weakened)") });
+    const viaEnvironment = spawnSync(node, [cli, "hook", "run", "--agent", "claude"], { input: stop(), encoding: "utf8", env: { ...env, AGENT_ROAST_HOOK: "advisory" }, cwd: dir });
+    expect(JSON.parse(viaEnvironment.stdout).decision).toBeUndefined();
   });
 });

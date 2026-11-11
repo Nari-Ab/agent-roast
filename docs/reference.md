@@ -15,7 +15,7 @@ into an agent, a Git hook or CI see [integrations.md](integrations.md).
 | `agent-roast replay [--last <n>]` | Each of your last commits (default 50) reviewed on its own against its parent, as a pull-request check would have seen it. Never fails because of a finding. |
 | `agent-roast check` | Everything that is true of the code you have now, not only what changed. Takes a baseline. |
 | `agent-roast explain <rule>` | What a rule means, why it matters and what to do. |
-| `agent-roast hook <run\|install\|uninstall\|status\|pause\|resume>` | Guard a coding agent. See [integrations](integrations.md#the-agent-hook). |
+| `agent-roast hook <run\|install\|uninstall\|status\|pause\|resume>` | Guard a coding agent; `--advisory` only warns and never sends the agent back. See [integrations](integrations.md#the-agent-hook). |
 | `agent-roast mcp [--root <dir>]` | Run as a read-only MCP server over stdio, with tools to review uncommitted changes or a commit range. See [integrations](integrations.md#mcp-server). |
 | `agent-roast init [--ci] [--hook]` | Writes `.agentroastrc.json`, a GitHub workflow and a Git pre-commit hook. Existing files are kept. |
 | `agent-roast audit` | The original report: a score for the shortcuts a repository's history adds (`--all`, `--since`, `--verbose`, `--fail-under`). |

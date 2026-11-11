@@ -26,6 +26,32 @@ describe("installing the agent hook", () => {
     expect(hookCommand("cursor", "agent-roast")).toBe("agent-roast hook run --agent cursor");
   });
 
+  it("can install the hook in advisory mode, switch it back by installing again, and status tells the two apart", () => {
+    expect(hookCommand("claude", undefined, true)).toBe(`npx --yes agent-roast@${packageVersion()} hook run --agent claude --advisory`);
+    expect(hookCommand("cursor", "agent-roast", true)).toBe("agent-roast hook run --agent cursor --advisory");
+    const [first] = installHooks({ cwd: dir, agents: ["claude"], home, advisory: true });
+    expect(first.command).toMatch(/hook run --agent claude --advisory$/);
+    expect(read(".claude/settings.json").hooks.Stop[0].hooks[0].command).toMatch(/--advisory$/);
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "claude" && row.scope === "project")).toMatchObject({ installed: true, advisory: true });
+    const [again] = installHooks({ cwd: dir, agents: ["claude"], home });
+    expect(again.action).toBe("updated");
+    expect(read(".claude/settings.json").hooks.Stop).toHaveLength(1);
+    expect(read(".claude/settings.json").hooks.Stop[0].hooks[0].command).toBe(hookCommand("claude"));
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "claude" && row.scope === "project")).toMatchObject({ installed: true, advisory: false });
+  });
+
+  it("says so on the command line when the hook only warns", () => {
+    const run = (...args: string[]) => spawnSync(node, [cli, "hook", ...args], { cwd: dir, encoding: "utf8", env: { ...env, NO_COLOR: "1" } });
+    const installed = run("install", "claude", "--advisory");
+    expect(installed.status).toBe(0);
+    expect(installed.stdout).toMatch(/Installed the agent-roast hook in advisory mode \(project\)/);
+    expect(installed.stdout).toMatch(/hook run --agent claude --advisory/);
+    expect(installed.stdout).toMatch(/never sends the agent back|the agent is never sent back/);
+    expect(run("status").stdout).toMatch(/installed\s+Claude Code\s+project .*\(advisory: warns, never sends the agent back\)/);
+    expect(run("install", "claude").stdout).toMatch(/only warn instead: agent-roast hook install --advisory/);
+    expect(run("status").stdout).not.toMatch(/advisory/);
+  });
+
   it("adds a Claude Code Stop hook to the project settings, keeping everything else", () => {
     write(".claude/settings.json", JSON.stringify({ permissions: { allow: ["Bash(npm test)"] }, hooks: { Stop: [{ hooks: [{ type: "command", command: "echo done" }] }], PostToolUse: [{ matcher: "Edit", hooks: [] }] } }, null, 4));
     const [change] = installHooks({ cwd: dir, agents: ["claude"], home });

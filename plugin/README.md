@@ -46,7 +46,8 @@ repository and prints the real review; nothing of yours is read.
 /plugin install agent-roast --marketplace Nari-Ab/agent-roast
 ```
 
-Set `AGENT_ROAST_HOOK=off` to switch the hook off for a session. An intended change is accepted by committing it. The same
+Set `AGENT_ROAST_HOOK=off` to switch the hook off for a session, or `AGENT_ROAST_HOOK=advisory` to get a warning without Claude
+being sent back. An intended change is accepted by committing it. The same
 check also runs as a command (`npx agent-roast`), a Git hook and a GitHub Action; see the
 [repository](https://github.com/Nari-Ab/agent-roast) for those and for the source. Questions and bug reports go to the
 [issue tracker](https://github.com/Nari-Ab/agent-roast/issues); security reports go through GitHub's private advisories, as

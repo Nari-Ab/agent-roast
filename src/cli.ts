@@ -606,13 +606,15 @@ hook
   .command("run")
   .description("Run by the agent when it is about to finish; reads the agent's JSON on stdin and answers in its dialect")
   .option("--agent <agent>", `${HOOK_AGENTS.join(", ")} (detected from the input when omitted)`)
-  .action(async (opts: { agent?: string }) => {
+  .option("--advisory", "only warn the person; never send the agent back", false)
+  .action(async (opts: { agent?: string; advisory: boolean }) => {
     // Exit status 2 tells an agent to block, so only a misspelled --agent (a setup mistake) is non-zero.
     let agent: (typeof HOOK_AGENTS)[number] | undefined;
     try { agent = opts.agent === undefined ? undefined : parseAgents([opts.agent])[0]; }
     catch (error) { console.error(`agent-roast hook: ${errorMessage(error)}`); process.exitCode = 1; return; }
     try {
-      const outcome = await runHook(await readStdin(), { agent });
+      // The root command also defines --advisory (for the reviews), and Commander gives it the flag wherever it appears.
+      const outcome = await runHook(await readStdin(), { agent, advisory: opts.advisory || program.opts().advisory === true });
       if (outcome.stdout) process.stdout.write(outcome.stdout);
       if (outcome.stderr) process.stderr.write(outcome.stderr);
       process.exitCode = outcome.exitCode;
@@ -630,9 +632,10 @@ hook
   .option("--global", "install for every repository of this user instead", false)
   .option("--local", "Claude Code only: use .claude/settings.local.json, which stays out of Git", false)
   .option("--command <program>", "program to run instead of 'npx --yes agent-roast@<version>', for example 'agent-roast' when installed globally")
+  .option("--advisory", "try it without risk: the hook only warns you and never sends the agent back", false)
   .option("--instructions", "also write a short 'keep the checks honest' paragraph into AGENTS.md / CLAUDE.md", false)
   .option("--dry-run", "show what would change without writing anything", false)
-  .action((names: string[], opts: { global: boolean; local: boolean; command?: string; instructions: boolean; dryRun: boolean }) => {
+  .action((names: string[], opts: { global: boolean; local: boolean; command?: string; advisory: boolean; instructions: boolean; dryRun: boolean }) => {
     try {
       if (opts.global && opts.local) throw new ConfigError("Choose --global or --local, not both.");
       let agents = parseAgents(names);
@@ -640,14 +643,16 @@ hook
       if (!agents.length) agents = HOOK_AGENTS.filter(agent => fs.existsSync(path.join(root, { claude: ".claude", codex: ".codex", cursor: ".cursor" }[agent])));
       if (!agents.length) throw new ConfigError("Name the agent to guard: agent-roast hook install claude (or codex, cursor).");
       const scope = opts.global ? "global" : opts.local ? "local" : "project";
-      const changes = installHooks({ cwd: process.cwd(), agents, scope, command: opts.command, dryRun: opts.dryRun });
-      console.log(`${opts.dryRun ? "Would install" : "Installed"} the agent-roast hook (${scope}):`);
+      const advisory = opts.advisory || program.opts().advisory === true;
+      const changes = installHooks({ cwd: process.cwd(), agents, scope, command: opts.command, advisory, dryRun: opts.dryRun });
+      console.log(`${opts.dryRun ? "Would install" : "Installed"} the agent-roast hook${advisory ? " in advisory mode" : ""} (${scope}):`);
       for (const change of changes) console.log(`  ${change.action === "unchanged" ? "=" : "+"} ${AGENT_LABELS[change.agent]}: ${displayPath(change.file)} (${change.action})\n      ${change.command}`);
       if (opts.instructions) {
         for (const change of installInstructions({ cwd: process.cwd(), dryRun: opts.dryRun })) console.log(`  + ${displayPath(change.file)} (${change.action}): keep-the-checks-honest paragraph`);
       }
       if (agents.includes("codex")) console.log("\nCodex runs a new hook only after you trust it: open Codex and review it with /hooks.");
-      if (!opts.dryRun) console.log("\nWhen the agent is about to finish with weakened checks it is sent back once to fix the code.\nTurn it off for a while: agent-roast hook pause   ·   remove it: agent-roast hook uninstall");
+      if (!opts.dryRun && advisory) console.log("\nAdvisory mode: when the agent finishes with weakened checks you get a one-line warning and the agent is never sent back.\nStart sending it back: agent-roast hook install (without --advisory)   ·   remove it: agent-roast hook uninstall");
+      else if (!opts.dryRun) console.log("\nWhen the agent is about to finish with weakened checks it is sent back once to fix the code.\nTurn it off for a while: agent-roast hook pause   ·   only warn instead: agent-roast hook install --advisory   ·   remove it: agent-roast hook uninstall");
     } catch (error) {
       console.error(`agent-roast hook install error: ${errorMessage(error)}`);
       process.exitCode = 2;
@@ -681,7 +686,7 @@ hook
   .action(async () => {
     try {
       const rows = hookStatus({ cwd: process.cwd() });
-      for (const row of rows) console.log(`  ${row.installed ? pc.green("installed") : pc.dim("not set  ")}  ${AGENT_LABELS[row.agent].padEnd(11)} ${row.scope.padEnd(8)} ${displayPath(row.file)}`);
+      for (const row of rows) console.log(`  ${row.installed ? pc.green("installed") : pc.dim("not set  ")}  ${AGENT_LABELS[row.agent].padEnd(11)} ${row.scope.padEnd(8)} ${displayPath(row.file)}${row.advisory ? pc.yellow("  (advisory: warns, never sends the agent back)") : ""}`);
       const paused = await hookPausedUntil(process.cwd());
       if (paused) console.log(`\n  Paused in this repository until ${paused.toLocaleString()} (agent-roast hook resume).`);
       if (!rows.some(row => row.installed)) console.log("\n  Install it with: agent-roast hook install claude   (or codex, cursor)");

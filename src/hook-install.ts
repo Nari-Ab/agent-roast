@@ -19,6 +19,8 @@ export interface HookInstallOptions {
   dryRun?: boolean;
   /** Replaces `npx --yes agent-roast@<version>`, for example `agent-roast` when it is installed globally. */
   command?: string;
+  /** Install the hook in advisory mode: it warns the person and never sends the agent back. */
+  advisory?: boolean;
   home?: string;
   env?: NodeJS.ProcessEnv;
 }
@@ -42,9 +44,11 @@ export function packageVersion(): string {
 }
 
 /** The command an agent runs for this agent's Stop event. */
-export function hookCommand(agent: HookAgent, command = `npx --yes agent-roast@${packageVersion()}`): string {
-  return `${command.trim()} hook run --agent ${agent}`;
+export function hookCommand(agent: HookAgent, command = `npx --yes agent-roast@${packageVersion()}`, advisory = false): string {
+  return `${command.trim()} hook run --agent ${agent}${advisory ? " --advisory" : ""}`;
 }
+
+const isAdvisory = (command: string | undefined): boolean => Boolean(command && /(^|\s)--advisory(\s|$)/.test(command));
 
 const isOurs = (command: unknown): boolean => typeof command === "string" && /\bagent-roast\b.*\bhook\s+run\b/.test(command);
 
@@ -146,7 +150,7 @@ export function installHooks(options: HookInstallOptions): HookInstallChange[] {
   const { root, scope, home, env } = context(options);
   return options.agents.map(agent => {
     const file = hookConfigPath(agent, scope, root, home, env);
-    const command = hookCommand(agent, options.command);
+    const command = hookCommand(agent, options.command, options.advisory);
     const json = readJsonFile(file);
     const changed = addStopHook(agent, json.data, command);
     if (changed && !options.dryRun) writeJsonFile(file, json);
@@ -166,9 +170,9 @@ export function uninstallHooks(options: Omit<HookInstallOptions, "command">): Ho
 }
 
 /** Where the hook is installed right now, for every agent and scope that can hold one. */
-export function hookStatus(options: Pick<HookInstallOptions, "cwd" | "home" | "env">): (HookInstallChange & { installed: boolean })[] {
+export function hookStatus(options: Pick<HookInstallOptions, "cwd" | "home" | "env">): (HookInstallChange & { installed: boolean; advisory: boolean })[] {
   const { root, home, env } = context({ ...options, scope: "project" });
-  const rows: (HookInstallChange & { installed: boolean })[] = [];
+  const rows: (HookInstallChange & { installed: boolean; advisory: boolean })[] = [];
   for (const agent of ["claude", "codex", "cursor"] as const) {
     for (const scope of ["project", "local", "global"] as const) {
       if (scope === "local" && agent !== "claude") continue;
@@ -179,7 +183,7 @@ export function hookStatus(options: Pick<HookInstallOptions, "cwd" | "home" | "e
         const handlers = agent === "cursor" ? asArray(data.hooks?.stop) : asArray(data.hooks?.Stop).flatMap(group => asArray(group?.hooks));
         command = handlers.map(handler => handler?.command).find(isOurs);
       } catch { /* an unreadable file is reported as not installed */ }
-      rows.push({ agent, scope, file, command, installed: Boolean(command), action: command ? "unchanged" : "absent" });
+      rows.push({ agent, scope, file, command, installed: Boolean(command), advisory: isAdvisory(command), action: command ? "unchanged" : "absent" });
     }
   }
   return rows;

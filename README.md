@@ -46,8 +46,8 @@ MCP can also call agent-roast as a read-only tool, `agent-roast mcp` ([setup](do
 When the agent is about to finish, agent-roast reviews everything it changed. If a check got weaker, the agent is **sent back
 once**, with the file, the line and the before and after, and told to fix the code instead. If it tries again, you get a
 warning rather than an endless loop. Anything agent-roast cannot check lets the agent finish: it never breaks a session. An
-intended change is accepted by committing it. Setup for each agent, what it does not do, and how to pause it:
-[docs/integrations.md](docs/integrations.md).
+intended change is accepted by committing it. Not sure yet? `npx agent-roast hook install --advisory` only warns you and never
+sends the agent back. Setup for each agent, what it does not do, and how to pause it: [docs/integrations.md](docs/integrations.md).
 
 > The agent hooks follow each agent's documented hook protocol and are tested with simulated hook input, not yet in long live
 > sessions with every agent. Reports of what you see are welcome.
