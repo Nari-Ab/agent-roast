@@ -82,6 +82,22 @@ try {
     assert.doesNotMatch(roast("hook", "status").stdout, /installed\s+Claude Code/);
   });
 
+  step("the MCP server answers a client with the same findings", () => {
+    const messages = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "smoke", version: "1" } } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "review_worktree", arguments: {} } },
+    ];
+    const result = run(process.execPath, [cli, "mcp"], { input: messages.map(message => JSON.stringify(message)).join("\n") + "\n", env: { ...env, CLAUDE_PROJECT_DIR: "", CURSOR_PROJECT_DIR: "" } });
+    assert.equal(result.status, 0, result.stderr);
+    const answers = result.stdout.split("\n").filter(Boolean).map(line => JSON.parse(line));
+    assert.equal(answers.length, 3);
+    assert.equal(answers[0].result.serverInfo.name, "agent-roast");
+    assert.equal(answers[1].result.tools.length, 3);
+    assert.match(answers[2].result.content[0].text, /calc\.test\.ts:2 \[assertion-weakened\]/);
+  });
+
   step("the staged review and the replay agree with it", () => {
     git("add", "calc.test.ts");
     assert.equal(roast("review", "--staged").status, 1);

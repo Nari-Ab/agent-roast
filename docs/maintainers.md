@@ -9,6 +9,7 @@ The version appears in several places that must agree; `tests/distribution.test.
 - `package.json` and `package-lock.json`
 - `action.yml` (the Action installs exactly this version)
 - `plugin/.claude-plugin/plugin.json`, `plugin/hooks/hooks.json` and `.claude-plugin/marketplace.json`
+- `server.json` (its `version` and the package's `version`; `name` must equal `mcpName` in `package.json`)
 - the install snippets in `README.md` and `docs/integrations.md`, and the site (`site/index.html`)
 
 ## Release steps
@@ -62,3 +63,19 @@ the directory always holds for a reviewer to read. The directory follows the def
 - **Discussions** on, for questions that are not bugs.
 - **Branch protection** on `main`: require the `Test CLI` checks.
 - A **security policy** is in `SECURITY.md`; enable private vulnerability reporting.
+
+## MCP registry
+
+`server.json` describes `agent-roast mcp` for the [official MCP registry](https://modelcontextprotocol.io/registry/quickstart),
+which hosts metadata only and checks that the npm package carries the same name in `mcpName` (`package.json`). Publish it once
+the version is on npm, from a terminal signed in to GitHub as the repository owner:
+
+1. Install `mcp-publisher` (the quickstart has the one-line download).
+2. `mcp-publisher login github` and approve the device code in the browser.
+3. From the repository root: `mcp-publisher publish`. A rejection naming the namespace usually means the owner's name differs in
+   case or the GitHub login used is not `Nari-Ab`; `name` in `server.json` and `mcpName` must stay equal.
+4. Check it: `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Nari-Ab/agent-roast"`.
+
+Each release raises `version` in `server.json` (both places), publishes to npm first, and then runs `mcp-publisher publish` again.
+Community indexes such as Glama and PulseMCP list servers from GitHub and the registry on their own; other lists (for example
+awesome-mcp-servers) take a pull request from a person, and many refuse text written by a model, so write the entry yourself.

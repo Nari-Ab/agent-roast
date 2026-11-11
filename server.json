@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Nari-Ab/agent-roast",
+  "title": "Agent Roast",
+  "description": "Offline, read-only review that flags agent changes weakening tests, assertions, coverage or CI.",
+  "repository": {
+    "url": "https://github.com/Nari-Ab/agent-roast",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/Nari-Ab/agent-roast#readme",
+  "version": "0.13.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "agent-roast",
+      "version": "0.13.0",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }]
+    }
+  ]
+}

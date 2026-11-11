@@ -63,13 +63,13 @@ function describe(finding: Infraction, index: number): string[] {
 
 /**
  * What the agent reads when it is sent back: the offending changes, then the instruction to fix the code rather than the
- * checks. Short on purpose, since it is added to the agent's context.
+ * checks. Short on purpose, since it is added to the agent's context. `subject` names what was reviewed.
  */
-export function formatAgentFeedback(result: ReviewResult): string {
+export function formatAgentFeedback(result: ReviewResult, subject = "the uncommitted changes"): string {
   const ranked = mostImportantFirst(result.infractions, result.failedRules);
   const blocking = ranked.filter(finding => result.failedRules.includes(finding.type));
   const notes = ranked.filter(finding => !result.failedRules.includes(finding.type) && isCheckRule(finding.type));
-  const lines = ["agent-roast: the uncommitted changes make the checks easier to pass instead of making the code correct.", ""];
+  const lines = [`agent-roast: ${subject} make the checks easier to pass instead of making the code correct.`, ""];
   blocking.slice(0, LISTED).forEach((finding, index) => lines.push(...describe(finding, index + 1)));
   if (blocking.length > LISTED) lines.push(`   … and ${blocking.length - LISTED} more.`);
   if (notes.length) {
