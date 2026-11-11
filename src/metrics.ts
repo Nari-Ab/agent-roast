@@ -8,7 +8,26 @@ const PYTHON_TEST_SKIP_PATTERNS = [
   { regex: /(?<![\w.])pytest\s*\.\s*skip\s*\(/, name: "imperative pytest skip (pytest.skip)", imperative: true },
   { regex: /@unittest\s*\.\s*skip\s*\(/, name: "skipped unittest (@unittest.skip)", imperative: false },
   { regex: /\bself\s*\.\s*skipTest\s*\(/, name: "imperative unittest skip (self.skipTest)", imperative: true },
+  // A test that is expected to fail cannot fail the run, which is what a skip does too.
+  { regex: /(?<![\w.])pytest\s*\.\s*xfail\s*\(/, name: "imperative pytest xfail (pytest.xfail)", imperative: true },
+  { regex: /@(?:unittest\s*\.\s*)?expectedFailure\b/, name: "test expected to fail (@unittest.expectedFailure)", imperative: false },
 ];
+
+/** `pytest.mark.skip` or `.xfail` as a decorator, as `pytestmark = ...` for a whole module, or as `marks=` of one parametrized
+ * case. `skipif` ends in a word character after `skip`, so `\b` leaves it alone. */
+const PYTHON_MARKER = /(@\s*|(?<![\w.])marks\s*=\s*\[?\s*|^[ \t]*pytestmark\s*=\s*\[?\s*)pytest\s*\.\s*mark\s*\.\s*(skip|xfail)\b/gm;
+
+/** `@pytest.mark.xfail(sys.platform == "win32", reason="paths")` expects the failure only where its condition holds, like
+ * `skipif`. A bare marker, one with only `reason=`, `strict=`, `raises=` or `run=`, a literal `True`, or a condition that mentions
+ * CI expects it everywhere and hides the failure from the pipeline. `args` are the call's arguments as written; none are
+ * known (an unclosed call, a hunk gap) means the marker is reported. */
+function isConditionalXfail(args: string[] | null): boolean {
+  if (!args?.length) return false;
+  const keyword = (arg: string) => /^(\w+)\s*=(?!=)/.exec(arg)?.[1];
+  const condition = keyword(args[0]) ? args.find(arg => keyword(arg) === "condition")?.replace(/^condition\s*=\s*/, "") : args[0];
+  if (condition === undefined || /^(?:True|1)$/.test(condition.trim())) return false;
+  return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(condition);
+}
 
 /** `if not has_gpu(): pytest.skip("no GPU")` gates a test on its environment, and so does a skip in a fixture or
  * helper that no test name covers. A skip that is a direct statement of a `test*` function disables it, and so does
@@ -190,44 +209,80 @@ function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }
 // Familiar test APIs only; this does not resolve imports or custom aliases.
 // Contiguous full-source/diff runs share one matcher. NUL marks hunk gaps;
 // SOH marks a real template opener, so .each`...` is distinguished from a reference.
-const JS_TEST_API = /(?<![\w$.])(?:(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe|failing|sequential))*\s*\.\s*(skip|todo|only)|((?:xit|xtest|xdescribe|fit|fdescribe)))\b((?:\s*\.\s*(?:each|failing|concurrent|serial|parallel|sequential))*)\s*(?=\(|\u0001)/g;
+// `fixme` and `fail` are Playwright's; `fails` is Vitest's and `failing` Jest's and AVA's: tests expected to fail, which cannot fail the run.
+const JS_TEST_API = /(?<![\w$.])(?:(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe|failing|sequential))*\s*\.\s*(skip|todo|only|fixme|failing|fails|fail)|((?:xit|xtest|xdescribe|fit|fdescribe)))\b((?:\s*\.\s*(?:each|failing|concurrent|serial|parallel|sequential))*)\s*(?=\(|\u0001)/g;
 
 /** `test.skip(browserName === 'webkit', 'reason')` gates a test on its environment, so it is not a disabled test.
  * A title, a bare `skip()` and `skip(true)` switch a test off; so does a condition that mentions CI, which is how
  * a failing test gets hidden from the pipeline. `open` is the offset of the call's parenthesis; a hunk gap or an
  * unclosed call leaves the context unknown and the skip is reported. */
 function isConditionalSkip(source: string, raw: string, open: number): boolean {
-  if (source[open] !== "(") return false;
+  const args = callArguments(source, raw, open);
+  if (!args) return false;
+  const isString = (arg: string) => /^(['"`])[\s\S]*\1$/.test(arg);
+  if (!args.length || isString(args[0]) || args[0] === "true") return false;
+  if (args.length > 1 && !isString(args.at(-1)!)) return false;
+  return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(args[0]);
+}
+
+/** The arguments, as written in `raw`, of the call whose parenthesis sits at `open` in `source`. Null when `open` is not a
+ * parenthesis, or when the call is unclosed, longer than 2000 characters or crosses a hunk gap (NUL): its context is unknown. */
+function callArguments(source: string, raw: string, open: number): string[] | null {
+  if (source[open] !== "(") return null;
   const args: string[] = [];
   let depth = 0;
   let start = open + 1;
   for (let i = start; i < source.length && i - open <= 2000; i++) {
     const char = source[i];
-    if (char === "\0") return false;
+    if (char === "\0") return null;
     if ("([{".includes(char)) depth++;
     else if (")]}".includes(char)) {
       if (depth) { depth--; continue; }
-      if (char !== ")") return false;
+      if (char !== ")") return null;
       args.push(raw.slice(start, i).trim());
       while (args.length && !args.at(-1)) args.pop();
-      const isString = (arg: string) => /^(['"`])[\s\S]*\1$/.test(arg);
-      if (!args.length || isString(args[0]) || args[0] === "true") return false;
-      if (args.length > 1 && !isString(args.at(-1)!)) return false;
-      return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(args[0]);
+      return args;
     } else if (char === "," && !depth) { args.push(raw.slice(start, i).trim()); start = i + 1; }
   }
-  return false;
+  return null;
 }
 
-const JS_COMMENT_DIRECTIVE_PATTERNS = [
+// A directive that switches off a type, lint or coverage check for the code next to it. Coverage exclusions keep a line out of
+// the figure a coverage threshold is measured on, which is a way to pass the threshold without testing the code.
+/** `unless` names code a directive is conventionally written on, which is then not a way around a check. */
+interface Directive { regex: RegExp; name: string; unless?: RegExp }
+const JS_COMMENT_DIRECTIVE_PATTERNS: Directive[] = [
   { regex: /^\s*\/\/\s*@ts-ignore\b/, name: "compiler ignore (@ts-ignore)" },
   { regex: /^\s*\/\/\s*@ts-expect-error\b/, name: "compiler suppression (@ts-expect-error)" },
   { regex: /^\s*\/\/\s*@ts-nocheck\b/, name: "compiler check disable (@ts-nocheck)" },
   { regex: /^\s*\/\/\s*eslint-disable(?:-next-line|-line)?\b/, name: "linter suppression (eslint-disable)" },
+  { regex: /^\s*\/\/\s*biome-ignore\b/, name: "linter suppression (biome-ignore)" },
+  { regex: /^\s*\/\/\s*(?:istanbul|c8|v8|node:coverage)\s+(?:ignore\b(?!\s+(?:stop|end)\b)|disable\b)/, name: "coverage exclusion (istanbul / c8 / v8 ignore)" },
 ];
-const PYTHON_COMMENT_DIRECTIVE_PATTERNS = [
+/** The same directives written as block comments, which the masker reports by offset only. */
+const JS_BLOCK_DIRECTIVE_PATTERNS: Directive[] = [
+  { regex: /^\/\*\s*eslint-disable(?:-next-line|-line)?\b/, name: "linter suppression (eslint-disable)" },
+  { regex: /^\/\*\s*(?:istanbul|c8|v8|node:coverage)\s+(?:ignore\b(?!\s+(?:stop|end)\b)|disable\b)/, name: "coverage exclusion (istanbul / c8 / v8 ignore)" },
+];
+// Code that is conventionally left out of coverage because no test can or should reach it: type-checking and `__main__` blocks,
+// abstract and defensive stubs, optional-import guards, platform branches. A pragma on these is not a way around a threshold.
+const COVERAGE_IDIOM = /^\s*(?:if\s+(?:(?:typing|t)\s*\.\s*)?TYPE_CHECKING\b|if\s+__name__\s*==|raise\s+(?:NotImplementedError|AssertionError)\b|(?:\w+\s*\.\s*)?assert_never\s*\(|@(?:abc\s*\.\s*)?abstractmethod\b|except\s*\(?\s*(?:ImportError|ModuleNotFoundError)\b|import\s|from\s+\S+\s+import\b|\.\.\.\s*$|pass\s*$|else\s*:|case\s+_\s*:|(?:el)?if\s+sys\s*\.\s*(?:version_info|platform)\b)/;
+const PYTHON_COMMENT_DIRECTIVE_PATTERNS: Directive[] = [
   { regex: /#\s*type:\s*ignore\b/, name: "python type ignore" },
   { regex: /#\s*noqa\b/, name: "python linter suppression (# noqa)" },
+  { regex: /#\s*pragma:\s*no\s*(?:cover|branch)\b/i, name: "coverage exclusion (# pragma: no cover)", unless: COVERAGE_IDIOM },
+  { regex: /#\s*pylint:\s*(?:disable|skip-file)\b/, name: "python linter suppression (# pylint: disable)" },
+  { regex: /#\s*pyright:\s*ignore\b/, name: "python type ignore (# pyright: ignore)" },
+  { regex: /#\s*mypy:\s*ignore-errors\b/, name: "python type check disabled for the file (# mypy: ignore-errors)" },
+  { regex: /#\s*(?:flake8|ruff):\s*noqa\b/i, name: "python linter suppression for the file (# flake8: noqa)" },
+];
+// Test-harness code that rewrites what the runner reports. Read only in files that are part of the harness (conftest.py,
+// sitecustomize.py, test files); a pytest plugin has its own reasons to touch report objects.
+const PYTHON_HARNESS_FILE = /(?:^|\/)(?:conftest|sitecustomize|usercustomize)\.py$/i;
+const PYTHON_HARNESS_PATTERNS = [
+  { regex: /\.\s*outcome\s*=\s*(["'])passed\1/, name: "test report outcome forced to passed" },
+  { regex: /(?<![\w.])call\s*\.\s*excinfo\s*=\s*None\b/, name: "failure cleared from a test report hook (call.excinfo = None)" },
+  { regex: /(?<![\w.])session\s*\.\s*exitstatus\s*=\s*(?:0\b|(?:pytest\s*\.\s*)?ExitCode\s*\.\s*OK\b)/, name: "pytest exit status forced to 0" },
 ];
 const CODE_TYPE_ESCAPE_PATTERNS = [
   { regex: /\bas\s+any\b/, name: "type bypass (as any)" },
@@ -360,7 +415,7 @@ export function auditFileDiffs(
       // B. Type Escapes
       let foundEscape = false;
       for (const rule of directives) {
-        if (rule.regex.test(masked.comments)) {
+        if (rule.regex.test(masked.comments) && !rule.unless?.test(cleanedLine)) {
           infractions.push({
             type: "type-escape",
             file: file.path,
@@ -375,8 +430,11 @@ export function auditFileDiffs(
         }
       }
 
-      if (javascript && !foundEscape && masked.blockStarts.some(start => /^\/\*\s*eslint-disable(?:-next-line|-line)?\b/.test(rawLine.slice(start)))) {
-        infractions.push({ type: "type-escape", file: file.path, lineNumber: added.lineNumber, lineSnippet: rawLine.trim(), commitHash, commitDate, reason: "linter suppression (eslint-disable)" });
+      const blockDirective = javascript && !foundEscape
+        ? JS_BLOCK_DIRECTIVE_PATTERNS.find(rule => masked.blockStarts.some(start => rule.regex.test(rawLine.slice(start))))
+        : undefined;
+      if (blockDirective) {
+        infractions.push({ type: "type-escape", file: file.path, lineNumber: added.lineNumber, lineSnippet: rawLine.trim(), commitHash, commitDate, reason: blockDirective.name });
         foundEscape = true;
       }
 
@@ -447,6 +505,31 @@ export function auditFileDiffs(
       }
     }
 
+    if (python) {
+      // Markers on decorators, `pytestmark = ...` and `marks=...` can span lines, so they are read from the joined source.
+      const reportedSkips = new Set(infractions.slice(firstFinding).filter(f => f.type === "test-skip").map(f => f.lineNumber));
+      for (const match of source.matchAll(PYTHON_MARKER)) {
+        const xfail = match[2] === "xfail";
+        let open = match.index + match[0].length;
+        while (source[open] === " " || source[open] === "\t") open++;
+        if (xfail && isConditionalXfail(callArguments(source, raw, open))) continue;
+        const location = evidence(match.index, match[0].length);
+        if (reportedSkips.has(location.lineNumber)) continue;
+        reportedSkips.add(location.lineNumber);
+        infractions.push({ type: "test-skip", file: file.path, ...location, commitHash, commitDate,
+          reason: xfail ? "test marked as expected to fail (pytest.mark.xfail)" : "test skipped by a marker (pytest.mark.skip)" });
+      }
+      if (isTestFile(file.path) || PYTHON_HARNESS_FILE.test(file.path)) {
+        for (const rule of PYTHON_HARNESS_PATTERNS) {
+          for (const match of raw.matchAll(new RegExp(rule.regex.source, "g"))) {
+            // The value is a string literal, but the assignment around it must be code.
+            if (code[match.index] !== raw[match.index]) continue;
+            infractions.push({ type: "guard-weakened", file: file.path, ...evidence(match.index, match[0].length), commitHash, commitDate, reason: rule.name });
+          }
+        }
+      }
+    }
+
     if (typescript) {
       // Cast syntax can span comments/newlines. Keep one type warning per start
       // line, as before, and never match through a missing diff hunk (NUL).
@@ -469,10 +552,14 @@ export function auditFileDiffs(
         if (match[2] && !isTestFile(file.path)) continue;
         if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;
         if (source[match.index + match[0].length] === "\u0001" && !/\.\s*each\s*$/.test(match[3])) continue;
-        if (match[1] === "skip" && !match[3] && isConditionalSkip(source, raw, match.index + match[0].length)) continue;
+        // Playwright's `test.fixme(cond, why)` and `test.fail(cond, why)` take a condition like `test.skip` does.
+        if ((match[1] === "skip" || match[1] === "fixme" || match[1] === "fail") && !match[3] && isConditionalSkip(source, raw, match.index + match[0].length)) continue;
         const focus = match[1] === "only" || match[2] === "fit" || match[2] === "fdescribe";
+        const expectedToFail = match[1] === "failing" || match[1] === "fails" || match[1] === "fail";
         infractions.push({ type: focus ? "test-focus" : "test-skip", file: file.path, ...evidence(match.index, match[0].length),
-          commitHash, commitDate, reason: focus ? "focused test or suite excludes other tests from the run" : `skipped, disabled or placeholder test registration (${match[0].replace(/\s/g, "")})`,
+          commitHash, commitDate, reason: focus ? "focused test or suite excludes other tests from the run"
+            : expectedToFail ? `test expected to fail, so its failure cannot fail the run (${match[0].replace(/\s/g, "")})`
+            : `skipped, disabled or placeholder test registration (${match[0].replace(/\s/g, "")})`,
         });
       }
       if (isTestFile(file.path)) {

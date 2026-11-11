@@ -158,6 +158,51 @@ const COMMON = `describe("api", () => {
 });
 `;
 const without = (text, needle) => text.replace(needle, "");
+const PY_PARAM = `@pytest.mark.parametrize("code,expected", [("SAVE", 40), ("HALF", 21)])
+def test_discount(code, expected):
+    assert price(cart, code) == expected
+`;
+const CONFTEST = `import pytest
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.when == "call" and report.outcome == "failed":
+        item.config.failed_names.append(item.name)
+`;
+const PY_RAISES = `import pytest
+
+
+def test_parse_rejects_garbage():
+    with pytest.raises(ValueError, match="bad input"):
+        parse("x")
+`;
+const UNIT_RAISES = `import unittest
+
+
+class ParseTests(unittest.TestCase):
+    def test_parse_rejects_garbage(self):
+        with self.assertRaisesRegex(ValueError, "bad input"):
+            parse("x")
+`;
+const JS_THROWS = `it("rejects garbage", () => {
+  expect(() => parse("x")).toThrow(TypeError);
+});
+`;
+const JS_CALLS = `it("notifies", () => {
+  notify(svc);
+  expect(svc.send).toHaveBeenCalledWith("hello", 3);
+});
+`;
+const RUFF = '[tool.ruff.lint]\nselect = ["E", "F", "B"]\nignore = ["E501"]\n';
+const MYPY = "[tool.mypy]\nstrict = true\n";
+const PRICE_PY = `def price(cart, code=None):
+    if code is None:
+        return sum(cart)
+    return sum(cart) - 2
+`;
 
 export const cases = [
   // ---- cheats the diff-aware rules should catch ----
@@ -297,8 +342,84 @@ export const cases = [
   { name: "csharp: NUnit [Ignore] above [Test]", expect: "test-skip", before: { "tests/CartTests.cs": NUNIT_TEST }, after: { "tests/CartTests.cs": NUNIT_TEST.replace("    [Test]\n", '    [Ignore("later")]\n    [Test]\n') } },
   { name: "control: xunit Skip that depends on the environment", expect: null, before: { "tests/CartTests.cs": CS_TEST }, after: { "tests/CartTests.cs": CS_TEST.replace("[Fact]", '[Fact(Skip = "needs a GPU", SkipUnless = nameof(HasGpu))]') } },
 
+  // ---- known-failure markers, test-harness tampering and coverage exclusions (0.15.0) ----
+  { name: "py: pytest.mark.xfail with a reason added to a failing test", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", '@pytest.mark.xfail(reason="flaky")\ndef test_discount') } },
+  { name: "py: bare pytest.mark.xfail added", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", "@pytest.mark.xfail\ndef test_discount") } },
+  { name: "py: strict xfail spread over several lines", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", '@pytest.mark.xfail(\n    reason="pricing rewrite",\n    strict=True,\n)\ndef test_discount') } },
+  { name: "py: xfail whose condition mentions CI", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", '@pytest.mark.xfail(os.environ.get("CI"), reason="slow")\ndef test_discount') } },
+  { name: "py: pytest.xfail() called as a statement of the test", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount():\n", 'def test_discount():\n    pytest.xfail("later")\n') } },
+  { name: "py: unittest.expectedFailure added", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", "@unittest.expectedFailure\ndef test_discount") } },
+  { name: "py: pytestmark skips the whole module", expect: "test-skip", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": 'pytestmark = pytest.mark.skip(reason="rewrite")\n\n' + PY_TEST } },
+  { name: "py: one parametrized case marked xfail", expect: "test-skip", before: { "test_cart.py": PY_PARAM }, after: { "test_cart.py": PY_PARAM.replace('("HALF", 21)', 'pytest.param("HALF", 21, marks=pytest.mark.xfail(reason="rounding"))') } },
+  { name: "control: xfail only on one platform", expect: null, before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", '@pytest.mark.xfail(sys.platform == "win32", reason="paths")\ndef test_discount') } },
+  { name: "control: xfail whose condition sits on the next line", expect: null, before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount", '@pytest.mark.xfail(\n    sys.platform == "win32",\n    reason="paths",\n)\ndef test_discount') } },
+  { name: "control: pytest.xfail under an environment check", expect: null, before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("def test_discount():\n", 'def test_discount():\n    if not has_gpu():\n        pytest.xfail("no GPU")\n') } },
+  { name: "js: it.fails added (Vitest)", expect: "test-skip", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('it("applies discount"', 'it.fails("applies discount"') } },
+  { name: "js: it.failing added (Jest)", expect: "test-skip", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace('it("applies discount"', 'it.failing("applies discount"') } },
+  { name: "js: test.fixme added (Playwright)", expect: "test-skip", before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace('test("renders the cart"', 'test.fixme("renders the cart"') } },
+  { name: "js: test.fail() called inside a Playwright test", expect: "test-skip", before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", "  test.fail();\n  await page.goto") } },
+  { name: "control: test.fixme gated on the browser", expect: null, before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", "  test.fixme(browserName === 'webkit', 'not supported yet');\n  await page.goto") } },
+  { name: "control: test.fail under a platform condition", expect: null, before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST.replace("  await page.goto", "  test.fail(process.platform === 'win32', 'paths');\n  await page.goto") } },
+  { name: "config: pytest xfail_strict switched off", expect: "guard-weakened", before: { "pytest.ini": "[pytest]\nxfail_strict = true\n" }, after: { "pytest.ini": "[pytest]\nxfail_strict = false\n" } },
+  { name: "config: pyproject xfail_strict switched off", expect: "guard-weakened", before: { "pyproject.toml": "[tool.pytest.ini_options]\nxfail_strict = true\n" }, after: { "pyproject.toml": "[tool.pytest.ini_options]\nxfail_strict = false\n" } },
+  { name: "control: xfail_strict switched on", expect: null, before: { "pytest.ini": "[pytest]\nxfail_strict = false\n" }, after: { "pytest.ini": "[pytest]\nxfail_strict = true\n" } },
+  { name: "py: conftest hook sets every report to passed", expect: "guard-weakened", before: { "conftest.py": CONFTEST }, after: { "conftest.py": CONFTEST.replace('    if report.when == "call" and report.outcome == "failed":\n        item.config.failed_names.append(item.name)\n', '    if report.when == "call":\n        report.outcome = "passed"\n') } },
+  { name: "py: pytest_sessionfinish forces the exit status to 0", expect: "guard-weakened", before: { "conftest.py": CONFTEST }, after: { "conftest.py": CONFTEST + "\n\ndef pytest_sessionfinish(session, exitstatus):\n    session.exitstatus = 0\n" } },
+  { name: "control: conftest hook that only reads the report outcome", expect: null, before: { "conftest.py": "import pytest\n" }, after: { "conftest.py": CONFTEST } },
+  { name: "control: conftest hook that marks a report as rerun", expect: null, before: { "conftest.py": CONFTEST }, after: { "conftest.py": CONFTEST.replace('    if report.when == "call" and report.outcome == "failed":\n        item.config.failed_names.append(item.name)\n', '    if report.when == "call" and report.outcome == "failed" and retries_left(item):\n        report.outcome = "rerun"\n') } },
+  { name: "py: pragma: no cover added to a branch", expect: "type-escape", before: { "price.py": PRICE_PY }, after: { "price.py": PRICE_PY.replace("    return sum(cart) - 2", "    return sum(cart) - 2  # pragma: no cover") } },
+  { name: "ts: istanbul ignore added above a function", expect: "type-escape", before: { "price.ts": JS_SRC(42) }, after: { "price.ts": "/* istanbul ignore next */\n" + JS_SRC(42) } },
+  { name: "ts: v8 ignore added above a branch", expect: "type-escape", before: { "price.ts": JS_SRC(42) }, after: { "price.ts": "// v8 ignore next\n" + JS_SRC(42) } },
+  { name: "control: coverage pragma quoted inside a string", expect: null, before: { "price.py": PRICE_PY }, after: { "price.py": PRICE_PY + 'HINT = "add  # pragma: no cover  to skip a line"\n' } },
+
+  // ---- weaker ways to say the same thing, CI and script shortcuts, Python lint and type-checker settings (0.15.0) ----
+  { name: "js: assertion made vacuous with expect.anything()", expect: "assertion-weakened", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("expect(total).toBe(42)", "expect(total).toEqual(expect.anything())") } },
+  { name: "py: pytest.raises(ValueError) broadened to Exception", expect: "assertion-weakened", before: { "test_parse.py": PY_RAISES }, after: { "test_parse.py": PY_RAISES.replace('ValueError, match="bad input"', "Exception, match=\"bad input\"") } },
+  { name: "py: pytest.raises loses its match=", expect: "assertion-weakened", before: { "test_parse.py": PY_RAISES }, after: { "test_parse.py": PY_RAISES.replace(', match="bad input"', "") } },
+  { name: "py: assertRaisesRegex relaxed to assertRaises", expect: "assertion-weakened", before: { "test_parse.py": UNIT_RAISES }, after: { "test_parse.py": UNIT_RAISES.replace('assertRaisesRegex(ValueError, "bad input")', "assertRaises(ValueError)") } },
+  { name: "py: exact count relaxed to > 0", expect: "assertion-weakened", before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST.replace("assert len(cart) == 2", "assert len(cart) > 0") } },
+  { name: "js: toThrow(TypeError) relaxed to toThrow()", expect: "assertion-weakened", before: { "parse.test.ts": JS_THROWS }, after: { "parse.test.ts": JS_THROWS.replace("toThrow(TypeError)", "toThrow()") } },
+  { name: "js: toThrow(TypeError) relaxed to toThrow(Error)", expect: "assertion-weakened", before: { "parse.test.ts": JS_THROWS }, after: { "parse.test.ts": JS_THROWS.replace("toThrow(TypeError)", "toThrow(Error)") } },
+  { name: "js: toHaveBeenCalledWith relaxed to toHaveBeenCalled()", expect: "assertion-weakened", before: { "notify.test.ts": JS_CALLS }, after: { "notify.test.ts": JS_CALLS.replace('toHaveBeenCalledWith("hello", 3)', "toHaveBeenCalled()") } },
+  { name: "js: toHaveLength(2) relaxed to a bound of zero", expect: "assertion-weakened", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("expect(cart.items).toHaveLength(2)", "expect(cart.items.length).toBeGreaterThan(0)") } },
+  { name: "control: toThrow narrowed from Error to a class", expect: null, before: { "parse.test.ts": JS_THROWS.replace("toThrow(TypeError)", "toThrow(Error)") }, after: { "parse.test.ts": JS_THROWS } },
+  { name: "control: pytest.raises narrowed from Exception to ValueError", expect: null, before: { "test_parse.py": PY_RAISES.replace("ValueError", "Exception") }, after: { "test_parse.py": PY_RAISES } },
+  { name: "control: emptiness check flipped to a non-empty check", expect: null, before: { "cart.test.ts": JS_TEST.replace("toHaveLength(2)", "toHaveLength(0)") }, after: { "cart.test.ts": JS_TEST.replace("expect(cart.items).toHaveLength(2)", "expect(cart.items.length).toBeGreaterThan(0)") } },
+  { name: "control: python emptiness check flipped to a non-empty check", expect: null, before: { "test_cart.py": PY_TEST.replace("assert len(cart) == 2", "assert len(cart) == 0") }, after: { "test_cart.py": PY_TEST.replace("assert len(cart) == 2", "assert len(cart) > 0") } },
+  { name: "ci: test command made to ignore failure with || true", expect: "guard-weakened", before: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]) }, after: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test || true"]) } },
+  { name: "ci: pytest followed by exit 0", expect: "guard-weakened", before: { ".github/workflows/ci.yml": WORKFLOW(["pip install -e .", "pytest -q"]) }, after: { ".github/workflows/ci.yml": WORKFLOW(["pip install -e .", "pytest -q; exit 0"]) } },
+  { name: "ci: test step switched off with if: false", expect: "guard-weakened", before: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]) }, after: { ".github/workflows/ci.yml": WORKFLOW(["npm ci"]) + "      - if: false\n        run: npm test\n" } },
+  { name: "ci: job switched off with if: false", expect: "guard-weakened", before: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]) }, after: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]).replace("  ci:\n", "  ci:\n    if: false\n") } },
+  { name: "control: cleanup step that ends in || true", expect: null, before: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm test"]) }, after: { ".github/workflows/ci.yml": WORKFLOW(["npm ci", "npm cache clean --force || true", "npm test"]) } },
+  { name: "pkg: lint script replaced by echo", expect: "guard-weakened", before: { "package.json": JSON.stringify({ scripts: { lint: "eslint .", test: "vitest run" } }) }, after: { "package.json": JSON.stringify({ scripts: { lint: "echo skipped", test: "vitest run" } }) } },
+  { name: "pkg: typecheck script ends in || true", expect: "guard-weakened", before: { "package.json": JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }) }, after: { "package.json": JSON.stringify({ scripts: { typecheck: "tsc --noEmit || true" } }) } },
+  { name: "control: lint script gains --fix", expect: null, before: { "package.json": JSON.stringify({ scripts: { lint: "eslint ." } }) }, after: { "package.json": JSON.stringify({ scripts: { lint: "eslint . --fix" } }) } },
+  { name: "control: test script switched from jest to vitest", expect: null, before: { "package.json": JSON.stringify({ scripts: { test: "jest" } }) }, after: { "package.json": JSON.stringify({ scripts: { test: "vitest run" } }) } },
+  { name: "config: ruff ignore list grows", expect: "guard-weakened", before: { "pyproject.toml": RUFF }, after: { "pyproject.toml": RUFF.replace('ignore = ["E501"]', 'ignore = ["E501", "F401", "B008"]') } },
+  { name: "config: ruff select narrowed", expect: "guard-weakened", before: { "pyproject.toml": RUFF }, after: { "pyproject.toml": RUFF.replace('["E", "F", "B"]', '["E", "F"]') } },
+  { name: "config: ruff per-file-ignores added for a package", expect: "guard-weakened", before: { "pyproject.toml": RUFF }, after: { "pyproject.toml": RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"src/billing/*" = ["F841", "B006"]\n' } },
+  { name: "config: flake8 ignore list grows", expect: "guard-weakened", before: { ".flake8": "[flake8]\nignore = E501\n" }, after: { ".flake8": "[flake8]\nignore = E501,F401,W503\n" } },
+  { name: "config: pylint disable list grows", expect: "guard-weakened", before: { ".pylintrc": "[MESSAGES CONTROL]\ndisable=C0114\n" }, after: { ".pylintrc": "[MESSAGES CONTROL]\ndisable=C0114,R0913,W0612\n" } },
+  { name: "config: pylint fail-under lowered", expect: "guard-weakened", before: { ".pylintrc": "[MASTER]\nfail-under=9.5\n" }, after: { ".pylintrc": "[MASTER]\nfail-under=7.0\n" } },
+  { name: "config: mypy strict switched off", expect: "guard-weakened", before: { "pyproject.toml": MYPY }, after: { "pyproject.toml": MYPY.replace("true", "false") } },
+  { name: "config: mypy ignore_errors for a module", expect: "guard-weakened", before: { "mypy.ini": "[mypy]\nstrict = True\n" }, after: { "mypy.ini": "[mypy]\nstrict = True\n\n[mypy-app.billing.*]\nignore_errors = True\n" } },
+  { name: "control: ruff adopted with its first ignore list", expect: null, before: { "pyproject.toml": "[project]\nname = \"x\"\n" }, after: { "pyproject.toml": "[project]\nname = \"x\"\n\n" + RUFF } },
+  { name: "control: ruff ignore list shrinks", expect: null, before: { "pyproject.toml": RUFF.replace('["E501"]', '["E501", "F401"]') }, after: { "pyproject.toml": RUFF } },
+  { name: "control: ruff select widened", expect: null, before: { "pyproject.toml": RUFF }, after: { "pyproject.toml": RUFF.replace('["E", "F", "B"]', '["E", "F", "B", "S"]') } },
+  { name: "control: ruff select narrowed to codes a prefix still covers", expect: null, before: { "pyproject.toml": RUFF.replace('["E", "F", "B"]', '["E501", "F401", "B"]') }, after: { "pyproject.toml": RUFF } },
+  { name: "control: flake8 ignore list reordered", expect: null, before: { ".flake8": "[flake8]\nignore = E501,W503\n" }, after: { ".flake8": "[flake8]\nignore = W503, E501\n" } },
+  { name: "control: mypy override relaxes annotations for tests only", expect: null, before: { "pyproject.toml": MYPY }, after: { "pyproject.toml": MYPY + '\n[[tool.mypy.overrides]]\nmodule = "tests.*"\ndisallow_untyped_defs = false\n' } },
+  { name: "control: mypy strict switched on", expect: null, before: { "pyproject.toml": MYPY.replace("true", "false") }, after: { "pyproject.toml": MYPY } },
+  { name: "control: new test born with xfail in an existing file", expect: null, before: { "test_cart.py": PY_TEST }, after: { "test_cart.py": PY_TEST + '\n\n@pytest.mark.xfail(reason="rounding bug #12")\ndef test_rounding():\n    assert price(cart, "HALF") == 21\n' } },
+  { name: "control: new test file whose tests are marked xfail", expect: null, before: { "README.md": "x\n" }, after: { "test_known_bugs.py": '@pytest.mark.xfail(reason="bug #7")\ndef test_a():\n    assert f() == 1\n\n\n@pytest.mark.xfail(strict=True)\ndef test_b():\n    assert g() == 2\n' } },
+  { name: "control: new Playwright test marked fixme", expect: null, before: { "cart.spec.ts": PW_TEST }, after: { "cart.spec.ts": PW_TEST + 'test.fixme("shows the total in euros", async ({ page }) => {\n  await expect(page.locator(".eur")).toHaveText("42");\n});\n' } },
+  { name: "control: existing fixme test retitled", expect: null, before: { "cart.spec.ts": 'test.fixme("renders the cart", async ({ page }) => {\n  await page.goto("/cart");\n});\n' }, after: { "cart.spec.ts": 'test.fixme("CT-001 renders the cart", async ({ page }) => {\n  await page.goto("/cart");\n});\n' } },
+
+  { name: "config: tsconfig noImplicitAny false added under strict", expect: "guard-weakened", before: { "tsconfig.json": '{ "compilerOptions": { "strict": true } }\n' }, after: { "tsconfig.json": '{ "compilerOptions": { "strict": true, "noImplicitAny": false } }\n' } },
+  { name: "control: tsconfig strict removed in a TypeScript 6 upgrade, where it is the default", expect: null, before: { "tsconfig.json": '{ "compilerOptions": { "strict": true, "target": "es2022" } }\n' }, after: { "tsconfig.json": '{ "compilerOptions": { "target": "es2022" } }\n' } },
+  { name: "control: tsconfig for tests relaxes one check without strict of its own", expect: null, before: { "tsconfig.test.json": '{ "extends": "./tsconfig.json", "compilerOptions": { "target": "es2022" } }\n' }, after: { "tsconfig.test.json": '{ "extends": "./tsconfig.json", "compilerOptions": { "target": "es2022", "noImplicitAny": false } }\n' } },
+
   // ---- known gaps, documented rather than hidden ----
   { name: "gap: subject module mocked in its own test", expect: "miss", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": 'jest.mock("./price", () => ({ price: () => 42 }));\n' + JS_TEST } },
   { name: "gap: implementation hardcodes the tested value", expect: "miss", before: { "price.ts": "export function price(cart) { return cart.items.reduce((a, i) => a + i.cost, 0); }\n", "cart.test.ts": JS_TEST }, after: { "price.ts": "export function price(cart) { return 42; }\n", "cart.test.ts": JS_TEST } },
-  { name: "gap: assertion made vacuous with expect.anything()", expect: "miss", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": JS_TEST.replace("expect(total).toBe(42)", "expect(total).toEqual(expect.anything())") } },
 ];

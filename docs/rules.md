@@ -41,8 +41,14 @@ An exact check was replaced by a weaker one. The test stays green and verifies f
 ```
 
 Recognized weaker forms: in JavaScript/TypeScript `toBeDefined`, `toBeTruthy`, `toBeFalsy`, `toBeUndefined`,
-`.not.toBeNull()`, `.not.toBeUndefined()`, `.not.toThrow()` and `toBeGreaterThanOrEqual(0)`; in Python a bare `assert value`,
-`is not None` and `assert True`. Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
+`.not.toBeNull()`, `.not.toBeUndefined()`, `.not.toThrow()`, `toBeGreaterThanOrEqual(0)`, `toBeGreaterThan(0)` and
+`toBeGreaterThanOrEqual(1)` where an exact value or count stood, `toHaveBeenCalled()` where `toHaveBeenCalledWith(...)` or
+`toHaveBeenCalledTimes(n)` stood, `toEqual(expect.anything())` or `expect.any(Type)` where a value stood, and a
+`toThrow("message")` or `toThrow(SomeError)` that lost its argument (or became `toThrow(Error)`); in Python a bare
+`assert value`, `is not None`, `assert True`, `assert len(x) > 0` where `== 3` stood, `pytest.raises(ValueError)` broadened to
+`Exception`, a `match=` dropped from `pytest.raises`, and `assertRaisesRegex` relaxed to `assertRaises`. An exact check turned
+into a bound is not reported when the old check expected nothing (`toHaveLength(0)` to `toBeGreaterThan(0)` is a flipped
+expectation, not a looser one). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
 several checks into one snapshot are not reported.
 **Fix:** restore the exact check, or assert the specific value the code should produce.
 
@@ -65,11 +71,38 @@ A gate that decides whether bad code can pass was made easier to pass.
 ```
 
 Watched files: `package.json`, `tsconfig*.json`, `jest`/`vitest`/`vite` config, ESLint config, `pyproject.toml`,
-`setup.cfg`, `pytest.ini`, `tox.ini`, `.coveragerc`, `codecov.yml`, `.gitlab-ci.yml` and `.github/workflows/*.yml`. Covered:
+`setup.cfg`, `pytest.ini`, `tox.ini`, `ruff.toml`, `.flake8`, `mypy.ini`, `.pylintrc`, `.coveragerc`, `codecov.yml`,
+`.gitlab-ci.yml` and `.github/workflows/*.yml`. Covered:
 a lower coverage threshold (`lines`, `branches`, `functions`, `statements`, `fail_under`, `--cov-fail-under`), a compiler
 strictness switch turned off, a lint rule downgraded, a CI step allowed to fail (`continue-on-error`, `allow_failure`), a
-workflow that stops running tests or stops running on pushes and pull requests, and an npm `test` script that can no longer
-fail. Raising a threshold, restructuring CI and moving the test step are not reported.
+workflow that stops running tests or stops running on pushes and pull requests, an npm `test` script that can no longer
+fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
+Raising a threshold, restructuring CI and moving the test step are not reported.
+
+More shortcuts of the same kind:
+
+- **A test command that cannot fail in CI.** `npm test || true`, `pytest; exit 0` and `pytest || echo "tests failed"` end the
+  step with success whatever the tests did, which is `continue-on-error` written in shell. A step or job switched off with
+  `if: false` (or `if: ${{ false }}`) is reported when it existed before. Only a runner line counts: `npm cache clean || true`
+  is fine, and so is a step that was already written that way.
+- **An npm script that always says yes.** The `test`, `lint`, `typecheck`, `check`, `ci`, `verify` and `validate` scripts (and
+  their `test:unit`-style and `pre`/`post` variants) turned into `echo ...`, `true`, `exit 0`, `:` or `... || true`.
+  `--passWithNoTests` added to a test script counts too. A `build` script is not a gate and is not read.
+- **One compiler check switched off under `strict`.** `"noImplicitAny": false` (or another switch) added to a `tsconfig.json` that
+  has `"strict": true`. A `strict` that is simply deleted is not reported: TypeScript 6 turns it on by default.
+- **Lint and type-checker settings** (the Python twin of the tsconfig and ESLint checks). ruff, flake8, pylint and mypy are
+  compared between the two versions of their config (`pyproject.toml`, `ruff.toml`, `setup.cfg`, `tox.ini`, `.flake8`,
+  `mypy.ini`, `.pylintrc`): codes added to `ignore`, `extend-ignore`, `per-file-ignores` (ruff and flake8), `disable` (pylint) or
+  `disable_error_code` (mypy); codes dropped from `select` unless a shorter prefix still covers them; a mypy strictness switch
+  (`strict`, `disallow_untyped_defs`, `check_untyped_defs`, `warn_return_any`, ...) turned from true to false;
+  `ignore_errors = true` added for a module; a pylint `fail-under` lowered. A tool that was not configured before is being
+  adopted, and its first ignore list is not reported; a stricter setting, a code removed from an ignore list and a reordered
+  list are not reported either. `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
+
+The same rule covers a test harness that rewrites what the runner reports. In `conftest.py`, `sitecustomize.py` and test files,
+`report.outcome = "passed"` (any object, outcome set to the string `passed`), `call.excinfo = None` and `session.exitstatus = 0`
+(or `pytest.ExitCode.OK`) are reported: nothing else in a test run has a reason to say a failure passed. A pytest plugin outside
+those files is not read, and `report.outcome = "rerun"` or a comparison such as `report.outcome == "passed"` is fine.
 **Fix:** keep the gate and fix the failure. If the change is deliberate, record why and when it comes back.
 
 ## test-skip
@@ -78,8 +111,8 @@ A test was switched off. The runner reports success without executing the behavi
 
 | Language | Reported |
 | --- | --- |
-| JavaScript/TypeScript | `it.skip`, `describe.skip`, `xit`, `xdescribe`, `test.todo`, Playwright `test.skip(true)` or with only a title |
-| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test |
+| JavaScript/TypeScript | `it.skip`, `describe.skip`, `xit`, `xdescribe`, `test.todo`, Playwright `test.skip(true)` or with only a title; tests expected to fail: `it.fails` (Vitest), `test.failing` (Jest, AVA), Playwright `test.fixme` and `test.fail` |
+| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure`; `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
 | Go | `t.Skip`, `t.Skipf`, `t.SkipNow` as a statement of a test or sub-test |
 | Rust | `#[ignore]`, `#[ignore = "reason"]` |
 | Java, Kotlin | `@Ignore`, `@Disabled`, `@Test(enabled = false)` |
@@ -88,6 +121,16 @@ A test was switched off. The runner reports success without executing the behavi
 | PHP | `$this->markTestSkipped()`, `markTestIncomplete()` |
 | Swift | `throw XCTSkip(...)`, `@Test(.disabled())`, `@Test(.disabled("reason"))` |
 
+A test expected to fail is reported because a failure that is expected cannot fail the run: an agent that cannot fix a test marks it
+`xfail` and the suite is green. The conditional forms are exempt exactly like conditional skips:
+`@pytest.mark.xfail(sys.platform == "win32", reason="paths")` (also with the condition on its own line or as `condition=`) and
+`test.fixme(browserName === "webkit", "...")` expect the failure only where the condition holds. A bare marker, `reason=`,
+`strict=` or `raises=` alone, a literal `True` and a condition that mentions CI are reported. A marker that is only built
+(`skip_slow = pytest.mark.skip(...)`, the pytest documentation's `--runslow` pattern) or attached through `add_marker` is not.
+In the review (the hook, `review`, the Action) a marker only counts on a test that **was already there**: a new test written with
+`xfail` or `test.fixme` documents a bug its author knows about, and public history is full of them (in 24 repositories, 15 commits
+did it; after this rule one did, and that one marked two existing tests). The comparison is per test, by its name or title, so
+a file with many identical `@pytest.mark.xfail(` lines is read correctly. A plain skip is reported on new tests too.
 A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
 `@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
@@ -142,9 +185,15 @@ An empty handler (`catch {}`, `except: pass`) makes a failed operation look succ
 
 ## type-escape
 
-A suppression hides a type or lint problem: `as any`, `as unknown as`, `// @ts-ignore`, `// @ts-nocheck`,
-`// @ts-expect-error`, `eslint-disable`, `# type: ignore`, `# noqa`. Some are justified.
-**Fix:** narrow or validate the value at the boundary; keep a suppression only with a reason and the smallest scope.
+A suppression hides a type, lint or coverage problem: `as any`, `as unknown as`, `// @ts-ignore`, `// @ts-nocheck`,
+`// @ts-expect-error`, `eslint-disable`, `biome-ignore`, `# type: ignore`, `# noqa`, `# pylint: disable`, `# pyright: ignore`,
+`# mypy: ignore-errors`, `# flake8: noqa` and `# ruff: noqa`. Coverage exclusions count too: `# pragma: no cover` and
+`# pragma: no branch` in Python, `istanbul ignore`, `c8 ignore`, `v8 ignore` and `node:coverage ignore` in JavaScript and
+TypeScript, as line or block comments. A line a coverage threshold never sees is a way to pass the threshold without testing the
+code; the closing `c8 ignore stop` of a region is not counted again. Some are justified (a defensive branch, generated code),
+which is why the rule only warns by default.
+**Fix:** narrow or validate the value at the boundary; test the excluded code; keep a suppression only with a reason and the
+smallest scope.
 
 ## stub-abandonment
 
@@ -159,8 +208,21 @@ state explicit.
 These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) rather than hidden:
 
 - a module that is mocked inside its own test;
+- a pytest hook in `conftest.py` that deselects or skips tests wholesale (`pytest_collection_modifyitems`): the pytest
+  documentation's own `--runslow` example is the same code, so only the hooks that rewrite a result are reported;
+- `pytestmark = [pytest.mark.slow, pytest.mark.skip]`, where the skip is not the first marker of the list;
 - an implementation that hardcodes the tested value;
-- an assertion made vacuous with a matcher such as `expect.anything()`;
+- an assertion made vacuous by a custom matcher that always passes (`expect.extend({ toBeValid: () => ({ pass: true }) })`);
+- tests that stop running because a runner option excludes them (`testPathIgnorePatterns`, vitest `exclude`, pytest `--ignore`
+  or `-k "not ..."` in `addopts` or in a CI command, a longer coverage `omit` list): the CI check sees a removed test step, but
+  not a narrowed one;
+- a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await`, and
+  `assert x or True`;
+- a status-code check relaxed to a range (`== 200` to `< 500`): only a bound of zero is read as a weaker check;
+- a lint rule switched off in an ESLint config that never mentioned it (it may come from a preset), a longer `omit` list, a test
+  script whose runner was swapped for another command, a raised timeout or a retry count, an updated snapshot;
+- suppressions in the languages without a comment directive table: Go `//nolint`, Rust `#![allow(warnings)]`, Java
+  `@SuppressWarnings("all")`;
 - before/after rules for languages other than JavaScript/TypeScript, Python and Go, and `assertion-weakened` for Go (skips and
   placeholder assertions are covered for ten languages, but a weakened assertion in Java or Rust is not);
 - anything the agent does before it commits that the next review does not see, such as a weakened check that is fixed again.

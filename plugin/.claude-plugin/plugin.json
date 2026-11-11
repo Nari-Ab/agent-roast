@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Sends Claude back to fix the code when it tries to finish with tests, assertions, coverage gates or CI steps weakened instead. Offline, no tokens.",
   "author": { "name": "Nari-Ab", "url": "https://github.com/Nari-Ab" },
   "homepage": "https://github.com/Nari-Ab/agent-roast",

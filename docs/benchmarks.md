@@ -11,12 +11,13 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 71/71 cheats caught, 51/51 harmless changes left alone, 3 documented gaps open |
+| Labeled regression cases | 114/114 cheats caught, 80/80 harmless changes left alone, 2 documented gaps open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
 | Hand labels on unseen repositories | blocking: 2 unexplained, 7 deliberate, 2 false alarms (n=11) |
 | First run: `replay` of the newest 50 commits, 179 repositories | no commit that would block in 149 of 179; nothing to list in 43 of 179 (section 4) |
+| 0.15.0's new checks: newest 300 commits, 24 JavaScript and Python repositories | 5 more commits of 7,200 would block (24 to 29), all deliberate; 160 line-pattern warnings in 66 commits (section 6) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -30,11 +31,11 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **71/71 cheats caught, 51/51 harmless changes left alone, 3/3 documented gaps still
+Result: **114/114 cheats caught, 80/80 harmless changes left alone, 2/2 documented gaps still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
-cheats nobody thought to write down. Open gaps: mocking the module under test, hardcoding the
-tested value in production code, and vacuous matchers such as `expect.anything()`.
+cheats nobody thought to write down. Open gaps: mocking the module under test and hardcoding the
+tested value in production code. (A third, vacuous matchers such as `expect.anything()`, was closed in 0.15.0.)
 
 43 of the cases cover disabled tests and placeholder assertions in Go, Rust, Java, Kotlin, C#,
 Ruby, PHP and Swift: 29 were added in 0.12.0 and 14 in 0.12.2, after the run on real repositories in
@@ -287,6 +288,64 @@ and RSpec's own bisect resources (3). A project that keeps fixtures like these l
   them as failed and no findings are counted for them.
 - Reviewing the 11,681 commits took 10 minutes on a Mac, with four repositories in parallel.
 
+## 6. Shortcuts added in 0.15.0, on JavaScript and Python repositories
+
+0.15.0 added checks for tests marked as expected to fail, weaker ways to state the same check, shell and script shortcuts in CI
+and `package.json`, loosened Python lint and type-checker settings, a test-report hook that rewrites the result, and coverage
+exclusions (the list is in the [changelog](../CHANGELOG.md)). Along the way, 48 more shortcuts an agent might take were tried by
+hand against 0.14.0, which caught 3 of them; the build under test catches 26 and misses 22 (the main families are listed under
+"What no rule sees" in [rules.md](rules.md)). To see what the new checks say about code nobody wrote them for, `scripts/benchmark-compare.mjs` replayed
+the newest 300 commits of 24 well-known repositories with 0.14.0 and with the new build, each commit on its own against its
+parent, and listed what only the new build reports: 12 Python and 12 JavaScript/TypeScript repositories, 7,200 commits
+(`benchmarks/js-python-corpus.tsv` pins each revision). One reader (an AI assistant) then read every new finding that blocks in its
+source.
+
+| | 0.14.0 | 0.15.0 |
+| --- | --- | --- |
+| Commits that would block | 24 | 29 |
+| New findings that block | | 6, in 5 commits |
+| Findings 0.14.0 reported that 0.15.0 does not | | 0 |
+| Line-pattern warnings added (`type-escape`; listed with `--all-rules`, never block) | | 160 in 66 commits |
+
+**The six findings that block.** Four are lint settings: ruff `ignore` gained `F403`/`F405` in httpx (star imports for
+re-exports, "Define and expose the API from the same place"), `UP036` in requests ("Migrate build system to PEP 517"), `UP038` in
+flask ("drop end of life python versions") and `ISC004` in pip (a pre-commit.ci update that adds a new rule to the ignore list).
+Two are poetry's `@pytest.mark.xfail(reason="remove command does not support dependency-groups yet")` on two tests that already
+existed, in a commit that changes how those tests are set up. All six are deliberate, explained decisions; none looks like a check
+switched off to get a failure through. No new `assertion-weakened` finding and no new CI or script finding appeared in 7,200 commits, so those checks rest on the labeled cases
+and the hand-tried shortcuts alone.
+
+**The warnings.** `# pragma: no cover` and `# pragma: no branch`: 99 findings in 38 commits (httpx, pytest, pip, aiohttp,
+scikit-learn, pydantic, fastapi, pandas), most of them in projects that require full coverage and use the pragma as a habit.
+`istanbul`, `c8` and `v8 ignore`: 10 in 7 commits. `# pyright: ignore`: 42 in 19 commits (pydantic 24, flask 9). `biome-ignore`:
+6 in 2 commits (zod), `# pylint: disable` 2, `# mypy: ignore-errors` 1 (SQLAlchemy). They are warnings because a coverage exclusion
+looks the same whether a person or an agent adds it.
+
+**What the measurement changed.** The first version of each check was run on these repositories and corrected from what it
+said:
+
+- *Tests marked as expected to fail.* The first version reported 44 findings in 15 commits. Reading them: 13 commits added new
+  tests written with `xfail`, `fixme` or `test.failing` (fastapi's new parameter tests, six in pydantic, two in pandas, one each
+  in poetry, pip, Playwright and jest), and one only gave existing `fixme` tests an identifier prefix in their titles (Playwright).
+  A new test that documents a known bug hides nothing, so a marker is now reported only on a test that was there before. That is compared per test, by name or title: a file with many identical
+  `@pytest.mark.xfail(` lines made the first comparison blame the last one (pydantic). 15 commits became 1.
+- *Coverage pragmas.* 160 findings became 99 once the conventional uses were left alone: `if TYPE_CHECKING:`,
+  `if __name__ == "__main__":`, `raise NotImplementedError`, optional-import guards, `else:` and `case _:`.
+- *Ignore lists.* requests' "Move to src directory" re-pathed its flake8 `per-file-ignores`, which the first version read as new
+  ignores. Lists are now compared by code, across all of a tool's ignore lists.
+- *`strict` removed from `tsconfig.json`.* The first version reported it; TanStack's Angular 22 example dropped it in a TypeScript 6
+  upgrade, where it is the default. Only an explicit `false` is reported now.
+
+**Limits.**
+
+- This counts what is reported on human work. It says nothing about recall on agent work, which rests on the labeled cases (section 1)
+  and the hand-tried shortcuts, and the checks were corrected from the same findings the table counts.
+- The repositories are a convenience sample of well-known projects with long human histories. Half are Python projects, which is
+  where the lint-setting and marker checks apply; an average project has fewer chances for them to fire.
+- Known-failure markers are compared per test only in the review (the hook, `review`, the Action). `replay` runs the same review.
+  The older `roast` history card works on added lines alone and still reports a new test written with `xfail`.
+- 0.14.0 ran on the same 7,200 commits. Nothing it reported was lost.
+
 ## Reproduce
 
 ```bash
@@ -297,6 +356,7 @@ node scripts/benchmark-agents.mjs ./repo-a ./repo-b \
   --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --out agents.json
 node scripts/benchmark-replay.mjs ./repo-a ./repo-b --last 50 --out replay.json   # the first run, section 4
 node scripts/benchmark-languages.mjs ./language-benchmark                         # eight more languages, section 5
+node scripts/benchmark-compare.mjs ./compare-benchmark ./old-build/dist/cli.js dist/cli.js   # two builds on the same history, section 6
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For

@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { isTestFile } from "./metrics.js";
+import { analyzePythonConfig } from "./pyconfig.js";
 import { RULE_GUIDES } from "./rules.js";
 import type { DetectorType, Infraction } from "./types.js";
 
@@ -209,21 +210,57 @@ function skeleton(assertion: string): string {
     .replace(/\s+/g, "");
 }
 
-const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)/;
+// `toHaveBeenCalled()` says a function ran, not with what; `toEqual(expect.anything())` accepts any value that exists.
+const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)|\.(?:toHaveBeenCalled|toBeCalled)\s*\(\s*\)|\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*expect\s*\.\s*(?:anything\s*\(\s*\)|any\s*\(\s*\w+\s*\))\s*\)/;
+// "Not zero" in place of an exact count: weaker than `toHaveLength(3)`, but the reverse of `toHaveLength(0)`.
+const BOUND_JS = /\.toBeGreaterThan\s*\(\s*(?:0|-1)\s*\)|\.toBeGreaterThanOrEqual\s*\(\s*[01]\s*\)/;
+const ZERO_JS = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toHaveBeenCalledTimes)\s*\(\s*(?:0|\[\s*\]|\{\s*\}|null|undefined|false|"")\s*\)/;
 // A bare name, attribute, `is not None` or `True` only says "something exists". A call such as
 // `assert caps.has_any([...])` is a real check, so it is never the weaker side.
 const WEAK_PY = /^\s*assert\s+[\w.\[\]]+\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
+// `assert len(rows) > 0` in place of `assert len(rows) == 3`; not when the old check expected nothing (`== 0`, `is None`, `not x`).
+const BOUND_PY = /^\s*assert\s+.+(?:>\s*0|>=\s*[01])\s*(?:,.*)?$/;
+const EMPTY_PY = /==\s*(?:0|\[\s*\]|\{\s*\}|""|''|None|False)\b|\bis\s+None\b|\bnot\b|!=\s*(?:0|None)\b/;
 const PY_SPECIFIC = /==|!=|<=|>=|\bin\b|\bis\b|\bisinstance\s*\(|\.startswith\s*\(|\.endswith\s*\(|\bcallable\s*\(/;
 
 // Only an exact check can be weakened: `toBeNull()` becoming `toBeTruthy()` is a flipped expectation, not a looser one.
-const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toContainEqual|toMatch|toMatchObject|toHaveProperty|toHaveBeenCalledWith|toHaveBeenCalledTimes|toHaveTextContent|toHaveAttribute|toHaveValue|toThrow\w*|toBeGreaterThan\w*|toBeLessThan\w*)\s*\(/;
+const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toContainEqual|toMatch|toMatchObject|toHaveProperty|toHaveBeenCalledWith|toHaveBeenLastCalledWith|toHaveBeenNthCalledWith|toBeCalledWith|toHaveBeenCalledTimes|toHaveBeenCalledOnce|toHaveTextContent|toHaveAttribute|toHaveValue|toThrow\w*|toBeGreaterThan\w*|toBeLessThan\w*)\s*\(/;
 
 // Testing Library's getBy*/findBy* queries throw when nothing matches, so `toBeTruthy()` on one is still a presence check.
 const THROWING_QUERY = /\b(?:get|find)(?:All)?By\w*\s*\(/;
 
+/** The same kind of check with less pinned down: `toThrow("bad input")` → `toThrow()`, `raises(ValueError, match="x")` →
+ * `raises(Exception)`, `assertRaisesRegex(ValueError, "x")` → `assertRaises(ValueError)`. */
+function pinsLess(oldAssertion: string, newAssertion: string, language: Language): boolean {
+  if (language === "js") {
+    const was = /\.toThrow(?:Error)?\s*\(\s*([^)\s][^)]*)\)/.exec(oldAssertion);
+    const now = /\.toThrow(?:Error)?\s*\(\s*([^)]*)\)/.exec(newAssertion);
+    return !!was && !!now && (now[1].trim() === "" || (now[1].trim() === "Error" && was[1].trim() !== "Error"));
+  }
+  if (language === "py") {
+    const raised = (text: string) => {
+      const marker = /\bpytest\s*\.\s*raises\s*\(\s*([\w.]+|\([^)]*\))([^)]*)\)/.exec(text);
+      if (marker) return { type: marker[1], message: /\bmatch\s*=/.test(marker[2]) };
+      const unit = /\bassertRaises(Regex)?\s*\(\s*([\w.]+|\([^)]*\))/.exec(text);
+      return unit ? { type: unit[2], message: !!unit[1] } : null;
+    };
+    const was = raised(oldAssertion), now = raised(newAssertion);
+    const broad = (type: string) => /^(?:builtins\.)?(?:Base)?Exception$/.test(type);
+    return !!was && !!now && ((was.message && !now.message) || (!broad(was.type) && broad(now.type)));
+  }
+  return false;
+}
+
 function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
-  if (language === "js") return !THROWING_QUERY.test(newAssertion) && WEAK_JS.test(newAssertion) && !WEAK_JS.test(oldAssertion) && JS_SPECIFIC.test(oldAssertion);
-  if (language === "py") return WEAK_PY.test(newAssertion) && !WEAK_PY.test(oldAssertion) && PY_SPECIFIC.test(oldAssertion);
+  if (pinsLess(oldAssertion, newAssertion, language)) return true;
+  if (language === "js") {
+    if (THROWING_QUERY.test(newAssertion) || !JS_SPECIFIC.test(oldAssertion) || WEAK_JS.test(oldAssertion) || BOUND_JS.test(oldAssertion)) return false;
+    return WEAK_JS.test(newAssertion) || (BOUND_JS.test(newAssertion) && !ZERO_JS.test(oldAssertion));
+  }
+  if (language === "py") {
+    if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || !PY_SPECIFIC.test(oldAssertion)) return false;
+    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion));
+  }
   return false;
 }
 
@@ -334,9 +371,74 @@ export function resolveTampering(files: FileTampering[], productionChanged: bool
   ];
 }
 
+/** A marker that says a test is expected to fail (`xfail`, `it.fails`, `test.failing`, `test.fixme`, `expectedFailure`),
+ * as opposed to a plain skip. */
+export function isKnownFailureMarker(finding: Infraction): boolean {
+  return finding.type === "test-skip" && /\bxfail\b|\bexpectedFailure\b|\bfixme\b|expected to fail/i.test(finding.reason);
+}
+
+/** The test a known-failure marker applies to: the `def` below a decorator or a `marks=` argument, the `def` around a
+ * `pytest.xfail()`, the title of a JavaScript registration. Null when it applies to more than one test (`pytestmark`), to
+ * a test with no title on the line, or to a parametrized table. */
+function markedTest(finding: Infraction, lines: string[]): { key: string; title: string } | null {
+  const snippet = finding.lineSnippet ?? "";
+  const index = (finding.lineNumber ?? 1) - 1;
+  if (/\.py$/i.test(finding.file ?? "")) {
+    if (/^\s*pytestmark\b/.test(snippet)) return null;
+    if (/imperative/.test(finding.reason)) {
+      // `pytest.xfail()` sits inside the test: its `def` is the nearest line above with a smaller indent.
+      const indent = (lines[index] ?? "").search(/\S/);
+      for (let i = index - 1; i >= 0 && i > index - 200; i--) {
+        const def = /^(\s*)(?:async\s+)?def\s+(\w+)\s*\(/.exec(lines[i]);
+        if (def && def[1].length < indent) return { key: `py:${def[2]}`, title: def[2] };
+      }
+      return null;
+    }
+    // A marker, its arguments and any further decorators come before the `def` they belong to.
+    for (let i = index; i < lines.length && i < index + 80; i++) {
+      const def = /^\s*(?:async\s+)?def\s+(\w+)\s*\(/.exec(lines[i]);
+      if (def) return { key: `py:${def[1]}`, title: def[1] };
+    }
+    return null;
+  }
+  if (/\.each\b/.test(snippet)) return null;
+  const title = /(['"`])((?:\\.|(?!\1)[^\\\n])+)\1/.exec(snippet);
+  return title ? { key: `js:${title[0]}`, title: title[0] } : null;
+}
+
+/** Known-failure markers a change put on tests that were already there. A marker on a test the change added documents a bug its
+ * author knows about (public history is full of them: a new test for a reported issue, marked xfail); the same marker on a test
+ * that was running is how a failure gets hidden. Markers are compared per test rather than per line of text, because the
+ * lines of one file's markers are often identical and the review cannot tell which of them is the new one. A marker that
+ * names no single test (`pytestmark = ...`) counts when the file has more of them than before. `before` and `after` are the
+ * findings of the two versions of the file; `oldText` is null for a new file. */
+export function newKnownFailureMarkers(before: Infraction[], after: Infraction[], oldText: string | null, newText: string | null): Infraction[] {
+  const markers = after.filter(isKnownFailureMarker);
+  if (!markers.length || oldText === null) return [];
+  const oldLines = oldText.split(/\r?\n/), newLines = (newText ?? "").split(/\r?\n/);
+  const existed = (test: { key: string; title: string }) => test.key.startsWith("py:")
+    ? new RegExp(`^\\s*(?:async\\s+)?def\\s+${test.title}\\s*\\(`, "m").test(oldText)
+    : oldText.includes(test.title);
+  const markedBefore = new Set<string>();
+  let unnamedBefore = 0;
+  for (const finding of before.filter(isKnownFailureMarker)) {
+    const test = markedTest(finding, oldLines);
+    if (test) markedBefore.add(test.key); else unnamedBefore++;
+  }
+  const found: Infraction[] = [], unnamed: Infraction[] = [], seen = new Set<string>();
+  for (const finding of markers) {
+    const test = markedTest(finding, newLines);
+    if (!test) { unnamed.push(finding); continue; }
+    if (markedBefore.has(test.key) || seen.has(test.key) || !existed(test)) continue;
+    seen.add(test.key);
+    found.push(finding);
+  }
+  return [...found, ...unnamed.slice(unnamedBefore)];
+}
+
 // ---- Guards: configuration that decides whether bad code can pass ----
 
-const GUARD_FILE = /(?:^|\/)(?:package\.json|tsconfig[^/]*\.json|jsconfig\.json|(?:jest|vitest|vite)\.config\.[cm]?[jt]s|\.eslintrc(?:\.[a-z]+)?|eslint\.config\.[cm]?[jt]s|pyproject\.toml|setup\.cfg|pytest\.ini|tox\.ini|\.coveragerc|codecov\.ya?ml|\.gitlab-ci\.ya?ml|\.github\/workflows\/[^/]+\.ya?ml)$/i;
+const GUARD_FILE = /(?:^|\/)(?:package\.json|tsconfig[^/]*\.json|jsconfig\.json|(?:jest|vitest|vite)\.config\.[cm]?[jt]s|\.eslintrc(?:\.[a-z]+)?|eslint\.config\.[cm]?[jt]s|pyproject\.toml|setup\.cfg|pytest\.ini|tox\.ini|\.?ruff\.toml|\.flake8|\.?mypy\.ini|\.?pylintrc|\.coveragerc|codecov\.ya?ml|\.gitlab-ci\.ya?ml|\.github\/workflows\/[^/]+\.ya?ml)$/i;
 
 export function isGuardFile(file: string): boolean { return GUARD_FILE.test(file); }
 
@@ -360,9 +462,15 @@ const THRESHOLD_PATTERNS: RegExp[] = [
   /\b(lines|branches|functions|statements)\b["']?\s*[:=]\s*(\d+(?:\.\d+)?)/g,
   /\b(fail_under)\s*[:=]\s*(\d+(?:\.\d+)?)/g,
   /(--cov-fail-under)[= ](\d+(?:\.\d+)?)/g,
+  // `coverage report --fail-under=90` on a command line, and pylint's `fail-under=9.5` in its own config (a lint score).
+  /(?<![\w-])(--fail-under)[= ](\d+(?:\.\d+)?)/g,
+  /(?<![\w-])(fail-under)\s*[:=]\s*(\d+(?:\.\d+)?)/g,
 ];
 
 const SWITCHES = ["strict", "noImplicitAny", "strictNullChecks", "noImplicitReturns", "useUnknownInCatchVariables"];
+
+// npm scripts whose success the project (or its CI) takes as "the code is fine".
+const GATE_SCRIPT = /^(?:pre|post)?(?:test|lint|typecheck|type-check|check|ci|verify|validate)(?::[\w:.-]+)?$/;
 
 // A line that runs a known test runner, wherever it sits in the step (single-line `run:` or a multi-line block),
 // or a `run:` that names a test/unit/e2e target. Paths such as `.test/src/` are not test steps.
@@ -407,7 +515,10 @@ export function resolveCiTestSteps(counts: CiTestCount[], commit: string): Infra
       : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
 }
 
-const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true/;
+// A step that tolerates failure, or that `if: false` switches off: either way the gate stops gating.
+const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true|^\s*(?:-\s+)?if:\s*(?:\$\{\{\s*)?false\s*(?:\}\})?\s*(?:#.*)?$/;
+// `npm test || true` ends the step with success whatever the tests did: `continue-on-error` written in shell.
+const SHELL_SWALLOW = /\|\|\s*(?:true|exit\s+0|:|echo\b)|;\s*(?:true|exit\s+0)\b/;
 
 /** Tolerated-failure markers per enclosing step or job, keyed by that step's own line. */
 function lenientSteps(text: string): Map<string, { count: number; line: number }> {
@@ -417,8 +528,16 @@ function lenientSteps(text: string): Map<string, { count: number; line: number }
   lines.forEach((line, i) => {
     if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
     let j = i - 1;
-    while (j >= 0 && (!lines[j].trim() || lines[j].trim().startsWith("#") || indentOf(lines[j]) >= indentOf(line))) j--;
-    const identity = j >= 0 ? lines[j].trim() : "";
+    let identity: string;
+    if (/^\s*-\s+if:/.test(line)) {
+      // `- if: false` opens its own step: the next line (`run: npm test`, `name: Test`) names it.
+      j = i + 1;
+      while (j < lines.length && (!lines[j].trim() || lines[j].trim().startsWith("#"))) j++;
+      identity = j < lines.length ? lines[j].trim() : "";
+    } else {
+      while (j >= 0 && (!lines[j].trim() || lines[j].trim().startsWith("#") || indentOf(lines[j]) >= indentOf(line))) j--;
+      identity = j >= 0 ? lines[j].trim() : "";
+    }
     const entry = found.get(identity);
     if (entry) entry.count++; else found.set(identity, { count: 1, line: i + 1 });
   });
@@ -435,22 +554,26 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
   const out: Infraction[] = [];
   const add = (index: number, snippet: string, reason: string) =>
     out.push(finding("guard-weakened", file, lineOf(newText, index), snippet, reason, commit));
-  if (/threshold|fail_under|cov-fail-under|coverage/i.test(newText)) {
+  if (/threshold|fail[_-]under|coverage/i.test(newText)) {
     for (const pattern of THRESHOLD_PATTERNS) {
       const old = new Map(numbers(oldText, pattern).map(item => [item.key, item.value]));
       for (const item of numbers(newText, pattern)) {
         const previous = old.get(item.key);
         if (previous !== undefined && item.value < previous) {
-          add(item.index, `${item.key.split("#")[0]}: ${previous} → ${item.value}`, "Coverage threshold lowered");
+          add(item.index, `${item.key.split("#")[0]}: ${previous} → ${item.value}`, item.key.startsWith("fail-under#") ? "Lint score threshold lowered" : "Coverage threshold lowered");
         }
       }
     }
   }
   if (/(?:^|\/)(?:tsconfig|jsconfig)[^/]*\.json$/i.test(file)) {
+    const setting = (text: string, name: string) => new RegExp(`"${name}"\\s*:\\s*(true|false)`).exec(text);
+    const strictBefore = setting(oldText, "strict")?.[1] === "true";
     for (const name of SWITCHES) {
-      const pattern = new RegExp(`"${name}"\\s*:\\s*(true|false)`);
-      const before = pattern.exec(oldText), after = pattern.exec(newText);
-      if (before?.[1] === "true" && after?.[1] === "false") add(after.index, `${name}: true → false`, "Compiler strictness switched off");
+      const before = setting(oldText, name), after = setting(newText, name);
+      // `"noImplicitAny": false` added under `"strict": true` switches one check off without touching strict itself.
+      if (after?.[1] === "false" && (before?.[1] === "true" || (before === null && strictBefore && name !== "strict"))) {
+        add(after.index, `${name}: ${before ? "true → false" : "false (strict stays on)"}`, "Compiler strictness switched off");
+      }
     }
   }
   if (/eslint/i.test(file)) {
@@ -472,24 +595,53 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
       if (previous && previous.level === 2 && now.level < 2 && !replaced) add(now.index, `${name}: error → ${now.level ? "warn" : "off"}`, "Lint rule downgraded");
     }
   }
+  if (/(?:^|\/)(?:pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml)$/i.test(file)) {
+    // `xfail_strict` turns a test that is expected to fail but passes into a failure. Switched off, tests marked xfail pass
+    // or fail without the run noticing either way.
+    const strictness = (text: string) => /^[ \t]*xfail_strict[ \t]*=[ \t]*(true|false|1|0|yes|no|on|off)\b/im.exec(text);
+    const before = strictness(oldText), after = strictness(newText);
+    if (before && after && /^(?:true|1|yes|on)$/i.test(before[1]) && /^(?:false|0|no|off)$/i.test(after[1])) {
+      add(after.index, "xfail_strict: true → false", "Strict xfail switched off");
+    }
+  }
+  if (/(?:^|\/)(?:pyproject\.toml|setup\.cfg|tox\.ini|\.?ruff\.toml|\.flake8|\.?mypy\.ini|\.?pylintrc)$/i.test(file)) {
+    analyzePythonConfig(file, oldText, newText, (line, snippet, reason) => { out.push(finding("guard-weakened", file, line, snippet, reason, commit)); });
+  }
   if (CI_FILE.test(file)) {
     // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
     // same change is a new best-effort check, not a weakened one.
-    const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).map(line => line.trim()));
+    // A step written as `- run: npm test` is the same step as `run: npm test` under a new `- if: false` item.
+    const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).flatMap(line => [line.trim(), line.trim().replace(/^-\s+/, "")]));
+    const newLines = newText.split(/\r?\n/);
     for (const [identity, now] of lenientSteps(newText)) {
       if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
-        out.push(finding("guard-weakened", file, now.line, "continue-on-error: true", "CI step is now allowed to fail", commit));
+        const marker = (newLines[now.line - 1] ?? "").trim();
+        out.push(finding("guard-weakened", file, now.line, marker, /^(?:-\s+)?if:/.test(marker) ? "CI step is now switched off" : "CI step is now allowed to fail", commit));
         break;
       }
+    }
+    const swallowing = (text: string) => text.split(/\r?\n/).map((line, index) => ({ line: line.trim(), index }))
+      .filter(item => !item.line.startsWith("#") && CI_RUNNER.test(item.line) && SHELL_SWALLOW.test(item.line));
+    const was = swallowing(oldText), now = swallowing(newText);
+    if (now.length > was.length) {
+      const known = new Set(was.map(item => item.line));
+      const fresh = now.find(item => !known.has(item.line)) ?? now[0];
+      out.push(finding("guard-weakened", file, fresh.index + 1, fresh.line.slice(0, 80), "Test command can no longer fail the CI step", commit));
     }
   }
   if (/(?:^|\/)package\.json$/i.test(file)) {
     try {
-      const before = JSON.parse(oldText)?.scripts?.test, after = JSON.parse(newText)?.scripts?.test;
-      if (typeof before === "string" && typeof after === "string" && before !== after &&
-          (/^\s*(?:echo\b|true\b|exit\s+0|:)/.test(after) || /\|\|\s*(?:true|exit\s+0)\b/.test(after) ||
-           (/--passWithNoTests/.test(after) && !/--passWithNoTests/.test(before)))) {
-        add(Math.max(0, newText.indexOf('"test"')), `test: ${after}`, "Test script can no longer fail");
+      const before = JSON.parse(oldText)?.scripts, after = JSON.parse(newText)?.scripts;
+      // A script the project relies on to say "this is fine" that was changed into one that always does.
+      const noop = (script: string) => /^\s*(?:echo\b|true\b|exit\s+0|:)/.test(script) || /\|\|\s*(?:true|exit\s+0)\b/.test(script);
+      if (before && after) for (const name of Object.keys(after)) {
+        const was = before[name], now = after[name];
+        if (!GATE_SCRIPT.test(name) || typeof was !== "string" || typeof now !== "string" || was === now) continue;
+        const tests = /^(?:pre|post)?test(?::|$)/.test(name);
+        if ((noop(now) && !noop(was)) || (tests && /--passWithNoTests/.test(now) && !/--passWithNoTests/.test(was))) {
+          add(Math.max(0, newText.indexOf(`"${name}"`)), `${name}: ${now}`, tests ? "Test script can no longer fail" : `The ${name} script can no longer fail`);
+          break;
+        }
       }
     } catch { /* invalid JSON is reported by other tooling; nothing to compare */ }
   }
