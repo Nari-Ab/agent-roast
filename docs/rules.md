@@ -50,6 +50,20 @@ Recognized weaker forms: in JavaScript/TypeScript `toBeDefined`, `toBeTruthy`, `
 into a bound is not reported when the old check expected nothing (`toHaveLength(0)` to `toBeGreaterThan(0)` is a flipped
 expectation, not a looser one). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
 several checks into one snapshot are not reported.
+
+**An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, three more
+forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGreaterThanOrEqual(2)`, `toHaveLength(3)` to
+`toBeGreaterThan(1)`, `assert len(x) == 3` to `assert len(x) >= 3`, `assert handler.level == WARNING` to `> CRITICAL`, Node's
+`assert.equal(x.length, 3)` to `assert.ok(x.length > 0)`); a set or value equality turned into a subset or range
+(`assert set(a) == set(b)` to `assert set(a) <= set(b)`); and `toEqual(X)` or `toStrictEqual(X)` turned into `toMatchObject(X)` with the
+very same argument, which lets extra properties through. "The same expression" is what makes these safe to report: `expect(items)` and
+`expect(items.length)` count as one, another expression is another check, and a `toMatchObject` that was given more fields than the
+`toEqual` it replaces is not the same argument. A check that expected nothing (zero, empty, `None`) was flipped, not relaxed. The pair is
+found even when other assertions were added to or removed from the same test, by the expression it checks and only where the old
+assertion stood. Nothing is reported when the exact assertion is still somewhere in the file (it moved), or when the assertion that took its
+place still checks the same expression exactly with another value (`assert.equal(calls, 3)` became `assert.equal(calls, after)`, next to a
+new `assert.ok(calls > before)`: a changed expectation, not a looser check). A test whose title was changed in the same commit is a new
+scenario and is not compared.
 **Fix:** restore the exact check, or assert the specific value the code should produce.
 
 ## guard-weakened
@@ -242,7 +256,9 @@ These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) r
   not a narrowed one;
 - a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await`, and
   `assert x or True`;
-- a status-code check relaxed to a range (`== 200` to `< 500`): only a bound of zero is read as a weaker check;
+- a check relaxed to a range when the test was also renamed or the expected value changed in the same commit (`toBe(200)` to
+  `toBeLessThan(500)` on the same expression is reported; a renamed test is read as a new scenario and not compared), and a range
+  that is wider than the exact value but written in a form this rule does not read (`expect(res.status >= 400).toBe(true)`);
 - a lint rule switched off in an ESLint config that never mentioned it (it may come from a preset), a longer `omit` list, a test
   script whose runner was swapped for another command, a raised timeout or a retry count, an updated snapshot;
 - suppressions in the languages without a comment directive table: Go `//nolint`, Rust `#![allow(warnings)]`, Java

@@ -11,7 +11,7 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 119/119 cheats caught, 84/84 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 126/126 cheats caught, 90/90 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -19,6 +19,7 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 | First run: `replay` of the newest 50 commits, 179 repositories | no commit that would block in 149 of 179; nothing to list in 43 of 179 (section 4) |
 | 0.15.0's new checks: newest 300 commits, 24 JavaScript and Python repositories | 5 more commits of 7,200 would block (24 to 29), all deliberate; 160 line-pattern warnings in 66 commits (section 6) |
 | 0.15.0 on AI-signed commits: 9,732 sampled commits, 164 repositories | AI-signed commits that would block 0.3% to 0.6% (17 to 30 of 5,454), others 0.3% to 0.4% (13 to 19 of 4,278); of the 30 new findings 7 were false alarms (fixed in 0.16.0), 23 real loosening (section 7) |
+| 0.17.0's rule for an exact check turned into a bound: the same 9,761 commits, the 2,177 that can differ | 18 new findings in 14 commits (10 in 6 AI-signed), none lost; two false alarms found by reading them and fixed; 13 of the 29 commits that a scan found reported, up from 1; on the 7,200 commits of section 6, 1 new finding (section 8) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -32,7 +33,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **119/119 cheats caught, 84/84 harmless changes left alone, 1/1 documented gap still
+Result: **126/126 cheats caught, 90/90 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -404,6 +405,61 @@ patch is in force (scikit-learn, 1). Test files whose path mentions `mock` or `m
 - Reviewing each commit against its parent counts a revert or a merge-train commit separately; 27 AI-signed and 16 other commits
   could not be compared in full and are left out.
 
+## 8. An exact check turned into a bound
+
+Section 7 read what 0.15.0 added on AI-signed commits. The assertions that those commits edited in place showed one more shortcut that no
+rule read: an exact count or value turned into a bound (`expect(cost.do).toBe(2)` to `toBeLessThanOrEqual(2)`, `assert len(added) == 2`
+to `>= 2`), or `toEqual(X)` turned into `toMatchObject(X)`, which lets extra properties through. The test stays green, and the code may now
+do more than the test allowed.
+
+**How it was found.** The 9,761 reviewed commits of section 7 (9,732 of them compared in full) were scanned for assertions edited in place,
+a removed assertion line next to an added one in the same hunk of a test file (`scripts/scan-edited-assertions.mjs`), and each pair was
+sorted by the kind of matcher before and after. 29 commits turned an exact check into a bound, or `toEqual(X)` into
+`toMatchObject(...)`, on the same expression. 0.16.0 reported 1 of them (`== pytest.approx(x, abs=1.0)` relaxed to `>= 1`); this version
+reports 13. The rule was written from these commits, so they show what it was built on, not how well it works. The other 16 are left alone
+on purpose or are not loosening: in 12 the test was renamed or removed in the same commit (the new title says what the new scenario is,
+so the old test and the new one are not compared), in 3 the expected value or object changed as well (`toEqual({ status: 'ok' })` to
+`toMatchObject({ status: 'amount_mismatch' })` is another expectation, not a looser one), and 1 is a check of another kind.
+
+**What else the new rule says.** The two builds are the same code except for this rule, which can fire only on a commit that adds a bound
+matcher, a `toMatchObject`, `assert.ok` or a Python comparison to a test file, so `scripts/compare-builds-on-diffs.mjs` reviewed only the
+2,177 sampled commits that do, with 0.16.0 and with this version. The new build reported **18 findings that 0.16.0 did not, in 14 commits**
+(10 findings in 6 AI-signed commits, 8 in 8 others), and none that 0.16.0 reported disappeared. One reader (an AI assistant) read each
+one in its commit. These are the numbers of the fourth build of the rule on these commits, the one in this version; the earlier builds listed
+the two false alarms below (the second pass had 19 findings in 15 commits), and the third silenced a real finding on the human history:
+
+| Finding | Count |
+| --- | --- |
+| An exact count or value turned into a bound: `toBe(2)` to `toBeGreaterThanOrEqual(2)`, `len(added) == 2` to `>= 2`, a schema version `== 3` to `>= 3`, a pinned provider count (`21`) to "at least 21", `max(observed) == capacity` to `<= capacity`, pinned numbers to bounds between two fields | 10 findings in 10 commits |
+| `toEqual(X)` turned into `toMatchObject(X)`: four commits, one of which did it in five tests; in two the result had gained fields that added lines assert | 8 findings in 4 commits |
+
+Whether each is a good decision is not the tool's call. Several say why in the test or the commit: a count that only grows, a
+schema that moved to a new version, a field added to the result, a timing check that failed under load. One drops the checks on
+what was stored and keeps `len(comments) >= 2`. On the human side, the same 24 repositories and 7,200 commits as section 6 gave 1 new
+finding (aiohttp's `assert len(result) == len(sc_cookies)` replaced by `assert len(result) <= 1`, in a commit that adds limits to cookie handling), and nothing disappeared.
+
+**Two false alarms were found by reading them, and are fixed in this version.**
+
+- `assert tags == {}` turned into `assert len(tags) > 0` expects the opposite, not less, and was reported as a loosened check. The test
+  for an expected-empty value ended in a word boundary, which cannot match after `}`, `]` or a quote at the end of the line, so `== {}`,
+  `== []` and `== ''` were not recognized. 0.15.0 and 0.16.0 report it too; none of the sampled commits contained one (nothing
+  disappeared), but it turned up in the first findings of this run. `== set()`, `== ()` and `== 0.0` count as expecting nothing now as well.
+- `assert.equal(calls, 3)` replaced by `assert.equal(calls, afterLookup)` and a new `assert.ok(calls > beforeLookup)` was read as an exact
+  check turned into a bound, although an exact check on the same expression took the old one's place with another value. That is a changed
+  expectation, which `expectation-rewritten` is for, so the rule is quiet when the assertion that took the old one's place is an exact
+  check on the same expression. (A first version of this guard looked at the whole test and silenced a real relaxation, aiohttp's `len(result) ==
+  len(sc_cookies)` to `len(result) <= 1`, because an unrelated exact check on `result` was added further down; it now looks only at where the
+  old assertion stood.)
+
+**Limits.**
+
+- One reader labeled the findings and the two fixes were made from the same findings; expect other false alarms elsewhere.
+- The 29 commits are the ones the rule was written from. They are 29 of 9,761 commits, and the same scan found many more edits of another
+  kind: an exact check flipped to `toBeNull()` or `toBeUndefined()` (expecting the opposite, which is not looser), or changed to another value.
+- A check loosened in a commit that also renames its test is not compared: that is 12 of the 29.
+- JavaScript, TypeScript and Python only, and the bounds are read where the checked expression is spelled the same before and after.
+- The comparison covers commits that add one of the lines above; a bound written in a form the filter does not match is not in it.
+
 ## Reproduce
 
 ```bash
@@ -418,6 +474,9 @@ node scripts/benchmark-compare.mjs ./compare-benchmark ./old-build/dist/cli.js d
 node scripts/benchmark-agents.mjs ./clones/* --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --cli ./old-build/dist/cli.js --out old.json   # section 7,
 node scripts/benchmark-agents.mjs ./clones/* --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --cli dist/cli.js --out new.json         # once per build
 node scripts/compare-agent-runs.mjs old.json new.json ./clones --list
+node scripts/scan-edited-assertions.mjs agents.json ./clones --list           # section 8: the 29 commits where an exact check became a bound
+node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/cli.js --cand dist/cli.js \
+  --out diff.json --added '<the regular expression in the header of the script>'   # section 8: both builds on the commits that can differ
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For
