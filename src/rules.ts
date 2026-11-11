@@ -23,9 +23,9 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
   },
   "trivial-assert": {
     title: "Assertion that always passes",
-    why: "Comparing a constant to itself does not check the implementation and cannot catch regressions.",
-    suggestion: "Call the real behavior and assert its output or observable side effect instead of comparing constants.",
-    example: "expect(true).toBe(true) → expect(canSignIn(validUser)).toBe(true)",
+    why: "Comparing a constant to itself, or checking the output of a function the test itself replaces with a mock, does not check the implementation and cannot catch regressions.",
+    suggestion: "Call the real behavior and assert its output or observable side effect instead of comparing constants. Mock the dependencies of the code under test, never the code under test.",
+    example: "expect(true).toBe(true) → expect(canSignIn(validUser)).toBe(true); jest.mock('./price', ...) then expect(price(cart)).toBe(42) → mock the price list and assert total(cart)",
   },
   "type-escape": {
     title: "Type, lint or coverage check bypass",

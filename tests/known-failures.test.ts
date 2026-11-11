@@ -269,6 +269,28 @@ describe("a check that says the same thing with less in it", () => {
     expect(changed(py(before), py(after), "test_a.py")).toEqual(["assertion-weakened"]);
   });
 
+  it("pairs what changed by content: a weak check dropped and a bound added is not a weaker check", () => {
+    const test = (lines: string[]) => `def test_works():\n${lines.map(line => "    " + line).join("\n")}\n`;
+    // The real case: `is not None` replaced by `len(...) > 0` next to an `isinstance` that stayed.
+    expect(changed(test(["assert X is not None", "assert isinstance(X, str)"]), test(["assert isinstance(X, str)", "assert len(X) > 0"]), "test_a.py")).toEqual([]);
+    // Two checks that swapped places are not a change.
+    expect(changed(test(["assert a == 1", "assert b == 2"]), test(["assert b == 2", "assert a == 1"]), "test_a.py")).toEqual([]);
+    // An exact check replaced by a bound, with another check kept in front, is still reported.
+    expect(changed(test(["assert ready()", "assert count == 3"]), test(["assert ready()", "assert count > 0"]), "test_a.py")).toEqual(["assertion-weakened"]);
+  });
+
+  it("does not take the opposite expectation for a looser one", () => {
+    expect(changed(js("expect(send).toHaveBeenCalledWith(1);"), js("expect(send).not.toHaveBeenCalled();"), "a.test.ts")).toEqual([]);
+    expect(changed(js("expect(send).toHaveBeenCalledWith(1);"), js("expect(send).toHaveBeenCalled();"), "a.test.ts")).toEqual(["assertion-weakened"]);
+  });
+
+  it("does not report a dropped match= when the exception is kept to be checked", () => {
+    const raises = (head: string) => py(`${head}\n        parse('x')\n    assert info.value.reason == 1`.replace("    assert info.value.reason == 1", "    assert value"));
+    expect(changed(raises("with pytest.raises(ValueError, match='bad'):"), raises("with pytest.raises(ValueError) as info:"), "test_a.py")).toEqual([]);
+    expect(changed(raises("with pytest.raises(ValueError, match='bad'):"), raises("with pytest.raises(ValueError):"), "test_a.py")).toEqual(["assertion-weakened"]);
+    expect(changed(raises("with pytest.raises(ValueError, match='bad'):"), raises("with pytest.raises(Exception) as info:"), "test_a.py")).toEqual(["assertion-weakened"]);
+  });
+
   it.each([
     ["with pytest.raises(Exception):\n        parse('x')", "with pytest.raises(ValueError):\n        parse('x')"],
     ["with pytest.raises(ValueError, match='a'):\n        parse('x')", "with pytest.raises(ValueError, match='b'):\n        parse('x')"],
@@ -366,6 +388,8 @@ describe("CI and package scripts that stop a check from failing", () => {
     ["      - run: npm test\n", "      - run: npm test\n      # - if: false\n"],
     ["      - run: npm test\n", "      - run: npm test\n      - if: false\n        run: echo a brand new step\n"],
     ["      - run: npm test || true\n", "      - run: npm test\n"],
+    // The same tolerance written another way: `continue-on-error` replaced by `|| true` in one change.
+    ["      - name: Test\n        run: npm test\n        continue-on-error: true\n", "      - name: Test\n        run: npm test || true\n"],
   ])("leaves %j → %j alone", (before, after) => {
     expect(ci(before, after)).toEqual([]);
   });
@@ -417,7 +441,10 @@ describe("Python lint and type-checker settings that got easier to pass", () => 
     ["pyproject.toml", RUFF, RUFF.replace('ignore = ["E501"]', 'extend-ignore = ["E501"]\nignore = ["E501", "B008"]'), "Lint or type checks switched off in the configuration"],
     ["pyproject.toml", RUFF, RUFF.replace('["E501"]', '[\n    "E501",\n    "F841",  # unused\n]'), "Lint or type checks switched off in the configuration"],
     ["ruff.toml", 'select = ["E"]\nignore = ["E501"]\n', 'select = ["E"]\nignore = ["E501", "E741"]\n', "Lint or type checks switched off in the configuration"],
-    ["pyproject.toml", RUFF, RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"tests/*" = ["S101"]\n', "Lint or type checks switched off in the configuration"],
+    ["pyproject.toml", RUFF, RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"tests/*" = ["B006"]\n', "Lint or type checks switched off in the configuration"],
+    // `TCH` is the old name of `TC`: a rule selected under the old prefix is enforced when it is ignored under the new one.
+    ["pyproject.toml", RUFF.replace('["E", "F", "B"]', '["E", "F", "TCH"]'), RUFF.replace('["E", "F", "B"]', '["E", "F", "TCH"]').replace('["E501"]', '["E501", "TC002"]'), "Lint or type checks switched off in the configuration"],
+    ["pyproject.toml", '[tool.ruff]\nline-length = 100\n', '[tool.ruff]\nline-length = 100\nignore = ["F401"]\n', "Lint or type checks switched off in the configuration"],
     ["pyproject.toml", RUFF, RUFF.replace('["E", "F", "B"]', '["E", "F"]'), "Lint rules removed from the selected set"],
     ["pyproject.toml", RUFF.replace('["E", "F", "B"]', '["ALL"]'), RUFF.replace('["E", "F", "B"]', '["E"]'), "Lint rules removed from the selected set"],
     ["setup.cfg", "[flake8]\nignore = E501\nmax-line-length = 88\n", "[flake8]\nignore = E501,F401\nmax-line-length = 88\n", "Lint or type checks switched off in the configuration"],
@@ -447,6 +474,11 @@ describe("Python lint and type-checker settings that got easier to pass", () => 
     ["pyproject.toml", MYPY_BASE().replace("true", "false"), MYPY_BASE()],
     [".pylintrc", "[MASTER]\nfail-under=7\n", "[MASTER]\nfail-under=9\n"],
     ["pyproject.toml", '[tool.black]\nline-length = 88\n[tool.isort]\nignore = ["x"]\n', '[tool.black]\nline-length = 88\n[tool.isort]\nignore = ["x", "y"]\n'],
+    // A rule enabled in the same change with its existing violations listed per file (a "debt register"), or a code outside the
+    // tool's default set, was not being checked: ignoring it switches nothing off.
+    ["pyproject.toml", RUFF, RUFF.replace('["E", "F", "B"]', '["E", "F", "B", "BLE"]') + '\n[tool.ruff.lint.per-file-ignores]\n"src/a.py" = ["BLE001"]\n'],
+    ["pyproject.toml", '[tool.ruff]\nline-length = 100\n', '[tool.ruff]\nline-length = 100\nignore = ["B008", "S101"]\n'],
+    ["pyproject.toml", RUFF, RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"tests/*" = ["S101"]\n'],
     // The same ignores for files that moved, or an ignore for a code that is already off everywhere, switch nothing new off.
     ["pyproject.toml", RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"tests/*" = ["S101"]\n', RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"src/tests/*" = ["S101"]\n'],
     ["pyproject.toml", RUFF, RUFF + '\n[tool.ruff.lint.per-file-ignores]\n"tests/*" = ["E501"]\n'],

@@ -162,6 +162,29 @@ assert.True(t, true)
 Reported in JavaScript/TypeScript, Python, Go, Rust (`assert!(true)`), Java and Kotlin (`assertTrue(true)`,
 `assertEquals(1, 1)`), C#, Ruby, PHP and Swift. **Fix:** call the real behavior and assert its output or side effect.
 
+**A test that checks its own mock.** The same rule reports a test that replaces the function it checks with a mock and then
+asserts on what the mock returns. That cannot fail whatever the real code does:
+
+```ts
+jest.mock("./price", () => ({ price: () => 42 }));   // the module under test, replaced
+it("totals", () => { expect(price(cart)).toBe(42); }); // checks the mock
+```
+```python
+def test_total(monkeypatch):
+    monkeypatch.setattr(pricing, "price", lambda cart: 42)
+    assert pricing.price(CART) == 42
+```
+
+Read in one test file, in JavaScript/TypeScript (`jest.mock` and `vi.mock` at the top level of the file, against the file's imports
+and `expect(...)`, also through `const total = price(cart); expect(total)`) and in Python (`patch`, `patch.object`,
+`mocker.patch` and `monkeypatch.setattr`, against the `assert`s of the same test or `with` block). It is reported only when the
+change introduces it. Left alone: mocking a *dependency* of the code under test and asserting the code under test, a mock that
+keeps the real module (`requireActual`, `importActual`, `wraps=`), an automock nobody gave a return value (a manual mock decides),
+`doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
+called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
+`mock` or `monkeypatch` (the tests of the mocking tools themselves). On 21,686 test files of 24 public repositories the only
+matches were the tests of jest, vitest and pytest's `monkeypatch`, plus one sanity precondition in scikit-learn.
+
 ## assertion-removed
 
 A test keeps its name but loses assertions. Often the behavior changed on purpose; sometimes a check was dropped to get the
@@ -207,7 +230,8 @@ state explicit.
 
 These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) rather than hidden:
 
-- a module that is mocked inside its own test;
+- a module under test mocked in a way the file alone does not show (a helper that sets the mock up, `doMock` with a dynamic import,
+  a patch of the name in the test's own namespace);
 - a pytest hook in `conftest.py` that deselects or skips tests wholesale (`pytest_collection_modifyitems`): the pytest
   documentation's own `--runslow` example is the same code, so only the hooks that rewrite a result are reported;
 - `pytestmark = [pytest.mark.slow, pytest.mark.skip]`, where the skip is not the first marker of the list;

@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { isTestFile } from "./metrics.js";
+import { mockedSubjects } from "./mocks.js";
 import { analyzePythonConfig } from "./pyconfig.js";
 import { RULE_GUIDES } from "./rules.js";
 import type { DetectorType, Infraction } from "./types.js";
@@ -211,7 +212,7 @@ function skeleton(assertion: string): string {
 }
 
 // `toHaveBeenCalled()` says a function ran, not with what; `toEqual(expect.anything())` accepts any value that exists.
-const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)|\.(?:toHaveBeenCalled|toBeCalled)\s*\(\s*\)|\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*expect\s*\.\s*(?:anything\s*\(\s*\)|any\s*\(\s*\w+\s*\))\s*\)/;
+const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)|(?<!\.not)\.(?:toHaveBeenCalled|toBeCalled)\s*\(\s*\)|\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*expect\s*\.\s*(?:anything\s*\(\s*\)|any\s*\(\s*\w+\s*\))\s*\)/;
 // "Not zero" in place of an exact count: weaker than `toHaveLength(3)`, but the reverse of `toHaveLength(0)`.
 const BOUND_JS = /\.toBeGreaterThan\s*\(\s*(?:0|-1)\s*\)|\.toBeGreaterThanOrEqual\s*\(\s*[01]\s*\)/;
 const ZERO_JS = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toHaveBeenCalledTimes)\s*\(\s*(?:0|\[\s*\]|\{\s*\}|null|undefined|false|"")\s*\)/;
@@ -239,14 +240,16 @@ function pinsLess(oldAssertion: string, newAssertion: string, language: Language
   }
   if (language === "py") {
     const raised = (text: string) => {
+      // `... as info:` keeps the exception, so its message can be checked on the next line instead of through `match=`.
+      const captured = /\)\s*as\s+\w+/.test(text);
       const marker = /\bpytest\s*\.\s*raises\s*\(\s*([\w.]+|\([^)]*\))([^)]*)\)/.exec(text);
-      if (marker) return { type: marker[1], message: /\bmatch\s*=/.test(marker[2]) };
+      if (marker) return { type: marker[1], message: /\bmatch\s*=/.test(marker[2]), captured };
       const unit = /\bassertRaises(Regex)?\s*\(\s*([\w.]+|\([^)]*\))/.exec(text);
-      return unit ? { type: unit[2], message: !!unit[1] } : null;
+      return unit ? { type: unit[2], message: !!unit[1], captured } : null;
     };
     const was = raised(oldAssertion), now = raised(newAssertion);
     const broad = (type: string) => /^(?:builtins\.)?(?:Base)?Exception$/.test(type);
-    return !!was && !!now && ((was.message && !now.message) || (!broad(was.type) && broad(now.type)));
+    return !!was && !!now && ((was.message && !now.message && !now.captured) || (!broad(was.type) && broad(now.type)));
   }
   return false;
 }
@@ -259,7 +262,7 @@ function isWeaker(oldAssertion: string, newAssertion: string, language: Language
   }
   if (language === "py") {
     if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || !PY_SPECIFIC.test(oldAssertion)) return false;
-    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion));
+    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|\bin\b|[<>]=?/.test(oldAssertion));
   }
   return false;
 }
@@ -302,6 +305,11 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
   const addedText = after.filter(test => !beforeKeys.has(test.key)).map(test => test.text).join("\n");
   const result: FileTampering = { immediate: [], removedTests: [], addedHashes: [], rewritten: [] };
   for (const test of after) if (!beforeKeys.has(test.key)) result.addedHashes.push(test.bodyHash);
+  // A test that checks what its own mock returns checks nothing: report each such mock that this change introduced.
+  const mockedBefore = new Set((oldText === null ? [] : mockedSubjects(oldText, oldPath)).map(item => item.key));
+  for (const item of newText === null ? [] : mockedSubjects(newText, newPath)) {
+    if (!mockedBefore.has(item.key)) result.immediate.push(finding("trivial-assert", newPath, item.line, item.snippet, item.reason, commit));
+  }
   for (const old of before) {
     const current = afterByKey.get(old.key);
     if (!current) {
@@ -343,8 +351,19 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
       continue;
     }
     if (current.assertions.length === old.assertions.length && old.assertions.length > 0) {
-      const changed = old.assertions.map((assertion, i) => ({ before: assertion, after: current.assertions[i], rawBefore: old.raw[i], rawAfter: current.raw[i] }))
-        .filter(pair => pair.before !== pair.after);
+      // An assertion that is still there, wherever it moved to inside the test, is not part of the change: pair what is left.
+      const left = (from: string[], against: string[]) => {
+        const budget = new Map<string, number>();
+        for (const assertion of against) budget.set(assertion, (budget.get(assertion) ?? 0) + 1);
+        return from.map((assertion, i) => ({ assertion, i })).filter(({ assertion }) => {
+          const available = budget.get(assertion) ?? 0;
+          if (available > 0) { budget.set(assertion, available - 1); return false; }
+          return true;
+        }).map(({ i }) => i);
+      };
+      const goneIndexes = left(old.assertions, current.assertions), freshIndexes = left(current.assertions, old.assertions);
+      const changed = goneIndexes.map((index, k) => ({ before: old.assertions[index], after: current.assertions[freshIndexes[k]], rawBefore: old.raw[index], rawAfter: current.raw[freshIndexes[k]] }))
+        .filter(pair => pair.after !== undefined);
       const weaker = changed.find(pair => isWeaker(pair.rawBefore, pair.rawAfter, language));
       if (weaker) {
         result.immediate.push(finding("assertion-weakened", newPath, current.line,
@@ -623,7 +642,10 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
     const swallowing = (text: string) => text.split(/\r?\n/).map((line, index) => ({ line: line.trim(), index }))
       .filter(item => !item.line.startsWith("#") && CI_RUNNER.test(item.line) && SHELL_SWALLOW.test(item.line));
     const was = swallowing(oldText), now = swallowing(newText);
-    if (now.length > was.length) {
+    // A `continue-on-error: true` that went away in the same change was the same tolerance written another way.
+    const tolerance = (text: string) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && /continue-on-error:\s*true|allow_failure:\s*true/.test(line)).length;
+    const traded = Math.max(0, tolerance(oldText) - tolerance(newText));
+    if (now.length > was.length + traded) {
       const known = new Set(was.map(item => item.line));
       const fresh = now.find(item => !known.has(item.line)) ?? now[0];
       out.push(finding("guard-weakened", file, fresh.index + 1, fresh.line.slice(0, 80), "Test command can no longer fail the CI step", commit));
