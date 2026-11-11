@@ -49,6 +49,17 @@ function members(value: string): string[] {
   return value.replace(/[#;].*$/gm, "").split(/[\s,]+/).map(word => word.trim()).filter(Boolean);
 }
 
+/** Does a rule selector (`ALL`, `E`, `E5`, `E501`) cover a rule code? A selector is a prefix inside one linter: `B` is bugbear and
+ * does not reach `BLE001`; `C90` reaches `C901`. Names that are not codes (pylint's) match as plain prefixes. */
+function covers(selector: string, code: string): boolean {
+  if (selector === "ALL") return true;
+  const wanted = /^([A-Za-z]+)(\d*)$/.exec(selector), actual = /^([A-Za-z]+)(\d*)$/.exec(code);
+  if (!wanted || !actual) return code.startsWith(selector);
+  // Ruff renamed the flake8-type-checking prefix from TCH to TC; configs in the wild still use both.
+  const linter = (letters: string) => letters.toUpperCase().replace(/^TCH$/, "TC");
+  return linter(wanted[1]) === linter(actual[1]) && actual[2].startsWith(wanted[2]);
+}
+
 const truthy = (value: string) => /^(?:true|1|yes|on)$/i.test(value.replace(/\s*[#;].*$/, "").trim());
 
 function toolOf(file: string, section: string): "ruff" | "flake8" | "pylint" | "mypy" | null {
@@ -95,10 +106,19 @@ export function analyzePythonConfig(file: string, oldText: string, newText: stri
     return found;
   };
   const was = ignored(before);
+  // Ignoring a code the tool did not check before switches nothing off: a rule enabled in the same change with its existing
+  // violations listed per file ("debt register"), or a rule outside the tool's default set.
+  const enforced = (tool: string, code: string) => {
+    if (tool !== "ruff" && tool !== "flake8") return true;
+    const chosen = (key: RegExp) => before.filter(entry => toolOf(file, entry.section) === tool && key.test(entry.key)).flatMap(entry => members(entry.value));
+    const explicit = chosen(/^select$/), extra = chosen(/^extend[-_]select$/);
+    const base = explicit.length ? explicit : tool === "ruff" ? ["E4", "E7", "E9", "F"] : ["E", "F", "W", "C90"];
+    return [...base, ...extra].some(selected => covers(selected, code) || covers(code, selected));
+  };
   for (const [tool, bucket] of ignored(after)) {
     if (!configured.has(tool as "ruff")) continue;
     const old = [...(was.get(tool)?.keys() ?? [])];
-    const fresh = [...bucket].filter(([code]) => !old.some(known => code.startsWith(known)));
+    const fresh = [...bucket].filter(([code]) => !old.some(known => covers(known, code)) && enforced(tool, code));
     if (fresh.length) report(Math.min(...fresh.map(([, line]) => line)), `${tool} ignore: ${fresh.slice(0, 4).map(([code]) => "+" + code).join(", ")}${fresh.length > 4 ? ", …" : ""}`, "Lint or type checks switched off in the configuration");
   }
 
@@ -107,7 +127,7 @@ export function analyzePythonConfig(file: string, oldText: string, newText: stri
   for (const tool of ["ruff", "flake8"]) {
     const old = selected(before, tool), now = selected(after, tool);
     if (!old.length || !now.length || now.includes("ALL")) continue;
-    const dropped = old.filter(code => !now.some(kept => code.startsWith(kept)));
+    const dropped = old.filter(code => !now.some(kept => covers(kept, code)));
     if (dropped.length) {
       const line = after.find(entry => toolOf(file, entry.section) === tool && entry.key === "select")?.line ?? 1;
       report(line, `${tool} select: ${dropped.slice(0, 4).map(code => "-" + code).join(", ")}${dropped.length > 4 ? ", …" : ""}`, "Lint rules removed from the selected set");

@@ -158,6 +158,13 @@ const COMMON = `describe("api", () => {
 });
 `;
 const without = (text, needle) => text.replace(needle, "");
+const PY_MODULE_TEST = `import shop.pricing as pricing
+
+
+def test_total():
+    total = pricing.price(CART)
+    assert total == 42
+`;
 const PY_PARAM = `@pytest.mark.parametrize("code,expected", [("SAVE", 40), ("HALF", 21)])
 def test_discount(code, expected):
     assert price(cart, code) == expected
@@ -419,7 +426,17 @@ export const cases = [
   { name: "control: tsconfig strict removed in a TypeScript 6 upgrade, where it is the default", expect: null, before: { "tsconfig.json": '{ "compilerOptions": { "strict": true, "target": "es2022" } }\n' }, after: { "tsconfig.json": '{ "compilerOptions": { "target": "es2022" } }\n' } },
   { name: "control: tsconfig for tests relaxes one check without strict of its own", expect: null, before: { "tsconfig.test.json": '{ "extends": "./tsconfig.json", "compilerOptions": { "target": "es2022" } }\n' }, after: { "tsconfig.test.json": '{ "extends": "./tsconfig.json", "compilerOptions": { "target": "es2022", "noImplicitAny": false } }\n' } },
 
+  // ---- the module under test replaced by a mock in its own test (0.16.0) ----
+  { name: "js: the function under test is mocked in its own test", expect: "trivial-assert", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": 'jest.mock("./price", () => ({ price: () => 42 }));\n' + JS_TEST } },
+  { name: "js: vitest mock added above a direct assertion", expect: "trivial-assert", before: { "price.test.ts": 'import { price } from "./price";\nit("prices", () => {\n  expect(price(cart)).toBe(42);\n});\n' }, after: { "price.test.ts": 'import { price } from "./price";\nvi.mock("./price", () => ({ price: () => 42 }));\nit("prices", () => {\n  expect(price(cart)).toBe(42);\n});\n' } },
+  { name: "js: automock given the expected return value", expect: "trivial-assert", before: { "price.test.ts": 'import { price } from "./price";\nit("prices", () => {\n  expect(price(cart)).toBe(42);\n});\n' }, after: { "price.test.ts": 'import { price } from "./price";\njest.mock("./price");\nit("prices", () => {\n  (price as jest.Mock).mockReturnValue(42);\n  expect(price(cart)).toBe(42);\n});\n' } },
+  { name: "py: the function under test is patched in its own test", expect: "trivial-assert", before: { "test_price.py": PY_MODULE_TEST }, after: { "test_price.py": PY_MODULE_TEST.replace("def test_total():\n", "def test_total(monkeypatch):\n    monkeypatch.setattr(pricing, \"price\", lambda cart: 42)\n") } },
+  { name: "py: patch.object around the call under test", expect: "trivial-assert", before: { "test_price.py": PY_MODULE_TEST }, after: { "test_price.py": PY_MODULE_TEST.replace("    total = pricing.price(CART)\n    assert total == 42\n", "    with patch.object(pricing, \"price\", return_value=42):\n        total = pricing.price(CART)\n        assert total == 42\n") } },
+  { name: "control: a dependency is mocked and the code under test is asserted", expect: null, before: { "cart.test.ts": 'import { total } from "./cart";\nit("totals", () => {\n  expect(total(cart)).toBe(42);\n});\n' }, after: { "cart.test.ts": 'import { total } from "./cart";\nimport { price } from "./price";\njest.mock("./price", () => ({ price: () => 42 }));\nit("totals", () => {\n  expect(total(cart)).toBe(42);\n  expect(price).toHaveBeenCalledWith(cart);\n});\n' } },
+  { name: "control: a partial mock keeps the real function under test", expect: null, before: { "price.test.ts": 'import { price } from "./price";\nit("prices", () => {\n  expect(price(cart)).toBe(42);\n});\n' }, after: { "price.test.ts": 'import { price } from "./price";\njest.mock("./price", () => ({ ...jest.requireActual("./price"), tax: () => 1 }));\nit("prices", () => {\n  expect(price(cart)).toBe(42);\n});\n' } },
+  { name: "control: python patch in one test, the real function asserted in another", expect: null, before: { "test_price.py": PY_MODULE_TEST }, after: { "test_price.py": PY_MODULE_TEST + '\n\ndef test_other(monkeypatch):\n    monkeypatch.setattr(pricing, "price", lambda cart: 1)\n    run()\n' } },
+  { name: "control: python imported name is the real function while the module attribute is patched", expect: null, before: { "test_price.py": "from shop.pricing import price\n\n\ndef test_total():\n    assert price(CART) == 42\n" }, after: { "test_price.py": 'from shop.pricing import price\n\n\n@patch("shop.pricing.price", return_value=1)\ndef test_total(mock_price):\n    assert price(CART) == 42\n' } },
+
   // ---- known gaps, documented rather than hidden ----
-  { name: "gap: subject module mocked in its own test", expect: "miss", before: { "cart.test.ts": JS_TEST }, after: { "cart.test.ts": 'jest.mock("./price", () => ({ price: () => 42 }));\n' + JS_TEST } },
   { name: "gap: implementation hardcodes the tested value", expect: "miss", before: { "price.ts": "export function price(cart) { return cart.items.reduce((a, i) => a + i.cost, 0); }\n", "cart.test.ts": JS_TEST }, after: { "price.ts": "export function price(cart) { return 42; }\n", "cart.test.ts": JS_TEST } },
 ];

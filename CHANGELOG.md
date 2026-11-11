@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.16.0 — 2026-11-11
+
+**A test that checks its own mock, and a first look at what the rules say about AI-signed commits.**
+
+- **A test that replaces the function it checks with a mock** (`trivial-assert`, blocks) is reported: `jest.mock("./price", () =>
+  ({ price: () => 42 }))` followed by `expect(price(cart)).toBe(42)`, or `monkeypatch.setattr(cart, "total", lambda: 42)` followed by
+  `assert cart.total() == 42`. The assertion cannot fail whatever the real code does. It is read in one test file, in
+  JavaScript/TypeScript (top-level `jest.mock` and `vi.mock`, also through `const total = price(cart); expect(total)`) and in Python
+  (`patch`, `patch.object`, `mocker.patch`, `monkeypatch.setattr` against the `assert`s of the same test or `with` block), and only when
+  the change introduces it. A mocked dependency, a mock that keeps the real module (`requireActual`, `wraps=`, `{ spy: true }`), an
+  automock without a return value, `doMock`, an assertion about how a mock was called, and the tests of the mocking tools themselves are
+  left alone. On 21,686 test files of 24 public repositories the only matches were jest's, vitest's and pytest's own tests of mocking,
+  plus one sanity check. This closes the second of the three documented gaps.
+- **Six kinds of false alarm that 0.15.0 had, found by replaying it on AI-signed commits, are fixed.** The same 9,732 commits (5,454
+  AI-signed, 4,278 others, 164 public repositories) were reviewed with 0.14.0 and 0.15.0: 30 findings were new, in 27 commits, and
+  reading them showed 7 false alarms. An assertion removed from the front of a test shifted the pairing of the others, so a check that
+  stayed was compared with one that replaced it (assertions are now paired by content, and `isinstance` replaced by `len(x) > 0` is no
+  longer read as an exact check turned into a bound); `.not.toHaveBeenCalled()` was read as looser than `toHaveBeenCalledWith(...)` (twice);
+  a dropped `match=` was reported although the exception was kept (`as info`) to be checked on the next line; a ruff rule enabled in the
+  same change with its existing violations listed per file, and a flake8 code outside the tool's default set, were reported as ignored;
+  and `|| true` that replaced a `continue-on-error: true` was reported although the tolerance was the same. The other 23 findings are
+  real loosening: a test marked `xfail` in a commit titled to turn CI green, `--passWithNoTests` added "to prevent CI failure",
+  `toHaveBeenCalledWith(...)` relaxed to `toHaveBeenCalled()`, `== pytest.approx(x)` relaxed to `>= 1`, `raises(RuntimeError, match=...)`
+  relaxed to `raises(Exception, ...)`, a CI job switched off, and ruff, mypy and tsconfig settings loosened. Section 7 of
+  `docs/benchmarks.md` has the numbers, the limits, and `scripts/compare-agent-runs.mjs` to repeat it.
+- Labeled cases: 119 cheats caught, 84 look-alikes left alone, 1 gap open (it was 114, 80 and 2).
+
 ## 0.15.0 — 2026-11-11
 
 **More of the shortcuts an agent takes to turn a red test green.** 48 shortcuts were tried by hand against 0.14.0; it caught 3.

@@ -11,13 +11,14 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 114/114 cheats caught, 80/80 harmless changes left alone, 2 documented gaps open |
+| Labeled regression cases | 119/119 cheats caught, 84/84 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
 | Hand labels on unseen repositories | blocking: 2 unexplained, 7 deliberate, 2 false alarms (n=11) |
 | First run: `replay` of the newest 50 commits, 179 repositories | no commit that would block in 149 of 179; nothing to list in 43 of 179 (section 4) |
 | 0.15.0's new checks: newest 300 commits, 24 JavaScript and Python repositories | 5 more commits of 7,200 would block (24 to 29), all deliberate; 160 line-pattern warnings in 66 commits (section 6) |
+| 0.15.0 on AI-signed commits: 9,732 sampled commits, 164 repositories | AI-signed commits that would block 0.3% to 0.6% (17 to 30 of 5,454), others 0.3% to 0.4% (13 to 19 of 4,278); of the 30 new findings 7 were false alarms (fixed in 0.16.0), 23 real loosening (section 7) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -31,11 +32,11 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **114/114 cheats caught, 80/80 harmless changes left alone, 2/2 documented gaps still
+Result: **119/119 cheats caught, 84/84 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
-cheats nobody thought to write down. Open gaps: mocking the module under test and hardcoding the
-tested value in production code. (A third, vacuous matchers such as `expect.anything()`, was closed in 0.15.0.)
+cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
+(Vacuous matchers such as `expect.anything()` were closed in 0.15.0, and a module mocked in its own test in 0.16.0.)
 
 43 of the cases cover disabled tests and placeholder assertions in Go, Rust, Java, Kotlin, C#,
 Ruby, PHP and Swift: 29 were added in 0.12.0 and 14 in 0.12.2, after the run on real repositories in
@@ -346,6 +347,63 @@ said:
   The older `roast` history card works on added lines alone and still reports a new test written with `xfail`.
 - 0.14.0 ran on the same 7,200 commits. Nothing it reported was lost.
 
+## 7. AI-signed commits, and a test that checks its own mock
+
+Sections 3 and 6 measure human history. Section 3 compares AI-signed commits with others, but only for the rules of 0.10.1 and 0.11.0.
+To see what the rules of 0.15.0 say about AI-signed commits, `scripts/benchmark-agents.mjs` was run once per build on the same sampled
+commits, and `scripts/compare-agent-runs.mjs` listed what the newer build reports and the older one does not. The corpus is the 166
+public repositories of `benchmarks/agent-corpus.tsv` (164 cloned again at their pinned revisions; two could not be fetched), each
+with at most its newest 1,500 commits. For each repository a seeded sample (seed 3) of at most 50 AI-signed and 50 other commits that
+touch tests or configuration was reviewed, each commit on its own against its parent: 5,454 AI-signed commits in 158 repositories
+and 4,278 others in 139. "AI-signed" means that the commit message or the author or committer identity carries the signature of Claude,
+Copilot, Cursor, Codex, Devin, aider or Gemini; it says nothing about how much of the change an agent wrote.
+
+| Commits that would block | 0.14.0 | 0.15.0 |
+| --- | --- | --- |
+| AI-signed, of 5,454 | 17 (0.3%) | 30 (0.6%, 95% CI 0.4 to 0.8%) |
+| Others, of 4,278 | 13 (0.3%) | 19 (0.4%, 95% CI 0.3 to 0.7%) |
+
+**The 30 new findings** (20 in AI-signed commits, 10 in others; 27 commits) were read in their source by one reader (an AI assistant).
+7 were false alarms of six kinds, which 0.15.0 shipped with and 0.16.0 fixes:
+
+| False alarm | Findings |
+| --- | --- |
+| An assertion removed from the front of a test shifted the position-by-position pairing: an `isinstance` check that stayed was compared with the `len(x) > 0` that replaced `is not None`, and read as an exact check turned into a bound | 1 |
+| `toHaveBeenCalledWith(...)` or `toHaveBeenCalledTimes(2)` replaced by `.not.toHaveBeenCalled()`, the opposite expectation, read as a looser one | 2 |
+| A `match=` dropped from `pytest.raises(...)` although the exception was kept (`as info`) and checked on the next line | 1 |
+| A ruff rule enabled in the same change with its existing violations listed per file | 1 |
+| A flake8 code ignored that the tool does not check by default | 1 |
+| `\|\| true` added in the same change that removed a `continue-on-error: true` from the step: the same tolerance | 1 |
+
+The other **23 findings (20 commits; 15 findings in 13 AI-signed commits)** are loosening that a reviewer should see: 10 lint or type
+settings (ruff, flake8 and mypy ignore lists and a tsconfig check switched off), 9 weaker assertions (`toHaveBeenCalledWith(...)`
+relaxed to `toHaveBeenCalled()` in two tests, `== pytest.approx(x, abs=1.0)` relaxed to `>= 1` in two, `call_count == 5` relaxed to
+`>= 1`, an exact list relaxed to `length > 0`, `raises(RuntimeError, match=...)` relaxed to `raises(Exception, ...)`, and two tests that
+expected `TypeError` with a message and now expect `ValueError` without one), two `--passWithNoTests` added to a test script (one in a
+commit titled to prevent a CI failure), one CI job switched off with `if: false` (with a comment saying why) and one test marked `xfail`
+in a commit titled to turn CI green on `main`. Most carry an explanation in the commit; whether each is a good decision is not the
+tool's call. Counting only these 23, 13 of the 5,454 AI-signed commits (0.2%) and 7 of the 4,278 others (0.2%) would block that 0.14.0
+did not report. The two rates overlap and the sample is small, so this is no evidence that agents do these things more often than
+people, which is what section 3 found too.
+
+**Findings that disappeared.** Two findings that 0.14.0 reported are gone in 0.15.0: an assertion that was already a bound
+(`len(x) > 0`, `toBeGreaterThan(0)`) is no longer compared as if it were an exact check.
+
+**The mock detector on the same commits.** The build with the mock detector (0.16.0 before the six fixes) was run on the same
+9,732 commits and reported nothing new: in this sample no commit has a test that checks its own mock, so the detector's recall on
+real agent work is untested and rests on the labeled cases. On the human side, all 21,686 test files of the 24 repositories of
+section 6 were read with it: 15 matches, every one a test of jest's, vitest's or pytest's mocking itself (14) or a sanity check that a
+patch is in force (scikit-learn, 1). Test files whose path mentions `mock` or `monkeypatch` are now skipped; in a real review the
+`fixtures` folders that hold most of the jest and vitest ones are already left out.
+
+**Limits.**
+
+- One reader labeled the findings, and the six fixes were made from the same findings; expect other false alarms elsewhere.
+- Repositories that use coding agents are a convenience sample, a repository with many AI-signed commits is capped at 50 of them, and a
+  commit with no signature may still be agent-written.
+- Reviewing each commit against its parent counts a revert or a merge-train commit separately; 27 AI-signed and 16 other commits
+  could not be compared in full and are left out.
+
 ## Reproduce
 
 ```bash
@@ -357,6 +415,9 @@ node scripts/benchmark-agents.mjs ./repo-a ./repo-b \
 node scripts/benchmark-replay.mjs ./repo-a ./repo-b --last 50 --out replay.json   # the first run, section 4
 node scripts/benchmark-languages.mjs ./language-benchmark                         # eight more languages, section 5
 node scripts/benchmark-compare.mjs ./compare-benchmark ./old-build/dist/cli.js dist/cli.js   # two builds on the same history, section 6
+node scripts/benchmark-agents.mjs ./clones/* --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --cli ./old-build/dist/cli.js --out old.json   # section 7,
+node scripts/benchmark-agents.mjs ./clones/* --max-commits 1500 --ai-cap 50 --human-sample 50 --seed 3 --cli dist/cli.js --out new.json         # once per build
+node scripts/compare-agent-runs.mjs old.json new.json ./clones --list
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For
