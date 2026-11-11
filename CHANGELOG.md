@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.0 — 2026-11-11
+
+**Try the hook without risk.** `agent-roast hook install --advisory` adds the hook in a mode where the agent is never sent
+back: when it finishes with a weakened check, you get the one-line warning and the agent carries on. Run it for a week to see
+what the hook would have said, then install it again without `--advisory` to start sending agents back. `hook status` shows
+which mode each hook is in. For a hook you cannot edit, such as the Claude Code plugin's, set `AGENT_ROAST_HOOK=advisory` in
+the environment; `hook run --advisory` does the same for a command you write by hand. Cursor has no channel for a message to the
+person, so there the warning goes to the hook's log.
+
+Fixed on the way: Commander gives `--advisory` to the root command wherever it appears, so the hook commands now read it from
+there as well (a test through the real command line caught it).
+
 ## 0.13.0 — 2026-11-11
 
 **An MCP server.** `agent-roast mcp` runs a small MCP server over stdio, so any agent that speaks MCP (Claude Code, Codex,

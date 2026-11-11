@@ -16,6 +16,8 @@ export interface HookOptions {
   agent?: HookAgent;
   /** Repository to review. Defaults to the directory the agent reports. */
   cwd?: string;
+  /** Only tell the person: the agent is never sent back. AGENT_ROAST_HOOK=advisory does the same. */
+  advisory?: boolean;
   env?: NodeJS.ProcessEnv;
   /** The agent is waiting, so a slow review gives up and lets it finish. */
   timeoutMs?: number;
@@ -132,7 +134,7 @@ const outcome = (action: HookOutcome["action"], stdout = "", stderr = "", result
  * The command an agent runs when it is about to finish. It reviews everything uncommitted against HEAD and, when that
  * weakens the checks, sends the agent back once with a plain account of what to undo. It never fails the agent's run:
  * anything it cannot check lets the agent finish, and an agent that already had its chance is not blocked a second time,
- * so the person decides instead of the two looping.
+ * so the person decides instead of the two looping. In advisory mode the agent is never sent back at all.
  */
 export async function runHook(rawInput: string, options: HookOptions = {}): Promise<HookOutcome> {
   const env = options.env ?? process.env;
@@ -143,7 +145,9 @@ export async function runHook(rawInput: string, options: HookOptions = {}): Prom
   } catch {
     return outcome("skip", "", "agent-roast hook: input was not JSON; nothing was checked.\n");
   }
-  if (["off", "0", "false"].includes((env.AGENT_ROAST_HOOK ?? "").toLowerCase())) return outcome("skip");
+  const mode = (env.AGENT_ROAST_HOOK ?? "").toLowerCase();
+  if (["off", "0", "false"].includes(mode)) return outcome("skip");
+  const advisory = options.advisory === true || mode === "advisory";
   const agent = options.agent ?? detectAgent(input);
   const event = String(input.hook_event_name ?? "Stop");
   if (event.toLowerCase() !== "stop") return outcome("skip");
@@ -167,8 +171,10 @@ export async function runHook(rawInput: string, options: HookOptions = {}): Prom
 
   // Claude Code and Codex set stop_hook_active when the agent is already continuing because of a Stop hook; Cursor counts follow-ups.
   const alreadyAsked = input.stop_hook_active === true || (typeof input.loop_count === "number" && input.loop_count > 0);
-  if (alreadyAsked) {
-    return outcome("warn", agent === "cursor" ? "{}\n" : JSON.stringify({ systemMessage: formatUserWarning(result) }) + "\n", "", result);
+  if (alreadyAsked || advisory) {
+    const warning = formatUserWarning(result);
+    // Cursor has no channel for a message to the person, so an advisory warning goes to the hook's log.
+    return outcome("warn", agent === "cursor" ? "{}\n" : JSON.stringify({ systemMessage: warning }) + "\n", agent === "cursor" && advisory ? `${warning}\n` : "", result);
   }
   const message = formatAgentFeedback(result);
   return outcome("block", JSON.stringify(agent === "cursor" ? { followup_message: message } : { decision: "block", reason: message }) + "\n", "", result);
