@@ -47,9 +47,9 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
   },
   "assertion-weakened": {
     title: "Exact check replaced by a weaker one",
-    why: "Swapping an exact assertion for toBeDefined, a truthiness check or `is not None` keeps the test green while it verifies far less.",
+    why: "Swapping an exact assertion for toBeDefined, a truthiness check, `is not None`, a bound (`>= 2` in place of `== 2`) or toMatchObject in place of toEqual keeps the test green while it verifies far less.",
     suggestion: "Restore the exact check, or assert the specific value the code should produce.",
-    example: "expect(total).toBe(42) → expect(total).toBeDefined()  (restore the exact check)",
+    example: "expect(total).toBe(42) → expect(total).toBeDefined()  (restore the exact check); expect(cost).toBe(2) → expect(cost).toBeLessThanOrEqual(2)  (pin the value again)",
   },
   "assertion-removed": {
     title: "Test checks less than before",

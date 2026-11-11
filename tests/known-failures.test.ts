@@ -303,6 +303,123 @@ describe("a check that says the same thing with less in it", () => {
   });
 });
 
+describe("an exact check relaxed on the same expression", () => {
+  const js = (assertion: string) => `it("works", () => {\n  const value = run();\n  ${assertion}\n});\n`;
+  const py = (assertion: string) => `def test_works():\n    value = run()\n    ${assertion}\n`;
+  const changed = (before: string, after: string, file: string) => analyzeTestFile(file, file, before, after, "HEAD").immediate.map(f => f.type);
+
+  it.each([
+    ["expect(total).toBe(2);", "expect(total).toBeGreaterThanOrEqual(2);"],
+    ["expect(total).toEqual(9);", "expect(total).toBeGreaterThanOrEqual(9);"],
+    ["expect(cost.do).toBe(2);", "expect(cost.do).toBeLessThanOrEqual(2);"],
+    ["expect(res.status).toBe(500);", "expect(res.status).toBeGreaterThanOrEqual(400);"],
+    ["expect(items).toHaveLength(3);", "expect(items.length).toBeGreaterThan(1);"],
+    ["assert.equal(weak.length, 3);", "assert.ok(weak.length > 0);"],
+    ["expect(result).toEqual(newList);", "expect(result).toMatchObject(newList);"],
+    ["expect(h.calls[0]).toStrictEqual({ model: 'm', max: 512 });", "expect(h.calls[0]).toMatchObject({ model: 'm', max: 512 });"],
+  ])("reports %s → %s", (before, after) => {
+    expect(changed(js(before), js(after), "a.test.ts")).toEqual(["assertion-weakened"]);
+  });
+
+  it.each([
+    ["assert len(added) == 2", "assert len(added) >= 2"],
+    ["assert set(a) == set(b)", "assert set(a) <= set(b)"],
+    ["assert handler.level == logging.WARNING", "assert handler.level > logging.CRITICAL"],
+    ["assert count == 3", "assert count < 10"],
+    ["self.assertEqual(count, 3)", "self.assertGreaterEqual(count, 3)"],
+  ])("reports %s → %s", (before, after) => {
+    expect(changed(py(before), py(after), "test_a.py")).toEqual(["assertion-weakened"]);
+  });
+
+  it.each([
+    // An old check that expected nothing was flipped, not loosened.
+    ["expect(items).toHaveLength(0);", "expect(items).toBeGreaterThanOrEqual(1);"],
+    ["expect(total).toBe(0);", "expect(total).toBeGreaterThan(0);"],
+    // Another expression is another check.
+    ["expect(total).toBe(2);", "expect(other).toBeGreaterThanOrEqual(2);"],
+    // A bound made exact, or an object check made strict, is stronger.
+    ["expect(total).toBeGreaterThanOrEqual(2);", "expect(total).toBe(2);"],
+    ["expect(result).toMatchObject(list);", "expect(result).toEqual(list);"],
+    // New fields in the expectation: a different object, not the same one let through.
+    ["expect(result).toEqual({ a: 1 });", "expect(result).toMatchObject({ a: 1, b: 2 });"],
+    // Not a number: nothing to relax into a bound.
+    ["expect(total).toBe(LIMIT);", "expect(total).toBeGreaterThan(1);"],
+    // A negated check reads the other way round.
+    ["expect(total).not.toBe(2);", "expect(total).not.toBeLessThan(5);"],
+    ["expect(result).not.toEqual(list);", "expect(result).not.toMatchObject(list);"],
+    ["assert.notEqual(total, 2);", "assert.ok(total > 5);"],
+  ])("leaves %s → %s alone", (before, after) => {
+    expect(changed(js(before), js(after), "a.test.ts")).toEqual([]);
+  });
+
+  it.each([
+    ["assert len(x) == 0", "assert len(x) >= 1"],
+    ["assert value is None", "assert value > 0"],
+    ["assert total == 2", "assert other >= 2"],
+    ["assert total >= 2", "assert total == 2"],
+    // An empty value expected before, a non-empty one now: a flipped expectation. The closing bracket or quote is the last character.
+    ["assert tags == {}", "assert len(tags) > 0"],
+    ["assert tags == []", "assert len(tags) >= 1"],
+    ["assert name == ''", "assert len(name) > 0"],
+    ['assert name == ""', "assert len(name) > 0"],
+    ["assert tags == set()", "assert len(tags) > 0"],
+    ["assert ratio == 0.0", "assert ratio > 0"],
+  ])("leaves %s → %s alone", (before, after) => {
+    expect(changed(py(before), py(after), "test_a.py")).toEqual([]);
+  });
+
+  it("still reads a decimal that merely starts with zero as an exact value", () => {
+    expect(changed(py("assert ratio == 0.5"), py("assert ratio >= 0.5"), "test_a.py")).toEqual(["assertion-weakened"]);
+  });
+
+  describe("when assertions were added or removed in the same test", () => {
+    const many = (...assertions: string[]) => `it("works", () => {\n  const value = run();\n${assertions.map(assertion => `  ${assertion}`).join("\n")}\n});\n`;
+    const manyPy = (...assertions: string[]) => `def test_works():\n    value = run()\n${assertions.map(assertion => `    ${assertion}`).join("\n")}\n`;
+    const types = (before: string, after: string, file = "a.test.ts") => changed(before, after, file);
+
+    it("pairs the loosened check with its old self by the expression it checks", () => {
+      // Three checks in place of two: positions no longer line up, the expression does.
+      expect(types(many("expect(total).toBe(2);", "expect(other).toBe(1);"),
+        many("expect(total).toBeGreaterThanOrEqual(2);", "expect(other).toBe(1);", "expect(extra).toBe(7);"))).toEqual(["assertion-weakened"]);
+      // One check fewer: the loosening is reported next to the lost check.
+      expect(types(many("expect(total).toBe(2);", "expect(a).toBe(1);", "expect(b).toBe(2);"),
+        many("expect(total).toBeGreaterThanOrEqual(2);", "expect(a).toBe(1);"))).toContain("assertion-weakened");
+      expect(types(manyPy("assert len(x) == 3", "assert a == 1"), manyPy("assert len(x) >= 3", "assert a == 1", "assert b == 2"), "test_a.py")).toEqual(["assertion-weakened"]);
+    });
+
+    it("takes the new check that is the looser one when several share the expression", () => {
+      expect(types(many("expect(total).toBe(3);"), many("expect(total).toBeDefined();", "expect(total).toBeGreaterThan(2);"))).toEqual(["assertion-weakened"]);
+    });
+
+    it("leaves a check alone that is still in the file, wherever it moved to", () => {
+      const other = (assertion: string) => `it("moved", () => {\n  ${assertion}\n});\n`;
+      const before = many("expect(total).toBe(2);", "expect(other).toBe(1);") + other("expect(1).toBe(1);");
+      const after = many("expect(total).toBeGreaterThanOrEqual(2);", "expect(other).toBe(1);", "expect(extra).toBe(7);") + other("expect(total).toBe(2);");
+      expect(types(before, after)).toEqual([]);
+    });
+
+    it("leaves a check alone when the assertion that took its place still checks the same expression exactly", () => {
+      // `calls == 3` became an exact check on a value taken on the way; the bound was inserted earlier.
+      expect(types(many("assert.equal(calls, 2);", "assert.ok(warned);", "assert.equal(calls, 3);"),
+        many("assert.equal(calls, 2);", "assert.ok(calls > before);", "assert.ok(warned);", "assert.equal(calls, after);"), "a.test.js")).toEqual([]);
+      expect(types(many("assert.equal(calls, 3);"), many("assert.ok(calls > before);", "assert.equal(calls, after);"), "a.test.js")).toEqual([]);
+      // Without an exact successor the same pair is a loosened check.
+      expect(types(many("assert.equal(calls, 3);"), many("assert.ok(calls > before);", "assert.equal(other, 1);"), "a.test.js")).toEqual(["assertion-weakened"]);
+    });
+
+    it("looks for what an assertion turned into only where it stood, not elsewhere in the test", () => {
+      // The loop's comparison became a bound; an unrelated exact check on the same variable was added further down.
+      expect(types(manyPy("assert len(result) == len(sc)", "assert len(sc) == 1"),
+        manyPy("assert len(result) <= 1", "assert len(sc) == 1", "assert len(result) == 3"), "test_a.py")).toEqual(["assertion-weakened"]);
+    });
+
+    it("leaves an added check alone, and one that only changed its value", () => {
+      expect(types(many("expect(total).toBe(2);"), many("expect(total).toBe(2);", "expect(extra).toBeGreaterThan(1);"))).toEqual([]);
+      expect(types(many("expect(total).toBe(2);", "expect(a).toBe(1);"), many("expect(total).toBe(3);", "expect(a).toBe(1);", "expect(b).toBe(2);"))).toEqual([]);
+    });
+  });
+});
+
 describe("known-failure markers count only on tests that were already there", () => {
   // The review audits the whole text of each version of a file, so these tests do the same.
   const audit = (text: string, file: string) => auditFileDiffs([{ path: file, addedLines: text.split("\n").map((line, index) => ({ line, lineNumber: index + 1 })) }]).infractions;

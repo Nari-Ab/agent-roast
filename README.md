@@ -78,7 +78,7 @@ Policy is read from the **base** branch, so a pull request cannot switch off the
 
 | Rule | Fires when | By default |
 | --- | --- | :-: |
-| `assertion-weakened` | an exact check is replaced by a weaker one: `toBe(42)` → `toBeDefined()`, `assert x == 1` → `assert x` | blocks |
+| `assertion-weakened` | an exact check is replaced by a weaker one: `toBe(42)` → `toBeDefined()`, `toBe(2)` → `toBeLessThanOrEqual(2)`, `toEqual(x)` → `toMatchObject(x)`, `assert x == 1` → `assert x` | blocks |
 | `guard-weakened` | a coverage threshold is lowered, `strict` is switched off, a lint rule is downgraded, a CI step may fail, a workflow stops running tests, a `conftest.py` hook sets a report to `passed` | blocks |
 | `test-skip` | a test is switched off or expected to fail: `it.skip`, `@pytest.mark.skip`, `@pytest.mark.xfail`, `it.fails`, `test.fixme`, `t.Skip`, `#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, ... | blocks |
 | `test-focus`, `trivial-assert` | `.only` / `fit`; `expect(true).toBe(true)` and its relatives in ten languages; a test that asserts on a function it mocked itself | blocks |
@@ -111,7 +111,7 @@ old debt with a baseline: [docs/reference.md](docs/reference.md#configuration).
 Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/benchmarks.md). **Weakened checks are rare, mostly
 deliberate, and not specific to AI. agent-roast is a tripwire that stays silent until a check gets weaker.**
 
-- **119 of 119** hand-labeled cheating edits are caught and **84 of 84** harmless look-alikes (reformats, moves, raised
+- **126 of 126** hand-labeled cheating edits are caught and **90 of 90** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. One gap is documented and still open.
 - **12,645 commits** that touch tests or CI/config in 166 public repositories: blocking rules fired on 0.3% of AI-signed commits
@@ -120,6 +120,11 @@ deliberate, and not specific to AI. agent-roast is a tripwire that stays silent 
   checks more often.
 - **About one finding in five was a false alarm**, and most of the rest were deliberate, explained changes a reviewer should
   see rather than mistakes. The labels come from one reader (an AI assistant), so treat them as a first estimate.
+- **9,732 commits compared in full** from 164 public repositories that use coding agents (5,454 of them AI-signed) were reviewed again for the
+  last two releases, and every new finding was read. 0.15.0's rules reported 30 new findings there and 7 were false alarms (fixed in 0.16.0);
+  0.17.0's rule for an exact check turned into a bound reported 18 in 14 commits, all of them loosened checks, after two false alarms were
+  fixed. One reader, and a convenience sample ([section 7](docs/benchmarks.md#7-ai-signed-commits-and-a-test-that-checks-its-own-mock),
+  [section 8](docs/benchmarks.md#8-an-exact-check-turned-into-a-bound)).
 - `replay` ran on 179 public repositories that use coding agents: no commit would have been blocked in 149 of them.
 - The rules for **eight more languages** (Go, Rust, Java, Kotlin, C#, Ruby, PHP, Swift) ran on the newest 300 commits of 39
   repositories and every finding was read: 26 of 99 were skips that depend on the environment, now fixed; of the 73 left, 56 are
