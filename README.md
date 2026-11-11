@@ -79,11 +79,11 @@ Policy is read from the **base** branch, so a pull request cannot switch off the
 | Rule | Fires when | By default |
 | --- | --- | :-: |
 | `assertion-weakened` | an exact check is replaced by a weaker one: `toBe(42)` → `toBeDefined()`, `assert x == 1` → `assert x` | blocks |
-| `guard-weakened` | a coverage threshold is lowered, `strict` is switched off, a lint rule is downgraded, a CI step may fail, a workflow stops running tests | blocks |
-| `test-skip` | a test is switched off: `it.skip`, `@pytest.mark.skip`, `t.Skip`, `#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, ... | blocks |
+| `guard-weakened` | a coverage threshold is lowered, `strict` is switched off, a lint rule is downgraded, a CI step may fail, a workflow stops running tests, a `conftest.py` hook sets a report to `passed` | blocks |
+| `test-skip` | a test is switched off or expected to fail: `it.skip`, `@pytest.mark.skip`, `@pytest.mark.xfail`, `it.fails`, `test.fixme`, `t.Skip`, `#[ignore]`, `@Disabled`, `[Ignore]`, `xit`, ... | blocks |
 | `test-focus`, `trivial-assert` | `.only` / `fit`; `expect(true).toBe(true)` and its relatives in ten languages | blocks |
 | `assertion-removed`, `test-removed`, `expectation-rewritten` | a test loses assertions, disappears, or its expected value is edited next to production code | warns |
-| `swallowed-error`, `type-escape`, `stub-abandonment` | `catch {}` / `except: pass`, `as any` / `# type: ignore`, `throw new Error("Not implemented")` | warns |
+| `swallowed-error`, `type-escape`, `stub-abandonment` | `catch {}` / `except: pass`, `as any` / `# type: ignore` / `# pragma: no cover` / `istanbul ignore`, `throw new Error("Not implemented")` | warns |
 
 Renames, moved tests, parametrization, moved assertions and reformatting are recognized and not reported, and neither is a skip
 that depends on the environment (`if testing.Short() { t.Skip() }`, `test.skip(isMobile, ...)`). JavaScript/TypeScript, Python
@@ -111,9 +111,9 @@ old debt with a baseline: [docs/reference.md](docs/reference.md#configuration).
 Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/benchmarks.md). **Weakened checks are rare, mostly
 deliberate, and not specific to AI. agent-roast is a tripwire that stays silent until a check gets weaker.**
 
-- **71 of 71** hand-labeled cheating edits are caught and **51 of 51** harmless look-alikes (reformats, moves, raised
+- **114 of 114** hand-labeled cheating edits are caught and **80 of 80** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
-  they do not prove accuracy. Three gaps are documented and still open.
+  they do not prove accuracy. Two gaps are documented and still open.
 - **12,645 commits** that touch tests or CI/config in 166 public repositories: blocking rules fired on 0.3% of AI-signed commits
   (Claude, Copilot, Cursor, Codex, Devin, aider) and on 0.3% of the others. Inside the same repositories the odds for an
   AI-signed commit were 0.81 times those of another commit (95% CI 0.40–1.67). There is no sign that AI-signed commits weaken

@@ -16,10 +16,10 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
     example: 'test.only("auth", ...) → test("auth", ...), then run the full suite',
   },
   "test-skip": {
-    title: "Skipped or disabled test",
-    why: "The test runner may report success without executing this behavior check.",
-    suggestion: "Re-enable the test and fix its failure. If a skip is intentional, document its reason and track when to restore it.",
-    example: 'it.skip("auth", ...) → it("auth", ...) after fixing the failing behavior',
+    title: "Skipped, disabled or expected-to-fail test",
+    why: "The test runner may report success without executing this behavior check, or without letting it fail.",
+    suggestion: "Re-enable the test and fix its failure. If a skip or an expected failure is intentional, document its reason and track when to restore it.",
+    example: 'it.skip("auth", ...) or @pytest.mark.xfail → remove the marker after fixing the failing behavior',
   },
   "trivial-assert": {
     title: "Assertion that always passes",
@@ -28,10 +28,10 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
     example: "expect(true).toBe(true) → expect(canSignIn(validUser)).toBe(true)",
   },
   "type-escape": {
-    title: "Type or linter check bypass",
-    why: "A suppression can hide incompatible values or a disabled correctness check. Some suppressions are justified.",
-    suggestion: "Narrow or validate the value at the boundary. Keep a suppression only with a specific reason and the smallest possible scope.",
-    example: "response as any → parse and validate response before using it",
+    title: "Type, lint or coverage check bypass",
+    why: "A suppression can hide incompatible values, a disabled correctness check, or code that no test reaches. Some suppressions are justified.",
+    suggestion: "Narrow or validate the value at the boundary, or test the excluded code. Keep a suppression only with a specific reason and the smallest possible scope.",
+    example: "response as any → parse and validate response before using it; # pragma: no cover → a test for that branch",
   },
   "swallowed-error": {
     title: "Error discarded without handling",
@@ -71,9 +71,9 @@ export const RULE_GUIDES: Record<DetectorType, RuleGuide> = {
   },
   "guard-weakened": {
     title: "Quality gate made easier to pass",
-    why: "Lower coverage thresholds, disabled compiler strictness, downgraded lint rules, tolerated CI failures or an always-passing test script let defects through without touching the code.",
+    why: "Lower coverage thresholds, disabled compiler strictness, downgraded lint rules, tolerated CI failures, an always-passing test script or a test-harness hook that rewrites the result let defects through without touching the code.",
     suggestion: "Keep the gate and fix the underlying failure. If the change is deliberate, record the reason and a plan to restore it.",
-    example: 'coverageThreshold lines: 80 → 60, "strict": true → false, continue-on-error: true',
+    example: 'coverageThreshold lines: 80 → 60, "strict": true → false, continue-on-error: true, report.outcome = "passed"',
   },
   "panic-loop": {
     title: "Rapid overlapping fix commits",

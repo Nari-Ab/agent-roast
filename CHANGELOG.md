@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.15.0 — 2026-11-11
+
+**More of the shortcuts an agent takes to turn a red test green.** 48 shortcuts were tried by hand against 0.14.0; it caught 3.
+The checks below were added for the rest that leave a trace in a diff, then run on the newest 300 commits of 24 public JavaScript
+and Python repositories and corrected from what they said (`docs/benchmarks.md`, section 6).
+
+- **Tests that are expected to fail count like skips.** `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure`,
+  `pytestmark = pytest.mark.skip` for a whole module, `marks=pytest.mark.xfail` on one parametrized case, `it.fails` (Vitest),
+  `test.failing` (Jest, AVA) and Playwright's `test.fixme` and `test.fail`: a failure that is expected cannot fail the run. A
+  condition that depends on the environment (`xfail(sys.platform == "win32", ...)`, `test.fixme(browserName === "webkit", ...)`)
+  is left alone, like a conditional skip. A marker only counts on a test that **was already there**, compared per test: a new test
+  written with `xfail` to document a known bug hides nothing, and public history is full of them (15 commits in the 24
+  repositories were reported without this condition, 1 with it). `xfail_strict` switched off is reported as `guard-weakened`.
+- **Weaker ways to say the same thing** (`assertion-weakened`). `toThrow("message")` to `toThrow()` or `toThrow(Error)`,
+  `pytest.raises(ValueError)` to `Exception`, a dropped `match=`, `assertRaisesRegex` to `assertRaises`,
+  `toHaveBeenCalledWith(...)` to `toHaveBeenCalled()`, an exact count to `toBeGreaterThan(0)`, `assert len(x) == 3` to
+  `assert len(x) > 0`, and `toEqual(expect.anything())`, which closes one of the three documented gaps. A check that expected
+  nothing (`toHaveLength(0)` to `toBeGreaterThan(0)`) is a flipped expectation and is left alone.
+- **CI and scripts** (`guard-weakened`). `npm test || true`, `pytest; exit 0` and a step or job switched off with `if: false`;
+  the `lint`, `typecheck`, `check`, `ci`, `verify` and `validate` scripts in `package.json`, not only `test`, turned into `echo`,
+  `true` or `... || true`.
+- **Python lint and type-checker settings** (`guard-weakened`), the twin of the tsconfig and ESLint checks: codes added to a ruff,
+  flake8 or pylint ignore list (or mypy's `disable_error_code`), codes dropped from `select`, a mypy strictness switch turned off,
+  `ignore_errors = true` for a module, a pylint `fail-under` lowered. A tool being configured for the first time is not reported.
+  In `tsconfig.json`, a single check such as `noImplicitAny` switched off under `strict`.
+- **A test harness that rewrites the result** (`guard-weakened`). In `conftest.py`, `sitecustomize.py` and test files:
+  `report.outcome = "passed"`, `call.excinfo = None`, `session.exitstatus = 0`.
+- **Coverage exclusions and more suppressions** (`type-escape`, a warning that never blocks): `# pragma: no cover` and
+  `# pragma: no branch`, `istanbul ignore`, `c8 ignore`, `v8 ignore`, `# pylint: disable`, `# pyright: ignore`,
+  `# mypy: ignore-errors`, `# flake8: noqa`, `# ruff: noqa`, `biome-ignore`. The conventional uses of a pragma (`if TYPE_CHECKING:`,
+  `if __name__ == "__main__":`, `raise NotImplementedError`, optional-import guards) are not reported.
+
+On the 7,200 commits, 5 more would block than with 0.14.0 (24 to 29): four ruff `ignore` changes and one commit that marked two
+existing tests `xfail`, all deliberate and explained; 160 warnings appeared in 66 commits; nothing 0.14.0 reported was lost.
+The labeled set is now 114 cheats caught, 80 look-alikes left alone and 2 gaps open (it was 71, 51 and 3). Still missed, and now
+listed in `docs/rules.md`: tests excluded by a runner option (`--ignore`, `testPathIgnorePatterns`, a longer `omit`), assertions made
+unreachable, and suppressions in Go, Rust and Java. `scripts/benchmark-compare.mjs` replays two builds on the same history so the
+next release can be measured the same way.
+
 ## 0.14.0 — 2026-11-11
 
 **Try the hook without risk.** `agent-roast hook install --advisory` adds the hook in a mode where the agent is never sent
