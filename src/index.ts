@@ -37,6 +37,7 @@ export * from "./review.js";
 export * from "./replay.js";
 export * from "./hook.js";
 export * from "./hook-install.js";
+export * from "./mcp.js";
 export * from "./demo.js";
 export * from "./sarif.js";
 export * from "./baseline.js";

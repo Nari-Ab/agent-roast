@@ -40,7 +40,8 @@ npx agent-roast          # review what you have not committed yet (on a clean tr
 npx agent-roast hook install          # Claude Code, Codex and Cursor
 ```
 
-For Claude Code there is also a plugin: `/plugin install agent-roast --marketplace Nari-Ab/agent-roast`.
+For Claude Code there is also a plugin: `/plugin install agent-roast --marketplace Nari-Ab/agent-roast`. Any agent that speaks
+MCP can also call agent-roast as a read-only tool, `agent-roast mcp` ([setup](docs/integrations.md#mcp-server)).
 
 When the agent is about to finish, agent-roast reviews everything it changed. If a check got weaker, the agent is **sent back
 once**, with the file, the line and the before and after, and told to fix the code instead. If it tries again, you get a

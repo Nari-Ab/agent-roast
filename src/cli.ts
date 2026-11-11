@@ -13,6 +13,7 @@ import {
   replayHistory,
   runDemo,
   runHook,
+  serveMcp,
   HOOK_AGENTS,
   AGENT_LABELS,
   installHooks,
@@ -714,6 +715,19 @@ hook
     } catch (error) {
       console.error(`agent-roast hook resume error: ${errorMessage(error)}`);
       process.exitCode = 2;
+    }
+  });
+
+program
+  .command("mcp")
+  .description("Run as an MCP server over stdio, so any MCP-capable coding agent can review its own changes (read-only, offline)")
+  .option("--root <directory...>", "a directory the tools may review (repeatable); defaults to the project the server was started in")
+  .action(async (opts: { root?: string[] }) => {
+    try {
+      await serveMcp({ version: pkg.version, roots: opts.root });
+    } catch (error) {
+      console.error(`agent-roast mcp: ${errorMessage(error)}`);
+      process.exitCode = 1;
     }
   });
 

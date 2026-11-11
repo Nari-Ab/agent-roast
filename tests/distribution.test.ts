@@ -29,6 +29,14 @@ describe("every place that names the version agrees with package.json", () => {
     expect(lock.version).toBe(version);
     expect(lock.packages[""].version).toBe(version);
   });
+  it("the MCP registry entry names this package and version, and the package proves the name", () => {
+    const entry = json("server.json");
+    const pkg = json("package.json");
+    expect(entry.version).toBe(version);
+    expect(entry.packages).toEqual([expect.objectContaining({ registryType: "npm", identifier: pkg.name, version, transport: { type: "stdio" }, packageArguments: [{ type: "positional", value: "mcp" }] })]);
+    expect(entry.name).toBe(pkg.mcpName);
+    expect(entry.description.length).toBeLessThanOrEqual(100);
+  });
   it.each(["README.md", "docs/integrations.md", "docs/reference.md", "site/index.html"])("%s pins no other version in an install command", file => {
     for (const match of read(file).matchAll(/agent-roast@(\d+\.\d+\.\d+)/g)) expect(match[1]).toBe(version);
   });

@@ -1,15 +1,16 @@
 # Integrations
 
-agent-roast can stop a weakened check at four points. Use as many as you like; they share one set of rules and one policy file.
+agent-roast can stop a weakened check at five points. Use as many as you like; they share one set of rules and one policy file.
 
 | Where | What happens | Command |
 | --- | --- | --- |
 | **The agent is about to finish** | The agent is sent back once to fix the code | `agent-roast hook install` |
+| **The agent asks first** | Any MCP-capable agent can call a read-only tool before it says it is done | `agent-roast mcp`, see [MCP server](#mcp-server) |
 | **You are about to commit** | The commit is refused | `agent-roast init --hook`, or [pre-commit](#the-pre-commit-framework) |
 | **A pull request is opened** | The check fails, annotates and comments | [GitHub Action](#github-actions) |
 | **Any time** | You look | `npx agent-roast`, `npx agent-roast replay` |
 
-- [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [AGENTS.md and CLAUDE.md](#agentsmd-and-claudemd)
+- [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [AGENTS.md and CLAUDE.md](#agentsmd-and-claudemd) · [MCP server](#mcp-server)
 - [Git hook and pre-commit](#git-hooks) · [GitHub Actions](#github-actions) · [other CI](#other-ci) · [the API](#programmatic-use)
 
 ---
@@ -74,7 +75,7 @@ Or without the plugin system: `npx agent-roast hook install claude`, which write
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.12.2 hook run --agent claude", "timeout": 60 } ] }
+      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.13.0 hook run --agent claude", "timeout": 60 } ] }
     ]
   }
 }
@@ -113,6 +114,43 @@ in place when you run it again:
 
 ---
 
+## MCP server
+
+`agent-roast mcp` runs a small [MCP](https://modelcontextprotocol.io) server over stdio, so any agent that speaks MCP can ask
+"did my changes weaken a check?" before it says it is done. It is read-only and offline like the rest of agent-roast: nothing is
+run, written or sent, and it has no dependency. It answers both protocol eras, the `initialize` handshake of 2025-11-25 and
+earlier and the per-request metadata of 2026-07-28, and Claude Code's own connection check accepts it.
+
+| Tool | What it does |
+| --- | --- |
+| `review_worktree` | Everything not committed yet against `HEAD`, the same review the hook runs. |
+| `review_changes` | Two committed revisions, for example `main` and a branch (`base`, optional `head`). The rules come from the base revision. |
+| `stop_hook` | The Stop hook's check and answer, for plugin hooks of type `mcp_tool`. Meant to be called by a hook, not by hand. |
+
+```bash
+claude mcp add agent-roast -- npx --yes agent-roast@0.13.0 mcp      # Claude Code
+codex mcp add agent-roast -- npx --yes agent-roast@0.13.0 mcp       # Codex
+```
+
+Cursor reads `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project, and other clients take the same
+command and arguments:
+
+```json
+{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.13.0", "mcp"] } } }
+```
+
+The tools read only the project the server was started in and other worktrees of the same repository; a path outside it is
+refused, and a server started from the filesystem root has no project at all. When a client starts servers outside your
+project, name the directory: add `"--root", "/path/to/project"` to the arguments (`--root` can be given more than once). A check
+that fails or runs past 25 seconds ends with a message the agent can read, not a protocol error.
+
+A tool only helps when the agent calls it. The server tells the agent to call `review_worktree` before it says it is done, and
+`hook install --instructions` writes the same advice into `AGENTS.md` and `CLAUDE.md`. For a guarantee, use the
+[hook](#the-agent-hook), which does not depend on the agent remembering. To list the server in the official MCP registry, see
+[maintainers](maintainers.md#mcp-registry).
+
+---
+
 ## Git hooks
 
 ```bash
@@ -133,7 +171,7 @@ repos:
         name: agent-roast
         entry: agent-roast review --staged
         language: node
-        additional_dependencies: ["agent-roast@0.12.2"]
+        additional_dependencies: ["agent-roast@0.13.0"]
         pass_filenames: false
         always_run: true
 ```
@@ -196,10 +234,10 @@ with `github/codeql-action/upload-sarif`. Source snippets are left out of SARIF.
 
 ```bash
 # GitLab merge request pipeline (full history: GIT_DEPTH: 0)
-npx agent-roast@0.12.2 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
+npx agent-roast@0.13.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
 
 # Anything else
-npx agent-roast@0.12.2 review --base origin/main --format github   # or json, markdown, sarif
+npx agent-roast@0.13.0 review --base origin/main --format github   # or json, markdown, sarif
 ```
 
 Before putting it in CI, see what it would have said about your recent history: `npx agent-roast replay`.
