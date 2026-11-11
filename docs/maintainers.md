@@ -67,15 +67,19 @@ the directory always holds for a reviewer to read. The directory follows the def
 ## MCP registry
 
 `server.json` describes `agent-roast mcp` for the [official MCP registry](https://modelcontextprotocol.io/registry/quickstart),
-which hosts metadata only and checks that the npm package carries the same name in `mcpName` (`package.json`). Publish it once
-the version is on npm, from a terminal signed in to GitHub as the repository owner:
+which hosts metadata only and checks that the npm package carries the same name in `mcpName` (`package.json`).
 
-1. Install `mcp-publisher` (the quickstart has the one-line download).
-2. `mcp-publisher login github` and approve the device code in the browser.
-3. From the repository root: `mcp-publisher publish`. A rejection naming the namespace usually means the owner's name differs in
-   case or the GitHub login used is not `Nari-Ab`; `name` in `server.json` and `mcpName` must stay equal.
-4. Check it: `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.Nari-Ab/agent-roast"`.
+`.github/workflows/mcp-registry.yml` publishes it with GitHub OIDC, so there is no token and no login on a laptop. After
+"Release to npm" succeeds it waits until npm serves the version in `server.json`, installs `mcp-publisher` and runs
+`login github-oidc` and `publish`. To publish a version that is already on npm by hand: Actions, "Publish to the MCP registry",
+Run workflow. The publisher is pinned to a release and to the sha256 in that release's checksums file; raise both together.
 
-Each release raises `version` in `server.json` (both places), publishes to npm first, and then runs `mcp-publisher publish` again.
-Community indexes such as Glama and PulseMCP list servers from GitHub and the registry on their own; other lists (for example
-awesome-mcp-servers) take a pull request from a person, and many refuse text written by a model, so write the entry yourself.
+Check it: `curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=agent-roast"`. A rejection naming the namespace
+usually means the owner's name differs in case: `name` in `server.json` and `mcpName` in `package.json` must stay equal and
+start with `io.github.` and the GitHub owner. Without CI, install `mcp-publisher` (the quickstart has the download), run
+`mcp-publisher login github`, approve the device code in the browser, then `mcp-publisher publish` from the repository root.
+
+Each release raises `version` in `server.json` (both places) with the other pins. Community indexes such as Glama and PulseMCP
+list servers from GitHub and the registry on their own; other lists (for example awesome-mcp-servers) take a pull request from a
+person, and many refuse text written by a model, so write the entry yourself.
+
