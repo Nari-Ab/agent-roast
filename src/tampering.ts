@@ -834,6 +834,8 @@ const GATE_SCRIPT = /^(?:pre|post)?(?:test|lint|typecheck|type-check|check|ci|ve
 const CI_RUNNER = new RegExp(
   String.raw`(?<![\w./-])(?:pytest|vitest|jest|mocha|tox|nox)(?![\w/-])` +
   String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make|dotnet|flutter)\s+(?:run\s+)?(?:-\S+\s+)*test(?![\w/])` +
+  // A package script that runs the tests with coverage: `yarn coverage`, `npm run coverage`.
+  String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?coverage(?![\w/-])` +
   // Monorepo runners: `nx affected --target=test`, `turbo run test`, `lerna run test`, `bazel test //...`.
   String.raw`|(?<![\w./-])(?:nx|turbo|lerna|rush)\s+(?:run-many|affected|run|test)\b[^\n]*(?<![\w-])(?:test|tests)(?![\w-])` +
   String.raw`|(?<![\w./-])(?:bazel\s+test|ctest|phpunit|rspec|deno\s+test)(?![\w/-])` +
@@ -843,8 +845,8 @@ const CI_RUNNER = new RegExp(
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
 // The shell builtin `test -f summary.md && cat summary.md` checks a file: it has the word on the line and runs no tests.
 const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*-[bcdefghkLnOGprsStuwxzN](?=\s)/g;
-/** Whether a line of a CI file runs a test command. */
-const ciRuns = (line: string): boolean => CI_RUNNER.test(line.replace(SHELL_TEST, " "));
+/** Whether a line of a CI file runs a test command. A trailing comment is not part of the command: `run: exit 0 # Skip unnecessary test runs for bots`. */
+const ciRuns = (line: string): boolean => CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(/\s#.*$/, ""));
 const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;

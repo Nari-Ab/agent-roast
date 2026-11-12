@@ -118,6 +118,13 @@ describe("the shell builtin test is not a test run", () => {
     expect(reasons(nightly(["./eval.sh"]), nightly(["./eval.sh", line]), file)).toEqual([]);
   });
 
+  it("does not read a file test inside a multi-line script as a test run", () => {
+    const script = (body: string) => `on:\n  pull_request:\njobs:\n  eval:\n    steps:\n      - name: Summary\n        run: |\n${body}`;
+    const before = script('          echo "done"\n'), after = script('          echo "done"\n          test -f out/summary.md && cat out/summary.md >> "$GITHUB_STEP_SUMMARY" || true\n');
+    expect(reasons(before, after, file)).toEqual([]);
+    expect(reasons(before, script('          echo "done"\n          test -f package.json && npm test || true\n'), file)).toEqual(["Test command can no longer fail the CI step"]);
+  });
+
   it("still reads a test run that follows a file test", () => {
     expect(reasons(nightly(["test -f package.json && npm test"]), nightly(["test -f package.json && npm test || true"]), file)).toEqual(["Test command can no longer fail the CI step"]);
     expect(reasons(nightly(["./ci.sh test -v"]), nightly(["./ci.sh test -v || true"]), file)).toEqual(["Test command can no longer fail the CI step"]);

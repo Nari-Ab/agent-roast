@@ -49,7 +49,9 @@ Recognized weaker forms: in JavaScript/TypeScript `toBeDefined`, `toBeTruthy`, `
 `Exception`, a `match=` dropped from `pytest.raises`, and `assertRaisesRegex` relaxed to `assertRaises`. An exact check turned
 into a bound is not reported when the old check expected nothing (`toHaveLength(0)` to `toBeGreaterThan(0)` is a flipped
 expectation, not a looser one). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
-several checks into one snapshot are not reported.
+several checks into one snapshot are not reported. Nor is a check that the element is there, written another way:
+`expect(wrapper.find(".menu").exists()).toBe(true)` turned into `expect(document.querySelector(".menu")).not.toBeNull()`,
+`toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it).
 
 **An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, three more
 forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGreaterThanOrEqual(2)`, `toHaveLength(3)` to
@@ -97,11 +99,19 @@ workflow that stops running tests or stops running on pushes and pull requests, 
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
 Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
-`bazel test`). A workflow gates changes when it runs on a push or a pull request (or is a reusable workflow, `workflow_call`, that one of those
-may call); the triggers are read from its `on:` section, not from the whole file, where a Docker step's `push: true` is not a trigger. In a
-workflow that runs only on a schedule, a release, a manual dispatch or after another workflow (a job that posts a comment after a release, a
-nightly canary), a step or job that is switched off or allowed to fail is reported only when it runs tests; the price is a gate-like job
-there that does not.
+`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`). The shell
+builtin `test -f summary.md` checks a file and is not a test run. A workflow gates changes when it runs on a push or a pull request (or is a
+reusable workflow, `workflow_call`, that one of those may call); the triggers are read from its `on:` section, not from the whole file, where a
+Docker step's `push: true` is not a trigger, and a `push:` that lists only `tags:` (no `branches:`) is a release pipeline that runs when a version is
+tagged, so it does not gate: tests that it runs do not count as tests that gate, and tests removed from it, or a trigger moved from a tag push to a
+published release, are not reported (on the 9,761 commits of section 7, three findings of that kind disappeared, all in release workflows of a deleted
+package or with a changed trigger, and none was a weaker check). In a workflow that runs only on a schedule, a release, a tag, a manual dispatch or after another workflow (a job that
+posts a comment after a release, a nightly canary), a step or job that is switched off or allowed to fail is reported only when it runs tests; the
+price is a gate-like job there that does not. A step that only moves files, signs in, publishes or comments is not a check in any workflow: when
+one step uses `actions/upload-artifact`, `download-artifact`, `cache`, `docker/login-action` or `build-push-action`, `azure/login`,
+`aws-actions/configure-aws-credentials`, `softprops/action-gh-release`, `codecov/codecov-action`, `peter-evans/*` or another action on that short
+list (`NON_CHECK_ACTION` in `src/tampering.ts`) and runs nothing, `continue-on-error: true` or `if: false` on it is not reported. An action that is
+not on the list, and every `run:` step, still is, because it may be the check.
 
 More shortcuts of the same kind:
 
@@ -161,7 +171,8 @@ Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned o
 new has only new tests. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
 file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
 cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. A registration that a formatter
-wrapped after its opening bracket (`test.fixme(` with the title on the next line) is read like one on a single line, and a
+wrapped after its opening bracket (`test.fixme(` or `it.todo(` with the title on the next line) is read like one on a single line (a `todo` that
+carries the title of a test the change adds is a new placeholder, not a test switched off), and a
 `test.skip(true, "needs admin")` that sits under an `if`, `else`, `case`, `catch` or after `cond &&` is a run-time condition, like
 `test.skip(isAdmin, ...)`; the condition counts only when it is in the lines the review can see, and one that mentions CI, or is plainly
 true (`if (true)`), still hides the test and is reported.
@@ -218,7 +229,8 @@ keeps the real module (`requireActual`, `importActual`, `wraps=`, or a factory t
 under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
 called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
-`mock` or `monkeypatch` (the tests of the mocking tools themselves). On 21,686 test files of 24 public repositories the only
+`mock` or `monkeypatch` (the tests of the mocking tools themselves). In JavaScript an assertion on a mock's output in a test (or hook) that
+also asserts on something that is not a mock's own output is a redundant check, not a test that cannot fail, and is not reported. On 21,686 test files of 24 public repositories the only
 matches were the tests of jest, vitest and pytest's `monkeypatch`, plus one sanity precondition in scikit-learn.
 
 ## assertion-removed

@@ -10,7 +10,8 @@ const PYTHON_TEST_SKIP_PATTERNS = [
   { regex: /\bself\s*\.\s*skipTest\s*\(/, name: "imperative unittest skip (self.skipTest)", imperative: true },
   // A test that is expected to fail cannot fail the run, which is what a skip does too.
   { regex: /(?<![\w.])pytest\s*\.\s*xfail\s*\(/, name: "imperative pytest xfail (pytest.xfail)", imperative: true },
-  { regex: /@(?:unittest\s*\.\s*)?expectedFailure\b/, name: "test expected to fail (@unittest.expectedFailure)", imperative: false },
+  // `@unittest.expectedFailure`, and the same decorator under another module's name (`@test.expectedFailure` of a test framework that re-exports it).
+  { regex: /@(?:[A-Za-z_]\w*\s*\.\s*)*expectedFailure\b/, name: "test expected to fail (@unittest.expectedFailure)", imperative: false },
 ];
 
 /** `pytest.mark.skip` or `.xfail` as a decorator, as `pytestmark = ...` for a whole module, or as `marks=` of one parametrized

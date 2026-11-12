@@ -96,8 +96,11 @@ function javascript(text: string): MockedSubject[] {
     if (/requireActual|importActual|importOriginal/.test(args)) continue;
     // So does a factory that is handed the real module's loader and calls it, whatever the parameter is called:
     // `vi.mock("./client", async (original) => ({ ...(await original<typeof import("./client")>()), send: vi.fn() }))`.
-    const loader = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(args)?.[2];
-    if (loader && new RegExp(`(?<![\\w$.])${loader.replace(/\$/g, "\\$")}\\s*(?:<[^\\n]*?>)?\\s*\\(`).test(args.slice(args.indexOf(loader) + loader.length))) continue;
+    // The factory's one parameter may be written with or without brackets: `async (original) => ...` and `async original => ...`.
+    const factoryHead = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?(?:\(\s*([A-Za-z_$][\w$]*)\s*[,)]|([A-Za-z_$][\w$]*)\s*=>)/.exec(args);
+    const loader = factoryHead?.[2] ?? factoryHead?.[3];
+    // (A call that is spread, `...original()`, has dots in front of it; a member access, `lib.original()`, has one.)
+    if (loader && new RegExp(`(?<![\\w$])(?:(?<=\\.\\.\\.)|(?<!\\.))${loader.replace(/\$/g, "\\$")}\\s*(?:<[^\\n]*?>)?\\s*\\(`).test(args.slice(args.indexOf(loader) + loader.length))) continue;
     // `{ spy: true }` is vitest's automock that still calls the real function.
     const factory = /^\(\s*(['"`])[^'"`\n]+\1\s*,/.test(args) && !/,\s*\{\s*spy\s*:\s*true\b/.test(args);
     if (!mocked.has(specifier)) mocked.set(specifier, { index: match.index, fake: factory });
