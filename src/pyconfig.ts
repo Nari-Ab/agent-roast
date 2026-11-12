@@ -4,7 +4,8 @@
 
 export type Report = (line: number, snippet: string, reason: string) => void;
 
-interface Entry { section: string; key: string; value: string; line: number }
+/** `block` is 0 for an ordinary table and n for the nth `[[array of tables]]` element of that name: `[[tool.mypy.overrides]]` is written once per module. */
+interface Entry { section: string; key: string; value: string; line: number; block: number }
 
 /** Brackets and braces still open once strings and comments are blanked: a TOML array or inline table runs until it is zero. */
 function openBrackets(text: string): number {
@@ -22,12 +23,17 @@ function openBrackets(text: string): number {
 export function configEntries(text: string, toml: boolean): Entry[] {
   const lines = text.split(/\r?\n/);
   const entries: Entry[] = [];
-  let section = "";
+  const elements = new Map<string, number>();
+  let section = "", block = 0;
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(";")) continue;
-    const header = /^\[\[?\s*([^\]]+?)\s*\]\]?\s*(?:[#;].*)?$/.exec(trimmed);
-    if (header) { section = header[1].replace(/["']/g, ""); continue; }
+    const header = /^(\[\[?)\s*([^\]]+?)\s*\]\]?\s*(?:[#;].*)?$/.exec(trimmed);
+    if (header) {
+      section = header[2].replace(/["']/g, "");
+      block = header[1] === "[[" ? (elements.set(section, (elements.get(section) ?? 0) + 1), elements.get(section)!) : 0;
+      continue;
+    }
     const pair = /^("[^"]*"|'[^']*'|[\w.-]+)\s*=\s*(.*)$/.exec(trimmed);
     if (!pair) continue;
     const start = i;
@@ -37,7 +43,7 @@ export function configEntries(text: string, toml: boolean): Entry[] {
     } else {
       while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1]) && !/^\s*[#;]/.test(lines[i + 1])) value += "\n" + lines[++i].trim();
     }
-    entries.push({ section, key: pair[1].replace(/["']/g, ""), value, line: start + 1 });
+    entries.push({ section, key: pair[1].replace(/["']/g, ""), value, line: start + 1, block });
   }
   return entries;
 }
@@ -134,11 +140,18 @@ export function analyzePythonConfig(file: string, oldText: string, newText: stri
     }
   }
 
-  // mypy: a strictness switch turned off, or a module whose errors are now ignored.
-  const switches = new Map(before.filter(entry => toolOf(file, entry.section) === "mypy" && MYPY_SWITCHES.test(entry.key)).map(entry => [`${entry.section}|${entry.key}`, truthy(entry.value)]));
+  // mypy: a strictness switch turned off, or a module whose errors are now ignored. Each `[[tool.mypy.overrides]]` element is a table of its own,
+  // named by its `module`: `check_untyped_defs = false` for `tests.*` next to `true` for `examples.fastapi.*` is not one switch that was turned off.
+  const tableOf = (entries: Entry[]) => {
+    const modules = new Map<string, string>();
+    for (const entry of entries) if (entry.block && entry.key === "module") modules.set(`${entry.section}#${entry.block}`, members(entry.value).join(","));
+    return (entry: Entry) => entry.block ? `${entry.section}#${modules.get(`${entry.section}#${entry.block}`) ?? entry.block}` : entry.section;
+  };
+  const tableBefore = tableOf(before), tableAfter = tableOf(after);
+  const switches = new Map(before.filter(entry => toolOf(file, entry.section) === "mypy" && MYPY_SWITCHES.test(entry.key)).map(entry => [`${tableBefore(entry)}|${entry.key}`, truthy(entry.value)]));
   for (const entry of after) {
     if (toolOf(file, entry.section) !== "mypy" || !MYPY_SWITCHES.test(entry.key)) continue;
-    if (switches.get(`${entry.section}|${entry.key}`) === true && !truthy(entry.value)) report(entry.line, `mypy ${entry.key}: true → false`, "Type checker strictness switched off");
+    if (switches.get(`${tableAfter(entry)}|${entry.key}`) === true && !truthy(entry.value)) report(entry.line, `mypy ${entry.key}: true → false`, "Type checker strictness switched off");
   }
   const ignoring = (entries: Entry[]) => entries.filter(entry => toolOf(file, entry.section) === "mypy" && entry.key === "ignore_errors" && truthy(entry.value));
   const before_ = ignoring(before), after_ = ignoring(after);

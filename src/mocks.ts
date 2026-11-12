@@ -63,6 +63,15 @@ function javascript(text: string): MockedSubject[] {
     if (end > 0) callbacks.push([open, end]);
   }
 
+  // A test sees what is configured in it, in a hook of a block around it, or outside every block: not what a sibling test, or a hook of
+  // a sibling `describe`, configures.
+  const tests: Range[] = [];
+  for (const match of code.matchAll(/(?<![\w$.])(?:it|test|describe)(?:\s*\.\s*\w+)*\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    const end = closing(code, open);
+    if (end > 0) tests.push([open, end]);
+  }
+
   /** True when nothing encloses `index`: not a function body, a block or a call's arguments. */
   const programLevel = (index: number) => {
     let depth = 0;
@@ -87,8 +96,11 @@ function javascript(text: string): MockedSubject[] {
     if (/requireActual|importActual|importOriginal/.test(args)) continue;
     // So does a factory that is handed the real module's loader and calls it, whatever the parameter is called:
     // `vi.mock("./client", async (original) => ({ ...(await original<typeof import("./client")>()), send: vi.fn() }))`.
-    const loader = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(args)?.[2];
-    if (loader && new RegExp(`(?<![\\w$.])${loader.replace(/\$/g, "\\$")}\\s*(?:<[^\\n]*?>)?\\s*\\(`).test(args.slice(args.indexOf(loader) + loader.length))) continue;
+    // The factory's one parameter may be written with or without brackets: `async (original) => ...` and `async original => ...`.
+    const factoryHead = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?(?:\(\s*([A-Za-z_$][\w$]*)\s*[,)]|([A-Za-z_$][\w$]*)\s*=>)/.exec(args);
+    const loader = factoryHead?.[2] ?? factoryHead?.[3];
+    // (A call that is spread, `...original()`, has dots in front of it; a member access, `lib.original()`, has one.)
+    if (loader && new RegExp(`(?<![\\w$])(?:(?<=\\.\\.\\.)|(?<!\\.))${loader.replace(/\$/g, "\\$")}\\s*(?:<[^\\n]*?>)?\\s*\\(`).test(args.slice(args.indexOf(loader) + loader.length))) continue;
     // `{ spy: true }` is vitest's automock that still calls the real function.
     const factory = /^\(\s*(['"`])[^'"`\n]+\1\s*,/.test(args) && !/,\s*\{\s*spy\s*:\s*true\b/.test(args);
     if (!mocked.has(specifier)) mocked.set(specifier, { index: match.index, fake: factory });
@@ -121,7 +133,10 @@ function javascript(text: string): MockedSubject[] {
     else bindings.set(match[1], { specifier, name: "*", namespace: true });
   }
 
-  const found = new Map<string, MockedSubject>();
+  // Every assertion that reads a mock's own output, with the test or hook body it sits in. One that stands next to an assertion on something
+  // else (`expect(getEnv(path)).toEqual(...)` beside `expect(python).not.toContain(...)`) is a redundant check, not a test that cannot fail.
+  const candidates: { key: string; at: number; range: Range | null; subject: MockedSubject }[] = [];
+  const mockedNames = [...bindings].filter(([, binding]) => mocked.has(binding.specifier)).map(([local]) => local.replace(/\$/g, "\\$"));
   for (const match of code.matchAll(/(?<![\w$.])expect\s*\(/g)) {
     const open = match.index + match[0].length - 1;
     const end = closing(code, open);
@@ -145,16 +160,29 @@ function javascript(text: string): MockedSubject[] {
     if (!name) continue;
     // A manual mock or an automock only fakes a result once the test says what it returns.
     const identifier = call[1].replace(/\$/g, "\\$");
-    const configured = new RegExp(`(?<![\\w$.])${identifier}\\b[^;]{0,80}?\\.\\s*mock(?:Return|Resolved|Rejected|Implementation)\\w*\\s*\\(`).test(raw);
+    const configures = new RegExp(`(?<![\\w$.])${identifier}\\b[^;]{0,80}?\\.\\s*mock(?:Return|Resolved|Rejected|Implementation)\\w*\\s*\\(`, "g");
+    const configured = [...raw.matchAll(configures)].some(config => tests.every(range => !within(range, config.index) || within(range, match.index)));
     if (!mock.fake && !configured) continue;
     const key = `${binding.specifier}::${name}`;
-    if (found.has(key)) continue;
     const line = lineOf(mock.index);
-    found.set(key, {
-      key, line, snippet: lines[line - 1].trim().slice(0, 120),
-      reason: `assertion on the output of ${name}(), which this test replaces with a mock of "${binding.specifier}"`,
+    candidates.push({
+      key, at: match.index, range: innermost(callbacks, match.index),
+      subject: {
+        key, line, snippet: lines[line - 1].trim().slice(0, 120),
+        reason: `assertion on the output of ${name}(), which this test replaces with a mock of "${binding.specifier}"`,
+      },
     });
   }
+  const candidateAt = new Set(candidates.map(candidate => candidate.at));
+  const mentionsMock = mockedNames.length ? new RegExp(`(?<![\\w$.])(?:${mockedNames.join("|")})(?![\\w$])`) : null;
+  /** Whether the same test or hook also asserts on something that is not a mock's own output. */
+  const checksSomethingElse = (range: Range | null) => !!range && [...code.matchAll(/(?<![\w$.])expect\s*\(/g)].some(other => {
+    if (!within(range, other.index) || candidateAt.has(other.index)) return false;
+    const open = other.index + other[0].length - 1, end = closing(code, open);
+    return end > 0 && !mentionsMock?.test(code.slice(open + 1, end));
+  });
+  const found = new Map<string, MockedSubject>();
+  for (const candidate of candidates) if (!found.has(candidate.key) && !checksSomethingElse(candidate.range)) found.set(candidate.key, candidate.subject);
   return [...found.values()];
 }
 
@@ -291,6 +319,8 @@ function python(text: string): MockedSubject[] {
       const receiver = new RegExp(`(?<![\\w.])${patch.object.replace(/[.$]/g, "\\$&")}\\s*\\.\\s*(?!${attribute}\\b)\\w+\\s*\\(`);
       if (receiver.test(code.slice(patch.end + 1, match.index))) continue;
     }
+    // A call such as `cpu_kernels.install()` between the patch and the assertion may wrap the patched function again.
+    if (/(?<![\w$])(?:[A-Za-z_]\w*\s*\.\s*)*_*(?:install|wrap|instrument|inject|hook|swap|rewire|reload)\w*\s*\(/.test(code.slice(patch.end + 1, match.index))) continue;
     const line = lineOf(patch.index);
     found.set(key, {
       key, line, snippet: lines[line - 1].trim().slice(0, 120),

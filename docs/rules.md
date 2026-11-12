@@ -49,7 +49,9 @@ Recognized weaker forms: in JavaScript/TypeScript `toBeDefined`, `toBeTruthy`, `
 `Exception`, a `match=` dropped from `pytest.raises`, and `assertRaisesRegex` relaxed to `assertRaises`. An exact check turned
 into a bound is not reported when the old check expected nothing (`toHaveLength(0)` to `toBeGreaterThan(0)` is a flipped
 expectation, not a looser one). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
-several checks into one snapshot are not reported.
+several checks into one snapshot are not reported. Nor is a check that the element is there, written another way:
+`expect(wrapper.find(".menu").exists()).toBe(true)` turned into `expect(document.querySelector(".menu")).not.toBeNull()`,
+`toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it).
 
 **An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, three more
 forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGreaterThanOrEqual(2)`, `toHaveLength(3)` to
@@ -97,7 +99,20 @@ workflow that stops running tests or stops running on pushes and pull requests, 
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
 Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
-`bazel test`).
+`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`) and a package script that runs
+the tests with coverage (`yarn coverage`, `npm run coverage`). The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
+line is not part of the command (`run: exit 0 # Skip unnecessary test runs`). A workflow gates changes when it runs on a push or a pull request (or is a
+reusable workflow, `workflow_call`, that one of those may call); the triggers are read from its `on:` section, not from the whole file, where a
+Docker step's `push: true` is not a trigger, and a `push:` that lists only `tags:` (no `branches:`) is a release pipeline that runs when a version is
+tagged, so it does not gate: tests that it runs do not count as tests that gate, and tests removed from it, or a trigger moved from a tag push to a
+published release, are not reported (on the 9,761 commits of section 7, three findings of that kind disappeared, all in release workflows of a deleted
+package or with a changed trigger, and none was a weaker check). In a workflow that runs only on a schedule, a release, a tag, a manual dispatch or after another workflow (a job that
+posts a comment after a release, a nightly canary), a step or job that is switched off or allowed to fail is reported only when it runs tests; the
+price is a gate-like job there that does not. A step that only moves files, signs in, publishes or comments is not a check in any workflow: when
+one step uses `actions/upload-artifact`, `download-artifact`, `cache`, `docker/login-action` or `build-push-action`, `azure/login`,
+`aws-actions/configure-aws-credentials`, `softprops/action-gh-release`, `codecov/codecov-action`, `peter-evans/*` or another action on that short
+list (`NON_CHECK_ACTION` in `src/tampering.ts`) and runs nothing, `continue-on-error: true` or `if: false` on it is not reported. An action that is
+not on the list, and every `run:` step, still is, because it may be the check.
 
 More shortcuts of the same kind:
 
@@ -117,7 +132,9 @@ More shortcuts of the same kind:
   (`strict`, `disallow_untyped_defs`, `check_untyped_defs`, `warn_return_any`, ...) turned from true to false;
   `ignore_errors = true` added for a module; a pylint `fail-under` lowered. A tool that was not configured before is being
   adopted, and its first ignore list is not reported; a stricter setting, a code removed from an ignore list and a reordered
-  list are not reported either. `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
+  list are not reported either. Each `[[tool.mypy.overrides]]` element is a table of its own, named by its `module`, so `check_untyped_defs = false` for
+  `tests.*` next to `true` for another module is two settings, not one that was turned off (until 0.19.0 it was read as one, and a repository whose overrides
+  were written that way blocked on every commit that touched `pyproject.toml`). `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
 
 The same rule covers a test harness that rewrites what the runner reports. In `conftest.py`, `sitecustomize.py` and test files,
 `report.outcome = "passed"` (any object, outcome set to the string `passed`), `call.excinfo = None` and `session.exitstatus = 0`
@@ -132,7 +149,7 @@ A test was switched off. The runner reports success without executing the behavi
 | Language | Reported |
 | --- | --- |
 | JavaScript/TypeScript | `it.skip`, `describe.skip`, `xit`, `xdescribe`, `test.todo`, Playwright `test.skip(true)` or with only a title; tests expected to fail: `it.fails` (Vitest), `test.failing` (Jest, AVA), Playwright `test.fixme` and `test.fail` |
-| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure`; `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
+| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure` (and the same decorator under another module's name, `@test.expectedFailure`); `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
 | Go | `t.Skip`, `t.Skipf`, `t.SkipNow` as a statement of a test or sub-test |
 | Rust | `#[ignore]`, `#[ignore = "reason"]` |
 | Java, Kotlin | `@Ignore`, `@Disabled`, `@Test(enabled = false)` |
@@ -156,9 +173,12 @@ Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned o
 (Python, JavaScript and TypeScript), by the `fn` below the attribute (Rust) and by the `func Test...` around `t.Skip()` (Go); a file that is
 new has only new tests. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
 file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
-cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. Two gaps are known: a
-`test.skip(true, "needs admin")` inside an `if` that checks the environment is reported, because the literal hides the condition, and a
-`test.fixme(` whose title is on the next line is compared by count, which can blame a marker that was already there.
+cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. A registration that a formatter
+wrapped after its opening bracket (`test.fixme(` or `it.todo(` with the title on the next line) is read like one on a single line (a `todo` that
+carries the title of a test the change adds is a new placeholder, not a test switched off), and a
+`test.skip(true, "needs admin")` that sits under an `if`, `else`, `case`, `catch` or after `cond &&` is a run-time condition, like
+`test.skip(isAdmin, ...)`; the condition counts only when it is in the lines the review can see, and one that mentions CI, or is plainly
+true (`if (true)`), still hides the test and is reported.
 A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
 `@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
@@ -212,7 +232,8 @@ keeps the real module (`requireActual`, `importActual`, `wraps=`, or a factory t
 under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
 called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
-`mock` or `monkeypatch` (the tests of the mocking tools themselves). On 21,686 test files of 24 public repositories the only
+`mock` or `monkeypatch` (the tests of the mocking tools themselves). In JavaScript an assertion on a mock's output in a test (or hook) that
+also asserts on something that is not a mock's own output is a redundant check, not a test that cannot fail, and is not reported. On 21,686 test files of 24 public repositories the only
 matches were the tests of jest, vitest and pytest's `monkeypatch`, plus one sanity precondition in scikit-learn.
 
 ## assertion-removed

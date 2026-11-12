@@ -30,8 +30,8 @@ is about to finish, when you commit, and on the pull request. It is deterministi
 - **Not being talked out of its rules.** A pull request, or an agent, cannot edit the config to silence the check, because
   policy is read from `HEAD` or the base branch.
 - **Saying how often it is right.** On 12,645 commits in 166 public repositories it found weakened checks in about 1 of 300
-  commits that touch tests or CI. On repositories that the rules were not written from, about half of the blocked commits were false
-  alarms, and the rest changed a check a reviewer should see. Method, caveats and the gaps that remain are in [benchmarks.md](benchmarks.md).
+  commits that touch tests or CI. On repositories that the rules were not written from, between a quarter and two thirds of the blocked commits were false
+  alarms, depending on the sample, and the rest changed a check a reviewer should see. Method, caveats and the gaps that remain are in [benchmarks.md](benchmarks.md).
 
 ## What it is not
 

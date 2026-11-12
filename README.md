@@ -109,23 +109,26 @@ old debt with a baseline: [docs/reference.md](docs/reference.md#configuration).
 ## Does it work?
 
 Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/benchmarks.md). **Weakened checks are rare, mostly
-deliberate, and not specific to AI. agent-roast is a tripwire that asks about them. On repositories it had not seen, about half of its
-blocks were questions with a harmless answer.**
+deliberate, and not specific to AI. agent-roast is a tripwire that asks about them. On repositories it had not seen, between a quarter and
+two thirds of its blocks were questions with a harmless answer, depending on the sample.**
 
-- **131 of 131** hand-labeled cheating edits are caught and **110 of 110** harmless look-alikes (reformats, moves, raised
+- **145 of 145** hand-labeled cheating edits are caught and **127 of 127** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. One gap is documented and still open.
 - **12,645 commits** that touch tests or CI/config in 166 public repositories: blocking rules fired on 0.3% of AI-signed commits
   (Claude, Copilot, Cursor, Codex, Devin, aider) and on 0.3% of the others. Inside the same repositories the odds for an
   AI-signed commit were 0.81 times those of another commit (95% CI 0.40–1.67). There is no sign that AI-signed commits weaken
   checks more often.
-- **On repositories it was not written from, about half of the blocked commits were false alarms.** Four samples of 39 or 40 public
-  repositories (158 in all, 44,878 commits) were replayed and every blocked commit was read. 0.17.0 blocked 74 of 11,604 commits in the
-  first sample and 65 of 10,726 in the fourth, and 69% of both were false alarms, mostly a skip on a test that the same commit adds.
-  This version, frozen before the fourth sample was drawn, blocked 41 of its 10,726 commits: 20 changed a check a reviewer should see
-  (an assertion that got weaker, a gate that was relaxed, a test switched off or left focused) and 21 were false alarms, nine of them in
-  one repository. Most of the rest, in the earlier measurements too, were deliberate and explained. One reader (an AI assistant) sorted
-  them, so treat the figures as a first estimate ([section 9](docs/benchmarks.md#9-repositories-nobody-had-tuned-on)).
+- **On repositories it was not written from, between a quarter and two thirds of the blocked commits were false alarms.** Six samples of 39
+  or 40 public repositories (238 in all, 67,843 commits) were replayed and every blocked commit was read. The share was 69% for 0.17.0 on the
+  first sample and on the fourth, 51% for 0.18.0 on the fourth and 27% on the fifth, which it had not seen either. This version, frozen before the
+  sixth sample was drawn, blocked 100 of its 11,335 commits: 34 changed a check a reviewer should see (an assertion that got weaker, a gate
+  that was relaxed, a test switched off or left focused) and 66 were false alarms, but 51 of the 66 were one defect in one repository, an array of
+  mypy overrides read as one table, which is fixed in this release; the released build blocks 44 of those commits, 34 and 10. A new
+  test that asserts nothing counts as a block for a reviewer; counted as false alarms, 13 of 33 on the fifth sample and 72 of 100 on the sixth. Most of the rest, in the
+  earlier measurements too, were deliberate and explained. One reader (an AI assistant) sorted them, and the fixes were made from the same
+  sorting, so treat the figures as a first estimate ([section 9](docs/benchmarks.md#9-repositories-nobody-had-tuned-on),
+  [section 10](docs/benchmarks.md#10-two-more-samples-and-what-the-fixes-from-sample-4-did)).
 - **9,732 commits compared in full** from 164 public repositories that use coding agents (5,454 of them AI-signed) were reviewed again for the
   last two releases, and every new finding was read. 0.15.0's rules reported 30 new findings there and 7 were false alarms (fixed in 0.16.0);
   0.17.0's rule for an exact check turned into a bound reported 18 in 14 commits, all of them loosened checks, after two false alarms were
