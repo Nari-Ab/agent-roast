@@ -9,11 +9,11 @@ than other commits. Everything here is reproducible, and none of it is an accura
 block), usually deliberate and explained, and not more frequent in AI-signed commits. On repositories that the rules
 were not written from, between a quarter and two thirds of the blocked commits were false alarms, depending on the sample (sections 9 and 10: 69%
 for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read, 66% for this version as it was frozen on a sixth, where 52 of the
-100 blocks were one repository and 51 of them one defect, which is fixed); the rest are decisions a reviewer should see.
+100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, section 11); the rest are decisions a reviewer should see.
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 145/145 cheats caught, 127/127 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 152/152 cheats caught, 136/136 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -24,6 +24,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | 0.17.0's rule for an exact check turned into a bound: the same 9,761 commits, the 2,177 that can differ | 18 new findings in 14 commits (10 in 6 AI-signed), none lost; two false alarms found by reading them and fixed; 13 of the 29 commits that a scan found reported, up from 1; on the 7,200 commits of section 6, 1 new finding (section 8) |
 | What the rules block on repositories nobody had tuned on: four samples, 158 repositories, 44,878 commits | 0.17.0 blocked 74 of 11,604 commits on sample 1 and 65 of 10,726 on sample 4, 69% of both false alarms; this version, frozen before sample 4 was drawn, blocked 41 of 10,726: 20 for a reviewer and 21 false alarms (51%), 9 of them in one repository (section 9) |
 | Two more samples nobody had read (section 10): 80 repositories, 22,965 commits | 0.18.0 blocked 33 of 11,630 commits on sample 5: 24 for a reviewer and 9 false alarms (27%); this version, frozen before sample 6 was drawn, blocked 100 of 11,335: 34 and 66 (52 of the 100 in one repository, 51 of them one defect since 0.15.0, fixed afterwards: the released build blocks 44, 34 and 10) |
+| A seventh sample nobody had read (section 11): 40 repositories, 12,000 commits | the published 0.19.0 blocked 31: 16 for a reviewer and 15 false alarms (48%; 39% without one repository); 0.18.0 blocked 32; the build frozen before the sample was read blocked 32, one more and a real one; the shipped build, after the fixes from reading it, blocks 22 of those commits (17 and 5) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -37,7 +38,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **145/145 cheats caught, 127/127 harmless changes left alone, 1/1 documented gap still
+Result: **152/152 cheats caught, 136/136 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -691,6 +692,8 @@ the fixes were made from those commits. The kinds that are not defects were left
   reviewer here and which most projects would call fine.
 - A runner the rules do not know. `python -m unittest` and `yarn coverage` were found on these samples and are known now; the next is not.
 
+Section 11 fixes the first of these (a workflow dropped while another runs the same command), part of the second (ignores that ride along with a version bump) and adds the runners that the seventh sample showed.
+
 **Limits.**
 
 - One reader sorted every block, an AI assistant, and the fixes were made from the same sorting. The rows marked fitted say nothing about other
@@ -703,6 +706,100 @@ the fixes were made from those commits. The kinds that are not defects were left
 - The same price as in section 9 holds, and three more: a skip with a literal `true` under an `if` of the agent's own is not reported; a step that only uploads, signs in or
   publishes is not a check, so letting it fail is not reported (an action that is not on the short list of `NON_CHECK_ACTION`, and every `run:` step, still is); a test step removed from a
   workflow that runs only when a version is tagged is not reported.
+- Everything in section 9 about the search, the age of the repositories, and "a reviewer should see it" does not mean the change was wrong.
+
+## 11. A seventh sample, and two things that were missing
+
+Section 10 ended with a list of what 0.19.0 still got wrong. This section measures the published 0.19.0 once more on repositories that nobody had read, and
+adds two things that were missing, found on corpora that had already been read, before any block of this sample was read: a check turned into "not another value" (`toBe(2)` into `not.toBe(0)`), which no rule read, and a workflow
+dropped while another one runs the same tests, which was reported as lost tests. The search, the replay, the reader and the definitions of "false alarm" and "a reviewer
+should see it" are those of sections 9 and 10, including the way a new test that asserts nothing is counted.
+
+**Method.** Sample 7 holds 40 repositories (24 JavaScript or TypeScript, 16 Python), `benchmarks/seventh-corpus.tsv` with the revision measured, none in an earlier corpus; 12,000 of the
+newest commits of their first-parent histories were reviewed against their parents (13 could not be compared in full and 2 failed to review, and are in no count). Three builds were
+replayed on it, and none of them was changed after the first block was read: 0.18.0, **0.19.0 as it was published**, and a build with the two additions of this version, frozen before any block of the sample was read.
+`benchmarks/section9-labels.tsv` has a row for every blocked commit of all seven samples, now with a column for this version.
+
+| Build | Blocked commits (repositories) | False alarms | A reviewer should see |
+| --- | --- | --- | --- |
+| 0.18.0 | 32 (14) | 16 | 16 |
+| **0.19.0, as published** | **31 (13)** | **15** | **16** |
+| **the build frozen before the sample was read** (0.19.0 and the two additions) | **32 (13)** | **15** | **17** |
+| this version, after the fixes from reading the sample (fitted) | 22 (12) | 5 | 17 |
+
+The share of false alarms among the blocks of a build that had not seen the sample is **48% for the published 0.19.0** (15 of 31; 39% without one repository, `disnake`, where 6 of its 8 blocks
+are false alarms in one file, `pyproject.toml`) and 50% for 0.18.0. By sample it is now 69%, 58%, 27%, 69%, 51%, 27% and 66% (sections 9 and 10), then 48%: the published 0.19.0 is inside the same range, a factor of two or three from one sample to the next.
+
+**The two additions, on this sample.** The check turned into "not another value" added one block that the published build does not have, and it is a real one: a test that pinned the kind of a record,
+`expect(record.resource.kind).toBe('unrenderable')`, now says `not.toBe('ready')`. The dropped duplicate changed nothing on this sample; it removes the two false alarms of sample 6 that section 10 listed and two older blocks, below.
+
+| What was blocked on sample 7 (0.19.0 as published) | Commits |
+| --- | --- |
+| A check that got weaker: an exact value turned into "something is there" (`assert cursor.summary[0]["read_rows"] == '2'` into `assert cursor.summary`; the pixels of a drawn image into `toBeDefined()` on the image), an exact count into a bound (`len(w) == 1` into `>= 1`, `== existing_runners - 1` into `<=`, `toHaveLength(20)` into `toBeGreaterThan(1)`, `assert.equal(matched, 2)` into `assert.ok(matched >= 2)`, a lower bound of four into one brought in by a merge), `toEqual` into `toMatchObject` (two commits, three tests) | 9 |
+| A gate that changed: ruff's flake8-type-checking rules ignored again; the XML-parsing rules and `ISC001` ignored in a commit that enables more docstring rules; the whole `TC` family and `T20` ignored for some files in a rewrite of a configuration to opt-out | 3 |
+| A test that was running is switched off: `@unittest.skipIf(<backend is off>)` turned into an unconditional `@unittest.skip` "until a pull request is merged" (two tests), `test.skip(true, ...)` on three tests that cover a retired mode, `xfail` on a test that the message calls flaky, `test.skip` on a test with a `@TODO` | 4 |
+| **False alarm:** ruff ignores added together with a bump of the Python version or of ruff (`requires-python = ">=3.9"` and `UP006`, `UP035`; `ruff==0.8.0` and `RUF022`): the bump brings the rules, the ignores keep what was in force. One repository | 4 |
+| **False alarm:** a ruff or mypy configuration that got stricter overall (rules enabled, `strict = true`), with an exemption for the examples or for one module | 3 |
+| **False alarm:** an existence check rewritten as another existence check after the thing it looked at changed: a file that moved into a database, an attribute into an element, a label into a lookup by that label | 3 |
+| **False alarm:** a CI test command rewritten as a wrapper script or a task alias that the CI rules did not know as a runner (`python scripts/run_tests.py`, `deno task test`) | 2 |
+| **False alarm:** a test workflow dropped while its tests moved with the code into a package that another workflow tests | 1 |
+| **False alarm:** `fit(line, width, ...)`, a function that a test calls, read as Jasmine's focused test | 1 |
+| **False alarm:** a report job that was allowed to fail merged into another job, where the same step is allowed to fail: the tolerance moved | 1 |
+
+0.18.0 blocks one more commit, a false alarm that 0.19.0 fixed: a step allowed to fail in a scheduled workflow that updates a spec.
+
+**What reading it showed to be defects, and what was fixed afterwards.** Ten of the fifteen false alarms are fixed in this version, after the sample was read: two defects and three kinds that a rule can tell apart:
+
+- Quoted words in the comments of a TOML list were read as rule codes: `"EM",  # allow Exception("text")` listed `text` as an ignored code, and `# "ANN", # flake8-annotations`, a selector that is commented out, was read as selected, so
+  enabling a rule family with an exemption for the examples looked like a rule switched off. Comments are dropped before the list is read. Two of the fifteen false alarms.
+- A ruff ignore added in the same change that raises `requires-python`, `target-version` or the pinned `ruff` version is not reported: the upgrade is what brings those rules. The setting has to be in both versions of the file and higher in the new one,
+  so a version that goes down, or a `requires-python` that is only written for the first time, does not hide an ignore. Four of the fifteen. The price: an ignore that rides along
+  with an upgrade is not reported, and a pin kept in another file (a pre-commit `rev`) is not read.
+- `deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`, `./gradlew test`, `node --test`, and a project's own test script run through an interpreter or by path (`python scripts/run_tests.py`,
+  `./scripts/test.sh`, `python tests/test_cli.py`) are test steps. Two of the fifteen. A command that only mentions such a script (`chmod +x scripts/test.sh`, `cat tests.py`) is not one.
+- `fit(` and `fdescribe(` are Jasmine's focused tests only with a title written as a string first (`fit("keeps the band", ...)`); a call such as `fit(line, width)` is a helper. One of the fifteen.
+- A tolerance that moved is not a new one: a step is not reported as made easier to pass when the same commands were already inside a job or step allowed to fail, and the places allowed to fail did not grow. One of the fifteen.
+
+On the 32 blocked commits of the frozen build, the shipped build blocks 22: all 17 that a reviewer should see, and 5 false alarms, with no finding that is new. The last row of the table is therefore fitted:
+the fixes were made from those commits. The five that are left were not fixed: an existence check that was rewritten after a refactor (three), tests that moved with the code into a package another workflow tests (one),
+and a configuration that is stricter overall but exempts one module from two error codes (one).
+
+**How the two additions were found.** A recall probe on the 9,761 commits of section 7: 1,248 of them say in their own message that they skip, disable, loosen, relax or de-flake a test, and touch a test or a CI file. The published build blocks 30 of them, warns on 280 and says nothing on 938.
+All 84 silent commits whose subject has one of the stronger words and a test file were read: one clear miss (an exit-code test, `expect(r.code).toBe(2)` into `expect(r.code).not.toBe(0)` in nine tests), and two by design (a failing precondition turned into `pytest.skip`, skips that depend on the environment); a random 30 of the rest had none.
+A second look at where an assertion was edited in place: of 121 pairs where the same expression was checked less exactly afterwards, the build reports 23. Of the 98 it does not, 44 are tests that were renamed or removed (the pairing
+needs the same title), 41 are tests whose number of assertions did not change and whose pair is a changed value, a flipped expectation or an equivalent record (`toBe('x')` into `toBeNull()`, `.length).toBe(0)` into `toHaveLength(0)`), 8 are tests that gained or lost an assertion, of which one is a loosening
+(`toEqual(['x'])` into `toContain('x')`), and 5 are not in a test. The negated check is the one form that was missing; `toEqual` of one element into `toContain` is a narrow one, and is not read. Scanning the corpora of the six samples and the agent corpus (about 97,000 commits) for an exact check edited into a negated one found
+45 commits, almost all of them a flipped expectation (the same value, negated), which is not reported; the new rule adds one block there (`toBe("first revert")` into `not.toBe("")`).
+
+**The regressions of this version, against the published 0.19.0.**
+
+- **The commits that touch a CI file or a Python lint or type configuration** (the newest 300 of every repository: 11,684 commits in 418 repositories, the seven samples, the agent corpus and the 24 repositories of section 6),
+  the analysis of the published 0.19.0 and of this version on every changed file, and a full review with both builds on the 639 commits where it differs (8 of them could not be reviewed). Sixteen commits lose findings and two gain one; in two more the same finding reads differently (the words of a comment are no longer in its snippet).
+  Gone: four workflows dropped or moved while the same tests run elsewhere (two false alarms of sample 6, and two older blocks that were sorted "for a reviewer": a schema workflow that stopped running on pushes while `pnpm test` still runs on every push, and a publish workflow whose
+  `npm test` still runs on every pull request); six ruff ignores that come with a higher Python or ruff version (the four of `disnake`, and two commits of other corpora: `requires-python` from 3.8 to 3.11, and from 3.9 to 3.10); two commits where words of a comment were read as codes (`disnake`);
+  three test commands replaced by a wrapper that is known now (two of sample 7 and `uv run pytest` replaced by `bash scripts/run-tests.sh` in a commit of sample 6, which stays blocked for another reason); and the tolerance that moved. New: a workflow deleted that ran `tests/pytorch/test_sanity_import.py` in three jobs ("Remove failing GitHub Build workflow",
+  `NVIDIA/TransformerEngine`; a reviewer should see it, and it is a gain of the longer runner list), and a loop over test files replaced by `bash packages/ag2-sparrow/tools/publish_gate.sh` (`sonichi/sutando`; a false alarm, a script whose name does not say that it runs tests).
+  A run on the commits that touch a workflow, with both builds and the rule for duplicates only, had found the first four and nothing new.
+- **The blocked commits of all seven samples** (394 rows of `benchmarks/section9-labels.tsv`), reviewed again with the shipped build: 195 are blocked, 162 that a reviewer should see and 33 false alarms. Of the 208 rows that the published 0.19.0 blocks, 14 are not blocked any more:
+  12 false alarms (ten of sample 7, the two of sample 6 about duplicate workflows) and the two older blocks sorted "for a reviewer" that are named above (a schema workflow and a publish workflow whose tests run elsewhere). One row is blocked now and was not: `docx-editor`, `toBe('unrenderable')` into `not.toBe('ready')`.
+  The column "blocked by 0.20.0" of the table has the answer for every row.
+- **The labeled cases:** 152 of 152 cheats are caught and 136 of 136 harmless changes are left alone (seven and nine more than for 0.19.0), and one gap is still open. The defects of this sample and of the two additions have tests (`tests/negated-exact.test.ts`, `tests/duplicate-workflow.test.ts`, `tests/seventh-sample.test.ts`).
+
+**What this version still gets wrong, as found on sample 7** (listed so that they can be fixed, not as a promise):
+
+- An existence check that was rewritten after a refactor (a file that moved into a database, an attribute into an element, a label into a lookup): the check is the same kind and no pairing by expression sees it. Three commits on sample 7.
+  It is the largest kind that is left, with the other equivalent rewrites of section 10.
+- Tests that moved with the code into a package that another workflow runs: the removed workflow's command was `cd kernels-data/bindings/python && uv run pytest tests`, the other's is `uv run pytest tests` with another working directory. The review compares commands, not where the tests went.
+- A configuration that is stricter overall and exempts a module from an error code.
+- An ignore list rewritten from rule codes to rule names (section 10) is still reported.
+- A runner the rules do not know. The ones found on sample 7 are known now; the next is not.
+
+**Limits.**
+
+- One reader sorted every block, an AI assistant, and the fixes were made from the same sorting. The last row of the table says nothing about other repositories. Out of sample are the published 0.19.0, 0.18.0 and the build frozen before the sample was read.
+- One repository with one habit moves a count. `disnake` has 8 of the 31 blocks, 6 of them false alarms; without it the share is 39%. The range is the finding, not the 48%.
+- The build that ships is not the build that was measured: it has five fixes from reading the sample, covered by tests and by the reviews above, not by a new sample.
+- The same price as in sections 9 and 10 holds, and two more: a ruff ignore added together with a version bump is not reported, and a test step is not reported as removed while another workflow runs the same command in the same directory.
 - Everything in section 9 about the search, the age of the repositories, and "a reviewer should see it" does not mean the change was wrong.
 
 
@@ -724,7 +821,7 @@ node scripts/scan-edited-assertions.mjs agents.json ./clones --list           # 
 node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/cli.js --cand dist/cli.js \
   --out diff.json --added '<the regular expression in the header of the script>'   # section 8: both builds on the commits that can differ
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
-#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv; summary.json has the blocked commits per repository for both
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 

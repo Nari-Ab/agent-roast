@@ -604,6 +604,12 @@ export function auditFileDiffs(
         if (match[2] && !isTestFile(file.path)) continue;
         // `fit()` or `xit()` with nothing between the brackets is a method that happens to have that name (a terminal addon's `fit`), not a test.
         if (match[2] && callArguments(source, raw, match.index + match[0].length)?.length === 0) continue;
+        // Jasmine's `fit(description, fn)` and `fdescribe(description, fn)` start with a title written as a string: `fit(line, width)` calls a helper named `fit`.
+        // (`fdescribe.each(table)(title, fn)` has the table first, and is a registration.)
+        if ((match[2] === "fit" || match[2] === "fdescribe") && !match[3]) {
+          const first = callArguments(source, raw, match.index + match[0].length)?.[0];
+          if (first !== undefined && !/^[`'"]/.test(first)) continue;
+        }
         // A registration is a statement of its own: `expect(fit({ x: 1 }))`, `await fit("okapi")` and `const v = fit(a)` call a helper that has that name.
         if (match[2] && previous >= 0 && (/[(,=:?[&|!+\-*%<]/.test(source[previous]) || /(?:await|return|yield|typeof|void)$/.test(source.slice(Math.max(0, previous - 6), previous + 1)))) continue;
         if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;

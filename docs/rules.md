@@ -53,14 +53,16 @@ several checks into one snapshot are not reported. Nor is a check that the eleme
 `expect(wrapper.find(".menu").exists()).toBe(true)` turned into `expect(document.querySelector(".menu")).not.toBeNull()`,
 `toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it).
 
-**An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, three more
+**An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, four more
 forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGreaterThanOrEqual(2)`, `toHaveLength(3)` to
 `toBeGreaterThan(1)`, `assert len(x) == 3` to `assert len(x) >= 3`, `assert handler.level == WARNING` to `> CRITICAL`, Node's
 `assert.equal(x.length, 3)` to `assert.ok(x.length > 0)`); a set or value equality turned into a subset or range
-(`assert set(a) == set(b)` to `assert set(a) <= set(b)`); and `toEqual(X)` or `toStrictEqual(X)` turned into `toMatchObject(X)` with the
-very same argument, which lets extra properties through. "The same expression" is what makes these safe to report: `expect(items)` and
+(`assert set(a) == set(b)` to `assert set(a) <= set(b)`); `toEqual(X)` or `toStrictEqual(X)` turned into `toMatchObject(X)` with the
+very same argument, which lets extra properties through; and a value turned into the exclusion of another one (`toBe(2)` to `not.toBe(0)`,
+`toHaveLength(3)` to `not.toHaveLength(0)`, `assert code == 124` to `assert code != 0`), which only rules a value out where the test used to pin one. "The same expression" is what makes these safe to report: `expect(items)` and
 `expect(items.length)` count as one, another expression is another check, and a `toMatchObject` that was given more fields than the
-`toEqual` it replaces is not the same argument. A check that expected nothing (zero, empty, `None`) was flipped, not relaxed. Left alone as other checks, not looser ones: a negated check with an argument (`rejects.toThrow(/a/)` turned into `rejects.not.toThrow(/b/)` says
+`toEqual` it replaces is not the same argument. A check that expected nothing (zero, empty, `None`) was flipped, not relaxed, and so is ruling out the very value the old check expected, a
+boolean (`toBe(true)` to `not.toBe(false)`) and a value that is only a name (`not.toBe(previousId)` asks whether something changed). Left alone as other checks, not looser ones: a negated check with an argument (`rejects.toThrow(/a/)` turned into `rejects.not.toThrow(/b/)` says
 the error must not match), a limit that moves against another expression (`toBeGreaterThan(before.height)` turned into `toBeGreaterThan(0)` after the
 subtraction moved, or an `in` test turned into `> 0`: only a numeric limit that was lowered counts), a compound Python assertion (`a == x and b <= c`
 holds more than one check), and brackets around a whole Python assertion (formatters add and drop them). A multi-index subscript such as
@@ -97,10 +99,14 @@ a lower coverage threshold (`lines`, `branches`, `functions`, `statements`, `fai
 strictness switch turned off, a lint rule downgraded, a CI step allowed to fail (`continue-on-error`, `allow_failure`), a
 workflow that stops running tests or stops running on pushes and pull requests, an npm `test` script that can no longer
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
-Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
+Raising a threshold, restructuring CI and moving the test step are not reported, and neither is dropping a duplicate: a workflow that stops
+running a test command is not reported while a workflow that gates changes still runs that very command, whether the same change touches that
+workflow or not (a deleted `production.yml` next to a `test.yml` that runs `npm test` too). The same command in another `working-directory`,
+another runner, or a workflow that runs only on a schedule does not count as the same tests. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
-`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`) and a package script that runs
-the tests with coverage (`yarn coverage`, `npm run coverage`). The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
+`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`), a package script that runs
+the tests with coverage (`yarn coverage`, `npm run coverage`), task runners (`deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`, `./gradlew test`, `node --test`) and a project's own
+test script run through an interpreter or by path (`python scripts/run_tests.py`, `./scripts/test.sh`, `python tests/test_cli.py`); a command that only mentions such a script (`chmod +x scripts/test.sh`) is not one. The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
 line is not part of the command (`run: exit 0 # Skip unnecessary test runs`). A workflow gates changes when it runs on a push or a pull request (or is a
 reusable workflow, `workflow_call`, that one of those may call); the triggers are read from its `on:` section, not from the whole file, where a
 Docker step's `push: true` is not a trigger, and a `push:` that lists only `tags:` (no `branches:`) is a release pipeline that runs when a version is
@@ -112,7 +118,8 @@ price is a gate-like job there that does not. A step that only moves files, sign
 one step uses `actions/upload-artifact`, `download-artifact`, `cache`, `docker/login-action` or `build-push-action`, `azure/login`,
 `aws-actions/configure-aws-credentials`, `softprops/action-gh-release`, `codecov/codecov-action`, `peter-evans/*` or another action on that short
 list (`NON_CHECK_ACTION` in `src/tampering.ts`) and runs nothing, `continue-on-error: true` or `if: false` on it is not reported. An action that is
-not on the list, and every `run:` step, still is, because it may be the check.
+not on the list, and every `run:` step, still is, because it may be the check. A tolerance that only moved is not new either: a step is not reported when the same commands were
+already inside a job or step allowed to fail (a report job merged into another job, where the step is allowed to fail) and the places allowed to fail did not grow.
 
 More shortcuts of the same kind:
 
@@ -134,7 +141,10 @@ More shortcuts of the same kind:
   adopted, and its first ignore list is not reported; a stricter setting, a code removed from an ignore list and a reordered
   list are not reported either. Each `[[tool.mypy.overrides]]` element is a table of its own, named by its `module`, so `check_untyped_defs = false` for
   `tests.*` next to `true` for another module is two settings, not one that was turned off (until 0.19.0 it was read as one, and a repository whose overrides
-  were written that way blocked on every commit that touched `pyproject.toml`). `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
+  were written that way blocked on every commit that touched `pyproject.toml`). A ruff ignore added in the same change that raises `requires-python`, `target-version`, mypy's `python_version` or the pinned ruff version is not reported: the bump is what brings
+  the rules (`UP006` once Python 3.9 is the minimum, `RUF022` with ruff 0.8). The setting has to be in both versions of the file and higher in the new one; a version that goes down, or one that is only written for the first time, hides nothing, and
+  neither does a pin kept in another file (a pre-commit `rev` is not read). The words of a comment in a TOML list are not codes: `"EM",  # allow Exception("text")` ignores `EM` and nothing else, and a commented-out `# "ANN"` is not selected.
+  `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
 
 The same rule covers a test harness that rewrites what the runner reports. In `conftest.py`, `sitecustomize.py` and test files,
 `report.outcome = "passed"` (any object, outcome set to the string `passed`), `call.excinfo = None` and `session.exitstatus = 0`
@@ -193,7 +203,7 @@ that hides a real failure is missed unless its condition mentions `CI`.
 
 An exclusive test or suite narrows the run, so the rest of the suite is never executed while the focused tests pass.
 `it.only`, `describe.only`, `test.only`, `fit`, `fdescribe` (JavaScript/TypeScript); `fit`, `fdescribe`, `focus: true` (Ruby). A method that happens
-to be called `fit()` or `xit()`, with nothing between the brackets (a terminal addon's `fit` in a test double), is not a registration.
+to be called `fit()` or `xit()`, with nothing between the brackets (a terminal addon's `fit` in a test double), is not a registration, and `fit` and `fdescribe` are Jasmine's focused tests only with a title written as a string first (`fit("keeps the band", ...)`): `fit(line, width)` calls a helper.
 **Fix:** remove the focus and run the whole suite. Turn on your runner's forbid-only option in CI as well
 ([Playwright](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only), Jest, Vitest).
 

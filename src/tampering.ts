@@ -381,9 +381,41 @@ function admits(value: number, operator: string, limit: number): boolean {
   }
 }
 
+/** The value an exact check expects, or the one a negated check rules out, as written with the spaces dropped: `expect(x).toBe(2)` → `2`,
+ * `expect(x).not.toBe(0)` → `0`, `assert x == 2, "msg"` → `2`, `assert x != 0` → `0`, `self.assertEqual(x, 2)` → `2`. Null when the line has none. */
+const EXACT_MATCHERS = ["toBe", "toEqual", "toStrictEqual", "toHaveLength"];
+function comparedValue(assertion: string, language: Language, negated: boolean): string | null {
+  if (language === "js") {
+    for (const matcher of EXACT_MATCHERS) {
+      const value = matcherArgument(assertion, negated ? `not\\s*\\.\\s*${matcher}` : matcher);
+      if (value !== null) return value;
+    }
+    return null;
+  }
+  const call = new RegExp(`\\bself\\s*\\.\\s*assert${negated ? "NotEqual" : "Equal"}\\s*\\(([\\s\\S]*)\\)\\s*;?\\s*$`).exec(assertion);
+  if (call) return splitArguments(call[1])[1]?.replace(/\s+/g, "") ?? null;
+  const at = assertion.indexOf(negated ? "!=" : "==");
+  return at < 0 ? null : splitArguments(assertion.slice(at + 2))[0]?.replace(/\s+/g, "") ?? null;
+}
+
+/** A value the old check could not lose by being negated: nothing (zero, empty, null) or a boolean, whose "not the other one" is the same check. */
+const NOTHING_OR_BOOLEAN = /^(?:true|false|True|False|null|undefined|None|NaN|0(?:\.0+)?|""|''|``|\[\]|\{\}|\(\))$/;
+/** A value written out in the test: a number, a string, null, an empty list or object. A name stands for something else that was computed
+ * (`not.toBe(previous)` asks whether it changed, which is another question). */
+const LITERAL_VALUE = /^(?:-?\d+(?:\.\d+)?|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|null|undefined|None|\[\]|\{\}|\(\))$/;
+
+/** An exact check turned into a negated one on the same expression: `expect(x).toBe(2)` → `expect(x).not.toBe(0)`, `assert x == 2` →
+ * `assert x != 0`. The test pinned one value and now only rules another out, so nearly anything passes. Ruling out the old value itself
+ * is a flipped expectation (`toBe(2)` → `not.toBe(2)`), and an old check that expected nothing or a boolean has no value to lose. */
+function exactBecameExclusion(oldAssertion: string, newAssertion: string, language: Language): boolean {
+  const pinned = comparedValue(oldAssertion, language, false), ruledOut = comparedValue(newAssertion, language, true);
+  return pinned !== null && ruledOut !== null && pinned !== "" && !NOTHING_OR_BOOLEAN.test(pinned) && LITERAL_VALUE.test(ruledOut) && pinned !== ruledOut;
+}
+
 /** An exact check on an expression turned into a bound on the same expression (`toBe(2)` → `toBeGreaterThanOrEqual(2)`,
  * `assert len(x) == 3` → `assert len(x) >= 3`, `set(a) == set(b)` → `set(a) <= set(b)`), or `toEqual(X)` into `toMatchObject(X)`
- * with the same argument, which lets extra properties through. An old check that expected nothing (zero, empty, None) was flipped,
+ * with the same argument, which lets extra properties through, or into a negated check that rules out some other value (`toBe(2)` →
+ * `not.toBe(0)`, `assert x == 2` → `assert x != 0`). An old check that expected nothing (zero, empty, None) was flipped,
  * not loosened, so it is left alone, and so is an old check whose expression is still checked exactly by another assertion that took its
  * place (`siblings`: `assert.equal(calls, 3)` became `assert.equal(calls, after)`, next to a new `assert.ok(calls > before)`): the value was
  * edited, not relaxed. */
@@ -392,8 +424,10 @@ function relaxes(oldAssertion: string, newAssertion: string, language: Language,
   if (!subject || subject !== checkedExpression(newAssertion, language)) return false;
   if (siblings.some(other => isExact(other, language) && checkedExpression(other, language) === subject)) return false;
   if (language === "js") {
-    // A negated check reads the other way round: `.not.toBe(2)` turned into `.not.toBeLessThan(5)` is stricter, not looser.
-    if (/\.\s*not\s*\./.test(oldAssertion) || /\.\s*not\s*\./.test(newAssertion)) return false;
+    // A negated check reads the other way round: `.not.toBe(2)` turned into `.not.toBeLessThan(5)` is stricter, not looser. The one way a
+    // negation loosens is an exact check that became a negated one.
+    const negated = (text: string) => /\.\s*not\s*\./.test(text);
+    if (negated(oldAssertion) || negated(newAssertion)) return !negated(oldAssertion) && exactBecameExclusion(oldAssertion, newAssertion, language);
     const exact = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength)\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/.exec(oldAssertion)?.[1] ?? /assert\s*\.\s*(?:equal|strictEqual|deepEqual|deepStrictEqual)\s*\([^,]+,\s*(-?\d+(?:\.\d+)?)\s*[,)]/.exec(oldAssertion)?.[1];
     const bound = /\.(?:toBeGreaterThan|toBeGreaterThanOrEqual|toBeLessThan|toBeLessThanOrEqual)\s*\(/.test(newAssertion) || /assert\s*\.\s*ok\s*\([^;]*(?:>=|<=|>|<)/.test(newAssertion);
     if (exact !== undefined && Number(exact) !== 0 && bound) {
@@ -415,6 +449,8 @@ function relaxes(oldAssertion: string, newAssertion: string, language: Language,
     const operator = (text: string) => /^\s*assert\s+(?:not\s+)?.+?\s*(==|!=|>=|<=|>|<|\bin\b|\bis\b)/.exec(text)?.[1] ?? "";
     const exact = (operator(oldAssertion) === "==" && plain(oldAssertion)) || /\bself\s*\.\s*assertEqual\s*\(/.test(oldAssertion);
     const bound = ([">=", "<=", ">", "<"].includes(operator(newAssertion)) && plain(newAssertion)) || /\bself\s*\.\s*assert(?:Greater|Less)(?:Equal)?\s*\(/.test(newAssertion);
+    const unequal = (operator(newAssertion) === "!=" && plain(newAssertion) && !/^\s*assert\s+not\b/.test(newAssertion)) || /\bself\s*\.\s*assertNotEqual\s*\(/.test(newAssertion);
+    if (exact && unequal) return exactBecameExclusion(oldAssertion, newAssertion, language);
     if (!exact || !bound) return false;
     // `assert x == y` turned into `assert x > y` (or `x == 16` into `x > 16`) rejects what the old check accepted: another expectation.
     const value = (text: string) => /==\s*(-?\d+(?:\.\d+)?|[\w.]+(?:\([^)]*\))?)\s*(?:,|$)/.exec(text)?.[1] ?? /\bassertEqual\s*\([^,]+,\s*(-?\d+(?:\.\d+)?|[\w.]+)\s*[,)]/.exec(text)?.[1];
@@ -842,6 +878,11 @@ const CI_RUNNER = new RegExp(
   // Python's own runners and the browser runners: `python3 -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`.
   String.raw`|(?<![\w./-])python[\d.]*\s+-m\s+(?:unittest|pytest|nose2?)(?![\w/-])` +
   String.raw`|(?<![\w./-])(?:nosetests|nose2|py\.test|stestr|behave|jasmine|playwright\s+test|cypress\s+run|karma\s+start|hatch\s+(?:run\s+)?test|swift\s+test)(?![\w/-])` +
+  // Task runners: `deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`, `./gradlew test`, and Node's own `node --test`.
+  String.raw`|(?<![\w./-])(?:deno\s+(?:task|run)|just|task|poe|rake|composer(?:\s+run)?|mix|sbt|lein|stack|cabal|(?:\./)?(?:gradlew|mvnw)(?:\.bat|\.cmd)?)\s+(?:-\S+\s+)*test(?![\w/-])` +
+  String.raw`|(?<![\w./-])(?:node|tsx)(?:\s+-\S+)*\s+--test(?![\w-])` +
+  // A project's own test script, run through its interpreter or by path: `python scripts/run_tests.py`, `./scripts/test.sh`, `python tests/test_cli.py`.
+  String.raw`|(?<![\w./-])(?:(?:python[\d.]*|node|bash|sh|zsh|ruby|pwsh|tsx|ts-node)(?:\s+-\S+)*\s+|\./)(?:[\w.-]+/)*(?:(?:run[_-]?)?tests?(?:[_-](?:all|suite|runner|unit|ci))?|test_[\w-]+|[\w-]+_test)\.(?:py|sh|bash|js|mjs|cjs|ts|rb|ps1)(?![\w-])` +
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
 // The shell builtin `test -f summary.md && cat summary.md` checks a file: it has the word on the line and runs no tests.
 const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*-[bcdefghkLnOGprsStuwxzN](?=\s)/g;
@@ -851,7 +892,7 @@ const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
 
-export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number }
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number; commandsBefore?: string[]; commandsAfter?: string[] }
 
 // A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
 const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
@@ -899,8 +940,14 @@ function triggerSection(text: string): string | null {
   return lines.slice(start, end).join("\n");
 }
 
-function gatingTestLines(file: string, text: string): number {
-  return /\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text) ? matchingLines(text, ciRuns) : 0;
+/** The test commands a workflow runs when changes are pushed or reviewed, one per line that runs one, as `npm test` rather than `- run: npm  test # x`,
+ * each followed by the directories the workflow says it works in (`working-directory: web`): the same command in two services of a monorepo is
+ * two checks. Empty for a workflow that gates nothing. */
+export function gatingTestCommands(file: string, text: string): string[] {
+  if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
+  const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
+  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && ciRuns(line))
+    .map(line => `${line.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
 }
 
 function matchingLines(text: string, pattern: RegExp | ((line: string) => boolean)): number {
@@ -912,17 +959,21 @@ function matchingLines(text: string, pattern: RegExp | ((line: string) => boolea
 export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
-  const after = gatingTestLines(file, now);
-  return { file, before: gatingTestLines(file, was), after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, ciRuns) : 0 };
+  const commandsBefore = gatingTestCommands(file, was), commandsAfter = gatingTestCommands(file, now);
+  const after = commandsAfter.length;
+  return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, ciRuns) : 0, commandsBefore, commandsAfter };
 }
 
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
- * moving them to another workflow, or to a shared one, is not removal. */
-export function resolveCiTestSteps(counts: CiTestCount[], commit: string): Infraction[] {
+ * moving them to another workflow, or to a shared one, is not removal, and neither is dropping a duplicate: every test command it ran is still run
+ * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch. */
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set()): Infraction[] {
   const before = counts.reduce((sum, item) => sum + item.before, 0);
   const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
   if (after >= before) return [];
+  const running = new Set([...counts.flatMap(item => item.commandsAfter ?? []), ...elsewhere]);
   return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
+    .filter(item => item.commandsBefore === undefined || item.commandsBefore.some(command => !running.has(command)))
     .map(item => item.ungatedAfter > 0
       ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)
       : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
@@ -944,7 +995,25 @@ const NON_CHECK_ACTION = new RegExp(String.raw`^\s*(?:-\s+)?uses:\s*["']?(?:` + 
   String.raw`codecov/codecov-action`, String.raw`coverallsapp/github-action`,
 ].join("|") + String.raw`)(?:/[\w./-]+)?@`, "i");
 
-interface LenientStep { count: number; line: number; runsChecks: boolean; nonCheck: boolean }
+interface LenientStep { count: number; line: number; runsChecks: boolean; nonCheck: boolean; commands: string[] }
+
+/** The commands of a step or job as written, one per `run:` or `uses:` and one per line of a `run: |` block, with the spaces collapsed. */
+function scopeCommands(scope: string[]): string[] {
+  const found: string[] = [];
+  scope.forEach((line, index) => {
+    const head = /^(\s*(?:-\s+)?)(?:run|uses)\s*:\s*(.*)$/.exec(line);
+    if (!head || line.trim().startsWith("#")) return;
+    const text = head[2].replace(/\s#.*$/, "").trim();
+    if (text && !/^[|>][+-]?$/.test(text)) { found.push(text.replace(/\s+/g, " ")); return; }
+    const keyAt = head[1].length;
+    for (let next = index + 1; next < scope.length; next++) {
+      if (!scope[next].trim()) continue;
+      if (scope[next].length - scope[next].trimStart().length <= keyAt) break;
+      if (!scope[next].trim().startsWith("#")) found.push(scope[next].trim().replace(/\s+/g, " "));
+    }
+  });
+  return found;
+}
 
 /** Tolerated-failure markers per enclosing step or job, keyed by that step's own line; `runsChecks` says whether that step or job runs a
  * test command anywhere in it, and `nonCheck` that it is one step that uses an action from NON_CHECK_ACTION and runs nothing. */
@@ -972,8 +1041,9 @@ function lenientSteps(text: string): Map<string, LenientStep> {
     const scope = lines.slice(start, end), runsChecks = matchingLines(scope.join("\n"), ciRuns) > 0;
     const uses = scope.filter(item => /^\s*(?:-\s+)?uses:/.test(item));
     const nonCheck = !runsChecks && uses.length === 1 && NON_CHECK_ACTION.test(uses[0]) && !scope.some(item => /^\s*(?:-\s+)?run:/.test(item));
+    const commands = scopeCommands(scope);
     const entry = found.get(identity);
-    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; entry.nonCheck &&= nonCheck; } else found.set(identity, { count: 1, line: i + 1, runsChecks, nonCheck });
+    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; entry.nonCheck &&= nonCheck; entry.commands.push(...commands); } else found.set(identity, { count: 1, line: i + 1, runsChecks, nonCheck, commands });
   });
   return found;
 }
@@ -1049,8 +1119,14 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
     // A step written as `- run: npm test` is the same step as `run: npm test` under a new `- if: false` item.
     const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).flatMap(line => [line.trim(), line.trim().replace(/^-\s+/, "")]));
     const newLines = newText.split(/\r?\n/);
+    // A tolerance that was already there for the same commands and only moved is not new: a report job that was allowed to fail, merged into a job whose
+    // step is allowed to fail. It counts as moved while the number of tolerated places did not grow.
+    const toleratedPlaces = (text: string) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && /continue-on-error:\s*true|allow_failure:\s*true/.test(line)).length;
+    const toleratedBefore = new Set([...before.values()].flatMap(step => step.commands));
+    const moved = toleratedPlaces(newText) <= toleratedPlaces(oldText);
     for (const [identity, now] of lenientSteps(newText)) {
       if (now.nonCheck || (!gating && !now.runsChecks)) continue;
+      if (moved && now.commands.length > 0 && now.commands.every(command => toleratedBefore.has(command))) continue;
       if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
         const marker = (newLines[now.line - 1] ?? "").trim();
         out.push(finding("guard-weakened", file, now.line, marker, /^(?:-\s+)?if:/.test(marker) ? "CI step is now switched off" : "CI step is now allowed to fail", commit));
