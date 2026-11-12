@@ -44,6 +44,10 @@ describe("a Python expectation of nothing turned into its opposite is flipped, n
     expect(review(py("assert not memory.items"), py("assert memory.items is not None"), file)).toEqual([]);
   });
 
+  it("does not read the negation of a compound condition as a compound check", () => {
+    expect(review(py("assert not (cap > 0 and used + 50 >= cap)"), py("assert admitted.unlimited"), file)).toEqual([]);
+  });
+
   it("still reports a compound check that lost a clause, whatever the clause says", () => {
     expect(review(py("assert data is not None and not data.refresh_pending"), py("assert data is not None"), file)).toEqual(["assertion-weakened"]);
   });

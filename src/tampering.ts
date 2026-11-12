@@ -542,7 +542,9 @@ function isWeaker(rawOld: string, rawNew: string, language: Language): boolean {
     const limit = /(?:>=|<=|>|<)\s*([^\s,)]+)/.exec(oldAssertion)?.[1];
     // An old check that expected nothing (`is None`, `not x`, `== 0`, `== []`) turned into a weak one (`is not None`, a bare name) is a flipped expectation. A compound check that has a `not` among its clauses
     // (`assert data is not None and not data.pending` turned into `assert data is not None`) expects more than nothing: the clause that was dropped is a check that got weaker.
-    const expectsNothing = EMPTY_PY.test(oldAssertion) && !/\b(?:and|or)\b/.test(oldAssertion.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, ""));
+    // Only an `and` or `or` outside every bracket makes a check compound: `assert not (cap > 0 and used >= cap)` is the negation of one condition.
+    const outsideBrackets = oldAssertion.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, "").replace(/[([{][^()[\]{}]*[)\]}]/g, " ").replace(/[([{][^()[\]{}]*[)\]}]/g, " ").replace(/[([{][^()[\]{}]*[)\]}]/g, " ");
+    const expectsNothing = EMPTY_PY.test(oldAssertion) && !/\b(?:and|or)\b/.test(outsideBrackets);
     return (WEAK_PY.test(newAssertion) && !expectsNothing) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|[<>]=?/.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit)));
   }
   return false;
