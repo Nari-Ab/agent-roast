@@ -1,0 +1,227 @@
+sample	repository	commit	build that blocked it	sorted as	cause	blocked by 0.18.0
+1	awslabs/cli-agent-orchestrator	8d12376b0277d44d2ac07e54863c22556f69f95b	0.17.0	false alarm	an equivalent refactor read as a weaker check	yes
+1	basicmachines-co/basic-memory	2e5d6f1e23ebb073889c0beb00e965c990ea43a8	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	basicmachines-co/basic-memory	3d433fd008acf31245959495b931e30a32f8d30b	0.17.0	false alarm	an equivalent refactor read as a weaker check	yes
+1	boxlite-ai/boxlite	088995a70f2e2e9425a4cf6c22766d3c8ede5185	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	1c9a4dfc4de9b9272b297a33ad43956bc0a44c71	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	1db1bab14daa4321f23ebf5c4bf276c3522b9680	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	2b5409296d1b492eb77d373b3f58e686f3729c2c	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	2d3658c05003b835a23122476930e8227c4d4244	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	32dd9aa4d8d18949c9307d197de7a5cc07038824	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	33fd1de263850227c36aab1ef717a293411f3edd	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	3a9b6c4ea45cabbc2257643d4f578ba8d978e760	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	444f3df31619f16072c2a8cde0d551fbbae4f6c0	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	5b335b51bb04f501d7f7915b2e9b39cba7585635	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	6435328ebe201885275ae2d5559cc467262e050a	0.17.0	false alarm	a method called fit() read as a focused test	no
+1	boxlite-ai/boxlite	6561f32be7348ed90a2a8a1f6e4dfeb01310e8c5	0.17.0	false alarm	an equivalent refactor read as a weaker check	yes
+1	boxlite-ai/boxlite	7cdfdd71e36a9d9f617e7d272e6b6477ebf40cb0	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	8e9f235b7715974da4da45feb4595f454e652322	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	923799bea7ecb368cb914e84b86f3f4114d4be2d	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	a35976c088b584dbc6836377344c2770d456d451	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	a39b7495838f5f3a46e82333c2b82112b0e8117c	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	a53a4102eca56e23b11eae4f2002e4e7b28a1742	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	a8428e279ede668665182607fc926aa6227274f7	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	b28c068beac047bc9b0f7fa50b26d6fd6771711a	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	b59b8c1f39e45e49adede56a65749a431d1380e7	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	b8c66bf05adcfa4d547ad04a39c2189ca1d30b14	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	c1e89966757ba86b204a7028d56970e691296632	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	c8623516f6fb0d26fdc5903082c78deb13b739ac	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	d093321fc5be44a301e4a0882c6b2145a8d496c6	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	d6802e83ae5a75c87af04fb6376b54262f4eeab5	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	dc0be5e11d81bc28591810dc56d7fe0ba551a4f3	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	de55ab0acea1f2bd89a3d0c11b9e9c6c9b53fb63	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	e27c9fe956a3739337afe2ec91e8fc258d71fe65	0.17.0	false alarm	a method called fit() read as a focused test	no
+1	boxlite-ai/boxlite	e51c13a559c2b9f7e1fa9e468f8588862f163d52	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	e8722183539be9c88fdd950e733a2cb8b2249c88	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	boxlite-ai/boxlite	ea69dc2f0ae283b87b0e19688967100ecbe6d23b	0.17.0	false alarm	a method called fit() read as a focused test	no
+1	ClawBio/ClawBio	9d822b096b21f4f8f6725f313acb99bdc42f798f	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	coveragepy/coveragepy	08fbc3229adc8e7681a0d9134d3d5beb1684ae54	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	coveragepy/coveragepy	c33085c3fcec4dd01fc3a0419c90de7ee6b869a7	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	enarjord/passivbot	061e472e3d400cb3a740583d52f9d46e02eaf781	0.17.0	false alarm	an assertion read wrongly (brackets, a compound, a limit against a variable, a negative check)	no
+1	enarjord/passivbot	9debd616818110f4fa7ca29461b0f9b348b43312	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	enarjord/passivbot	d4cd2d32502e8add96bf8f31ae18ad2e1e200686	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	enarjord/passivbot	fbc1e881e4bb3a5989c406ec427562906533954a	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	github/squad	a1a8e1f4ec10b2dc08411009f29acf725d9ab515	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	github/squad	c7d8791c9d6408097ef11ede3143931629547d31	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+1	hexabot-ai/Hexabot	107e6da96c5a792aab112134d82db73321bfa2c9	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	hexabot-ai/Hexabot	4ad55b866715ed94b2f6eebabe3f10be9d7358b6	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+1	inclusionAI/Avernet	08a32e141b60015b7b6f365b8381c9787882d6ab	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	inclusionAI/Avernet	2a07e78ae5cd554ebbd688aaebfc43b4a7aeb560	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	inclusionAI/Avernet	65e270da6d427132f2183b4f558c7ac348761ff7	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	jgravelle/jcodemunch-mcp	bfbcea104efa7050428711eecdf264135a51ea77	0.17.0	false alarm	an assertion read wrongly (brackets, a compound, a limit against a variable, a negative check)	no
+1	kunchenguid/axi	622a35b968ecfb7c7d9db40b837d57f4cd9dad71	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	lasharor/cleanyourtv-WebOS	3866b7606c5f0504b52ad98bc9558e4a7e537fc1	0.17.0	false alarm	a method called fit() read as a focused test	no
+1	linear/linear	a84d41819149c4bc6646caa7865f1259f2eb5fa3	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	linear/linear	ff770f3eaed66f7a2619c10d5454bec3c2c308d5	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	mujocolab/mjlab	96fbe35320f40b689eb1b7ec5d9316fc13ac7901	0.17.0	false alarm	an equivalent refactor read as a weaker check	yes
+1	nicedreamzapp/claude-code-local	440cd68936fe0fc6e33d2f90307b139ba33d777e	0.17.0	false alarm	a skip or ignore on a test the change adds	no
+1	open-legal-products/mike	2ec7cfc1e4ddd033f66fdf73634d7fe0072c8b32	0.17.0	false alarm	a mock factory that keeps the real module	no
+1	open-legal-products/mike	4df3edd5da88d7b09819ae3bb489ed8d82bc5f26	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	open-legal-products/mike	9de02492b6a993c239674bbfcefa5affa0a76a70	0.17.0	false alarm	an assertion read wrongly (brackets, a compound, a limit against a variable, a negative check)	no
+1	open-legal-products/mike	cab1a40e983eb3278b8acd22afca84da63909e11	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	open-legal-products/mike	d0a7ca7550bdaa3f21284b730c3139951ac89576	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+1	open-legal-products/mike	fa37b86d4add8e24286f54ef6a83b0a715a6ed96	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	openeverest/openeverest	dcd9cb089e562c221a046dc7328fec69e7c96335	0.17.0	false alarm	an assertion read wrongly (brackets, a compound, a limit against a variable, a negative check)	no
+1	proffesor-for-testing/agentic-qe	42924a7bfa51457b840ba1f63c59e1726fff71fc	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+1	proffesor-for-testing/agentic-qe	d26023c728f5036fc3cfe274e5b925495a13f6e5	0.17.0	for a reviewer	an assertion that got weaker	yes
+1	React95/React95	26aabb344179cdfee4327e58937ab6d7f31cb4e0	0.17.0	false alarm	tests moved to a monorepo runner	no
+1	sandbox-quantum/switch	9493ecf14356572a644e5fe016e4b729c788ad53	0.17.0	false alarm	a mock factory that keeps the real module	no
+1	SemiAnalysisAI/InferenceX	38f1832cf8cb3aedad16a5af02c54ff6431b12a3	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	sgl-project/SpecForge	33f402fc800f822f485a90b2d3de47ddda2ee176	0.17.0	for a reviewer	a test that was running is switched off	yes
+1	vacanza/holidays	39f3538764e7413c3b7a15426e065294238ce493	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	vacanza/holidays	749d783b270a31ef5662e735e527825b68559f5b	0.17.0	for a reviewer	a test that was running is switched off	yes
+1	vacanza/holidays	80927d6110889b26ae3ccd198198b7f4a32e7f61	0.17.0	for a reviewer	a test that was running is switched off	yes
+1	vacanza/holidays	bf54bcdd58ec072e8a274ea0949b79627e510723	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+1	vacanza/holidays	ddcb3b88c588e37c32b9db48031048470fc5e383	0.17.0	for a reviewer	a lint, coverage or CI gate changed	yes
+2	apache/cordova-ios	a8f9c5726af012e4efa60b222857ae0252c47099	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	apache/cordova-ios	d063f443bf74bee8eb8221cd3333eb947eb174ab	after the fixes from sample 1	false alarm	an equivalent refactor read as a weaker check	yes
+2	BytePioneer-AI/codex-host	06c2f9e7aeecf165fb1da5d75331f892943a0803	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	clavia-labs/tardigrade	1c25de45ad474f627ff955f4707d7d31e7b38b1e	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	clavia-labs/tardigrade	b8448c59a1fbf1296b045885d2a6ffed9cb91641	after the fixes from sample 1	for a reviewer	a test that was running is switched off or marked to fail	yes
+2	clavia-labs/tardigrade	de4934bfb682ef9d2f7e7ca6ee7809e712816ace	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	cloudflare/workers-sdk	022ee9dd5b13d811b439332ee0f8ca9affb6a403	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	dbos-inc/dbos-transact-ts	39e08cf81729bd7f02352aa7b79ac4f96da64517	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	dbos-inc/dbos-transact-ts	5dfc64fd466a80e78161013284816764d47111c9	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	dbos-inc/dbos-transact-ts	8495c0060e55d303a38b030900bb1f0c9429f611	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	dbos-inc/dbos-transact-ts	c6275fcc759dfb3634ef0acaba8bd11cd8b399f4	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	dbos-inc/dbos-transact-ts	fd7b8297f10ffd590591d75ea4d379806b332d81	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+2	deltachat/deltachat-desktop	f839866f476e1c086138c7849b564edb91b6d5f1	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+2	etkecc/ketesa	6f363796cfdd41a1934ae9995a5e0ce5ff690a71	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+2	farming-labs/farm.js	591f95f2ac83c8bbd763ece429f3f22f01fd1a4c	after the fixes from sample 1	false alarm	an equivalent refactor read as a weaker check	yes
+2	farming-labs/farm.js	884884d844c39f5253c36f5b6b27ddc7f5908e1e	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	gbasin/agentboard	6ea26981d3fb10ba6c5f70a387094dc83550b0d0	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	gbasin/agentboard	f21aff8454c5945649500900c158defd112a569b	after the fixes from sample 1	false alarm	a helper called fit() read as a focused test	no
+2	keptinventory/kept	29e92c02f2e63e59c8bd5058445591f1684d8d57	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	keptinventory/kept	94854c0209f3d81dc1ed03f50e07e2bea2d1af90	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	leo1oel/lattice	544f4847614f3189d4d1a3d9f4be5e8ab250c9d3	after the fixes from sample 1	false alarm	an equivalent refactor read as a weaker check	yes
+2	linghungegeg/Linghun	3e57d08477278886f2ea6eaa8fd0c1cd34f166ec	after the fixes from sample 1	for a reviewer	an assertion that got weaker	no
+2	linghungegeg/Linghun	8135effde9cb4b7a0a24c722919505f896633d41	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	linghungegeg/Linghun	9ab21753ef761ee46e3c8db4a6ec2e8a20e967bf	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	linghungegeg/Linghun	beb615edd636fb71785317e592bcbc163aca3a80	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	linghungegeg/Linghun	de714bd854fde82a492616e8f180fe93fc8a9802	after the fixes from sample 1	false alarm	an exact check turned into toBeUndefined() (a flipped or equivalent expectation)	no
+2	NYLLON-SOFTWARE/ember-cloudflare	07144d86973b5d48e225b791185ac2a337301d43	after the fixes from sample 1	false alarm	a helper called fit() read as a focused test	no
+2	NYLLON-SOFTWARE/ember-cloudflare	30279ee8bf3ca9f6e2ddd908ad9bd3825914bea4	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	NYLLON-SOFTWARE/ember-cloudflare	8fdc64a08b1e71fc8ebedb2be0e6768d23068f4e	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	NYLLON-SOFTWARE/ember-cloudflare	9109d818bcb0b07f95f9bd0b5fc2ed57406899f8	after the fixes from sample 1	false alarm	an equivalent refactor read as a weaker check	yes
+2	OpenLAIR/dr-claw	cf5aa7a0aae675013f345c14e309476ae20605a2	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+2	sonichi/sutando	5930a5d73c69839149e2acbb5e2f39d6200a90b8	after the fixes from sample 1	false alarm	a patch that is only assigned, or a mock the code under test rewires	no
+2	sonichi/sutando	aa42eb682534f7611fc6929dc0360058558b6563	after the fixes from sample 1	false alarm	a patch that is only assigned, or a mock the code under test rewires	no
+2	sonichi/sutando	ac108d75eaaa360b8f35117db813d1d1d8f05790	after the fixes from sample 1	false alarm	a patch that is only assigned, or a mock the code under test rewires	no
+2	superlinked/sie	22aa8250d41a67cbb14077e27f75a1ce1dc3b57a	after the fixes from sample 1	for a reviewer	an assertion that got weaker	yes
+2	vllm-project/speculators	52729cb7230ab30af443a3cae0e293e3faee1d6c	after the fixes from sample 1	for a reviewer	a test that was running is switched off or marked to fail	yes
+2	vllm-project/speculators	9d8fabf90c6b778865fd3dd4e7a6c16e671ea94f	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+2	whoahaow/rjsxrd	7d75432eb01b84ed850a8691aa0374d412bad59e	after the fixes from sample 1	for a reviewer	a lint, coverage or CI gate changed	yes
+3	bluesky-social/ozone	c731a6f0a0aafdef8039ffb99f1dfa3de2bc6def	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	bpatrik/pigallery2	5f95856ab7f9f9e82ab6052a89d945eb75b0e3f9	after the fixes from samples 1 and 2	false alarm	a known failure marked inside a test the change adds	no
+3	bpatrik/pigallery2	64854e4a738e0bc14e2c4b6ebcfe8a61c2b9d268	after the fixes from samples 1 and 2	false alarm	a known failure marked inside a test the change adds	no
+3	bpatrik/pigallery2	8f90d3601242b115ecea37fc5273debf3ac3fe05	after the fixes from samples 1 and 2	false alarm	a known failure marked inside a test the change adds	no
+3	ChenlizheMe/Infernux	b23296ad0686c9b218be831b22e9d25938754607	after the fixes from samples 1 and 2	false alarm	an equality turned into a strict inequality against the same value	no
+3	ChenlizheMe/Infernux	fe6d000abdee64b17bc4da028be7552ae440297d	after the fixes from samples 1 and 2	false alarm	an equality turned into a strict inequality against the same value	no
+3	coder/xum	1da00e46455fbd527ee248c61d2b1231fae902f3	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	coder/xum	7717f0e9eaa4985ec14ed914ea6025a409bc5459	after the fixes from samples 1 and 2	false alarm	an equivalent refactor read as a weaker check	yes
+3	coder/xum	f84be7246544a7ca9d83a062cefaeadd321b52a3	after the fixes from samples 1 and 2	false alarm	an equivalent refactor read as a weaker check	yes
+3	earthaccess-dev/earthaccess	016633b5fb6b8b2f12c93108920defb4cb28c54b	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	earthaccess-dev/earthaccess	4aa122390a78280a0b1a3af67abac21e6bf280bb	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	earthaccess-dev/earthaccess	76f1b5df0510dd59b131dcfa1f4be5aaac7dae03	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	earthaccess-dev/earthaccess	e38dcc362c04c7d85ea56a447f4eee084fa9c5cd	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	elastic/elasticsearch-js	eeeed8b9d8a47fc45949ce257a1f66e9f4185a68	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	EvanBacon/serve-sim	3bf95db12f9b6e1fa6a270e92f7558fbab62b357	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	firebase/firebase-js-sdk	0079975f661d9158ebbf22055b3903b00bd4a48a	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	firebase/firebase-js-sdk	165700746ddc870fa4f43091de4424de48c4cc8f	after the fixes from samples 1 and 2	false alarm	test data or a helper read as a trivial assertion	yes
+3	firebase/firebase-js-sdk	36d0ca32dc1b08ed840db008f3a629cde2971fa2	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	firebase/firebase-js-sdk	4cc583c6bfc433cc476ec115adfc00ddce0f3701	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	firebase/firebase-js-sdk	6e7226ed0a6248aa3ecd1c6433b19478cd789946	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	firebase/firebase-js-sdk	7b67f3b2b2bd79e8457fc1226633eea1c6b2f29c	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	firebase/firebase-js-sdk	82dd7edb7dc0d2aa6734cb69ebca0fdcaadd6659	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	firebase/firebase-js-sdk	8a0fef2f26d3239ec9bf237ec66e9b60b0b52f0c	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	firebase/firebase-js-sdk	96fb62ce1050c6a1371a7a84762cb48877d541d9	after the fixes from samples 1 and 2	false alarm	test data or a helper read as a trivial assertion	yes
+3	firebase/firebase-js-sdk	a27d6170d3cceca37193802a71910da6ae836b3b	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	firebase/firebase-js-sdk	d33e44e702e7bb853a83797f78301111e95c61ce	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	firebase/firebase-js-sdk	e4aadfe85bf05884e3a74ed1bf170b20d1c2db29	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	google/grain	18c543fef367685bcb045243652734bfe4b8419a	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	microsoft/apm	42f6ce893cf82602338087f6592356ee6a986f60	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	microsoft/apm	83dc6932404638027af927d154f57da228e1ece8	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	microsoft/apm	d3c5cd9bd793fd430d6e0eb3371acbdcaedcd8d3	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	mongodb/js-bson	28ce4d584ce399d99c41c5f5fd022b6e16f7b913	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	mongodb/js-bson	d9f0eaa243ceeba8dd82e9c3b07fd8bca10cfc44	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	naomiaro/waveform-playlist	aa506c29a0a7987cb4f513ef0257d90dd0da5fd8	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	neo4j/neo4j-javascript-driver	08229c11244e7d2a20880b8cf557a08dca3d3c28	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	neo4j/neo4j-javascript-driver	7b928d8c84a4b39270cef4a284b26cecd4984dd9	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	ni/nidaqmx-python	ac8a24ec6b70890ad4155fa035245991d38c4858	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	ni/nidaqmx-python	fcddb56f69d2c104dfb3ff226ee1d2d008810be6	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	NVIDIA/TransformerEngine	45223d764a28fdaae242de3f0077c34f538d00de	after the fixes from samples 1 and 2	false alarm	a method of the patched object runs after the patch	no
+3	openstack/cinder	953620ad048c95bc8b2a731a3783d58c439d4b04	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	Prism-Shadow/penguin-harness	436576cf1f51556b96ab8d9c91d7e039ed30cfae	after the fixes from samples 1 and 2	for a reviewer	a test that was running is switched off or marked to fail	yes
+3	Prism-Shadow/penguin-harness	5d01f6a48a854b4f70456a91a4d061f8b4e77402	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	Prism-Shadow/penguin-harness	acdfddc971206e3da7614da9eb5111c7426661d6	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	Prism-Shadow/penguin-harness	eb92af965b1318e49d86656f5f41edf08344875c	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	Prism-Shadow/penguin-harness	f168a408f504cce330c6b52cfbe872b393ec7ab1	after the fixes from samples 1 and 2	false alarm	an equivalent refactor read as a weaker check	yes
+3	Prism-Shadow/penguin-harness	f5261769598f4c1a71d90f94cc92c2590d6f03de	after the fixes from samples 1 and 2	for a reviewer	an assertion that got weaker	yes
+3	RobotecAI/rai	ce4885cb9a20c44e948f7645758948ab27145b7c	after the fixes from samples 1 and 2	false alarm	brackets around the message of an assertion	no
+3	strictdoc-project/strictdoc	120ec58863cf96fead2b829672ab7dc5f41fca0a	after the fixes from samples 1 and 2	for a reviewer	a lint, coverage or CI gate changed	yes
+3	strictdoc-project/strictdoc	5cd4617496ae2dea6585882bfa019f7d43c99a4b	after the fixes from samples 1 and 2	false alarm	test data or a helper read as a trivial assertion	yes
+4	abacusai/abacusai-bot	5edaecf159a777a8286e9ba573d3026e27ae6e9b	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+4	agsh/onvif	23dac1834bfb2fc10c0a2e74d559a565e8c69935	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	agsh/onvif	a325700c4ade4e38c86ffb30ed1a13079e23a5e3	0.17.0 and 0.18.0	for a reviewer	a CI, lint or type gate changed	yes
+4	bitfocus/companion	39152ef9af67072356b0a231c7f638883ddb5960	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	bitfocus/companion	b9b8a645bb35062b2eafaed3613941e6e108a338	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	bitfocus/companion	fb28cfaa9fc5c0aa68a43a9124bf87940a2f1e3b	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+4	codevise/pageflow	49ea594876c1b65551284e7214699f6bfb0fccc6	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	crossbario/autobahn-python	1fa5959390326d78cd11f6ce412c1d5f78b7bfd5	0.17.0 and 0.18.0	false alarm	a CI step that is not a check (a comment, an artifact download) switched off or allowed to fail	yes
+4	crossbario/autobahn-python	2d8a883e8ee90886db14c357507b652fa78ba2a5	0.17.0 and 0.18.0	for a reviewer	a CI, lint or type gate changed	yes
+4	crossbario/autobahn-python	67282568ce9810ae977acd8e0db69ce10d92deb8	0.17.0 and 0.18.0	false alarm	a CI step that is not a check (a comment, an artifact download) switched off or allowed to fail	yes
+4	crossbario/autobahn-python	8e30928813516d14d07c3ca495a936d975883a18	0.17.0 and 0.18.0	false alarm	a CI step that is not a check (a comment, an artifact download) switched off or allowed to fail	yes
+4	crossbario/autobahn-python	d34f2e1f75db7802b749298129b4a9b0c99aad96	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	daaain/claude-code-log	06313773ed92fcc46e705177d742145cec9e954c	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	daaain/claude-code-log	a88f9e23c16598acc806efd1f776432140ff8d27	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	daaain/claude-code-log	b5aefa06f31f131972b0b61a612b8e10d6601af1	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	daaain/claude-code-log	fc80008426651179a662bfbc5adba33774611617	0.17.0	false alarm	an equality turned into a strict inequality against the same value	no
+4	dengmeiluan/ticket-monitoring	44d545b3c98c6909c75175060d7d68ca55e7b7fd	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	extension-js/extension.js	433cbe709f7ada0bf1d1a0f9106c74118c6e2b7b	0.17.0	false alarm	an exact check turned into toBeUndefined() (a flipped expectation)	no
+4	extension-js/extension.js	a4fe2db27715edc9838fc0d9279dc0522fa80f0b	0.17.0 and 0.18.0	for a reviewer	a CI, lint or type gate changed	yes
+4	henmedia/layerling	9e5a64d53c07f743ac65a1795d30c4756a70bb67	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	iblai/os	05aabca6b2fd97ef1cc664e24a4ae486f794c937	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	17eded58ac7d02e7532219d605039a5e10837e32	0.17.0 and 0.18.0	false alarm	a fixme whose test title is on the next line (a new test, or a marker that was already there)	yes
+4	iblai/os	239640a6c34d152f248f07362b22aba2d06a0509	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	3382f7b763d4c4fd9ac0ff651a6807dc20e6218c	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	45e8e7854db2acadda272465d9e44cad53589d9f	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	5caec7deb5d0c10797c0b4bcd4bcfbbc450a96b9	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	6066fd28809dd9f9ade046cd19237ec55e2f1391	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	6614d682d6439333e63fe2e2653727b81ef346a9	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	681d08d55aba89f45dd02eaba1e42021626b72a8	0.17.0 and 0.18.0	false alarm	a skip guarded at run time by an if (an environment check)	yes
+4	iblai/os	6a94012a93a068f9942293bc1b63afe1a3da885d	0.17.0 and 0.18.0	false alarm	a skip guarded at run time by an if (an environment check)	yes
+4	iblai/os	6c31e761d96edfd9058714bc6c3412e31490bfe9	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	6ec798236b4eb6ff3785be35ad9795a94a3ad3ff	0.17.0 and 0.18.0	false alarm	a skip guarded at run time by an if (an environment check)	yes
+4	iblai/os	782fdac7ce03785a5b31d50509fcb3e5142e9692	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	7b7b6999bbfe4043e6bd2b93a5d5bba2040c2d94	0.17.0 and 0.18.0	false alarm	a fixme whose test title is on the next line (a new test, or a marker that was already there)	yes
+4	iblai/os	7c3e5578abb4e98ceb44b1bc01693538c4e31fa4	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	7f9b921d9c46aab81873973b39a46be192acf88f	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	8a57a2afe5b3ce42c7f9697caa0744206538130b	0.17.0 and 0.18.0	false alarm	a fixme whose test title is on the next line (a new test, or a marker that was already there)	yes
+4	iblai/os	8f90a6e43fd2c2351b4a795ec22dedccb3f8ef7d	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	a64d80638742be1589b03f6629deb7b5e81f1f9a	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	b7f656c62d15f0376b426b3db04e23de105bf2bb	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	b9dffe05e9cf9e892cd5084918793113f65ee97a	0.17.0 and 0.18.0	false alarm	a skip guarded at run time by an if (an environment check)	yes
+4	iblai/os	f62a1d14c9ca2c10e60d7d9efcffef9a268a05fc	0.17.0 and 0.18.0	false alarm	a fixme whose test title is on the next line (a new test, or a marker that was already there)	yes
+4	iblai/os	f7751485b4d2e8b9f0aa4a093aa792c61ba2ab08	0.17.0 and 0.18.0	false alarm	a skip guarded at run time by an if (an environment check)	yes
+4	iblai/os	f94d77136ce4d8e8941f5f4846d670bfe74d2b7a	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	fb9f67003479e9273ab2c47944c850599b370d7b	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	iblai/os	fc6e056fb48f69a7809074707dbf6606537ab6d0	0.17.0	false alarm	a skip on a test the pull request adds	no
+4	jo-duchan/tapflow	3024fe6c4bfa38e2260f3f0c2b133de82eb368cc	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	jo-duchan/tapflow	a844d88316239c14683a2aaa400b21f2da82aecd	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	Kiln-AI/Kiln	65d47311c6c306b7f7ffddd8ef03113fe366f8bb	0.17.0	false alarm	a helper called fit() read as a focused test	no
+4	Kiln-AI/Kiln	7559b3ef40b43043c46149b2bf557dcfc95a5d1e	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	linkml/linkml	41586bab22580690ab710532bb12f33aceb51929	0.17.0	false alarm	a commit that re-enabled skipped tests, blamed for the ones left	no
+4	PierreGode/Ragnar	a2a3cc5e65164413c02ce3676e2b7786115c9c7e	0.17.0	false alarm	a skip that depends on whether a module can be imported	no
+4	pk910/PoWFaucet	0cd073c70bdad1614f6351610c3d875ef58a340b	0.17.0 and 0.18.0	false alarm	a manual legacy workflow removed, the tests still run elsewhere	yes
+4	reticlehq/reticle	68dd8a141bf62a17c08fec843bf0ba1bbc7fa7a5	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	reticlehq/reticle	779eb1d62f442b55c65f865aea2f0f60d72d3db5	0.17.0 and 0.18.0	for a reviewer	a check that got weaker	yes
+4	schoero/eslint-plugin-better-tailwindcss	0037c1243598c3127312a0ce4ee19ba48c92b70c	0.17.0 and 0.18.0	for a reviewer	a test that was running is switched off or focused	yes
+4	schoero/eslint-plugin-better-tailwindcss	ee8f03b1dfece97680e8fe8564666e5a2c4ed70d	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	schoero/eslint-plugin-better-tailwindcss	faf955dfe0b808591759751b0c801d0b1adff356	0.17.0 and 0.18.0	for a reviewer	a test that was running is switched off or focused	yes
+4	strands-labs/strands-decider	c3d00895e5cb90838632b3056f815c4e121ad9de	0.17.0 and 0.18.0	false alarm	a patch that the code under test rewires	yes
+4	TheRealSavi/iOpenPod	79ed4fa9891fef14ffe98e95cd4febae9334f24f	0.17.0 and 0.18.0	for a reviewer	a CI, lint or type gate changed	yes
+4	TheRealSavi/iOpenPod	847d11dec43dabe9b11e314c96e8be2140defe42	0.17.0 and 0.18.0	for a reviewer	a CI, lint or type gate changed	yes
+4	TheRealSavi/iOpenPod	a880678ebd7fc07ce38a2d149598263ae2361774	0.17.0 and 0.18.0	false alarm	an equivalent refactor or a rewritten test read as weaker	yes
+4	webpack/webpack-dev-middleware	4c71cc7227e40ff55b93b81446ba28ef11271d89	0.17.0 and 0.18.0	for a reviewer	a test that was running is switched off or focused	yes
+4	wikimedia/pywikibot	a1c98a6b90ea951dd356872fbba6611b63fd3361	0.17.0 and 0.18.0	for a reviewer	a test that was running is switched off or focused	yes
+4	wikimedia/pywikibot	db4f8040a456771ca3c8121e7820d0aa8e631d85	0.17.0 and 0.18.0	for a reviewer	a test that was running is switched off or focused	yes

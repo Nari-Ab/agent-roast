@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.18.0 — 2026-11-12
+
+**Fewer false alarms: what 0.17.0 blocked on repositories that no earlier measurement had used.**
+
+0.17.0 was replayed on the newest 300 commits of 40 public JavaScript, TypeScript and Python repositories that none of the earlier corpora
+contained (`benchmarks/unseen-corpus.tsv`). It blocked 74 of the 11,604 commits, in 23 of the 40 repositories, and a single Rust repository
+had 32 of them. Each was read in its source: 51 were not a weaker check, and what could be fixed is fixed here, so the same replay blocks 27
+commits in 17 repositories. Two more samples were replayed with the builds in between, and a fourth was drawn after this version was frozen:
+it blocked 41 of 10,726 commits in 18 of 40 repositories, where 0.17.0 blocks 65 (45 of them false alarms). Of the 41, 20 are a check that got weaker, a gate that was
+relaxed or a test that was switched off, and 21 are false alarms (nine of them in one repository, six kinds in all, none of them fixed here).
+`docs/benchmarks.md` section 9 has the tables, the false alarms that are left and the limits.
+
+- **Changed: a skip, ignore or expected-failure marker counts only on a test that was already there.** `test-skip` reported any skipped
+  test that a change introduced; a test the same change adds, already skipped, is no longer reported, and a new file is all new tests.
+  Most of those were not a check that got weaker: 28 of the 32 blocked commits of the Rust repository added an integration test marked
+  `#[ignore = "requires /dev/kvm"]` or another VM or root requirement; of the 42 commits that a skip blocked among the 9,761 commits of the
+  last measurement, 20 are not blocked any more, because the skipped tests are new (a Playwright test that needs `TEST_USERNAME`, an
+  integration test that needs a database, a parity case deferred to a later spec). A skip on a test that was running is reported as before.
+  The test behind a marker is found in Python, JavaScript and TypeScript, Rust (the `fn` below the attribute) and Go (the `func Test...`
+  around `t.Skip()`); the other languages keep comparing counts. A `test.skip(true, "reason")` or `test.fail(true, "reason")` inside a test
+  body belongs to the test around it, when that test's title is on the line that registers it. The price: an agent that writes a new test
+  and skips it because it cannot make it pass is not stopped by this rule.
+- **Assertions are read more carefully.** The brackets around a whole Python assertion or around its message are a formatter's choice, and
+  `assert m[0, 1] == 3.0` is an exact check rather than a bare name followed by a message (which also made an exact check on such a table,
+  turned into a bare subscript, invisible). A quote or a bracket inside a regular expression literal no longer swallows the lines after a
+  multi-line assertion, which used to compare them with whatever stood there before. `rejects.toThrow(/a/)` turned into
+  `rejects.not.toThrow(/b/)` says the error must not match, and is not the weak form of a throw. A threshold counts only against a number:
+  `toBeGreaterThan(before.height)` to `toBeGreaterThan(0)` after the subtraction moved, and an `in` test turned into `> 0`, are other checks.
+  A compound Python assertion (`a == x and b <= c`) is not read as one comparison. `toBeUndefined()` is no longer a weaker form of an exact
+  check: `toEqual(x)` turned into it says the property is gone, which is the opposite expectation, not a looser one (`.not.toBeUndefined()`
+  still is). A bound that rejects the value the old check pinned (`toBe(2)` to `toBeGreaterThan(2)` or `toBeGreaterThanOrEqual(3)`,
+  `assert n == 16` to `assert n > 16`) is another expectation, not a looser one. The price: an exact count that was changed and turned into
+  a minimum at the same time (`== 13` to `>= 14`) is no longer reported.
+- **A method called `fit()` or `xit()` is not a test.** With nothing between the brackets it is a method of a test double, such as a terminal
+  addon's `fit`; `expect(fit({ x: 1 }))`, `await fit("okapi")` and `const v = fit(a)` call a helper that has that name.
+- **Fewer false `trivial-assert` reports on mocks.** A mock factory that is handed the real module's loader keeps the real module, whatever
+  the parameter is called: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`. A Python patch counts
+  only while it is in force (a fixture, a decorator, a `with` header on one or several lines, `.start()`, `enter_context`), not a patcher that
+  is only assigned; and not when the code under test may rewire the patched object afterwards (it is handed to another call, or another
+  method of it runs after the patch).
+- **`nx`, `turbo`, `lerna`, `rush` and `bazel test` count as test steps,** so tests that moved to a monorepo runner in another workflow are not
+  reported as removed.
+- **Measured** on four samples of 39 to 40 repositories (158 repositories, 44,878 commits; `benchmarks/unseen-corpus.tsv`,
+  `heldout-corpus.tsv`, `third-corpus.tsv`, `fourth-corpus.tsv` with the revisions measured). Each sample was read blocked commit by blocked
+  commit, which is where every fix above comes from, so the figures of the first three samples after the fixes are fitted; only the first
+  figure of each sample, and the fourth sample, are out of sample. On the 24 repositories of section 6, 25 commits block where 0.17.0 blocked
+  30, with no weaker check lost. On the 9,761 commits of section 7, the new build blocks 86 commits where 0.17.0 blocked 107, 20 of them
+  skips on tests that the commit adds; one finding that a reader would keep is gone (`== 13` to `>= 14`).
+- Labeled cases: 131 cheats caught, 110 look-alikes left alone, 1 gap open (it was 126, 90 and 1); 20 of the 25 new cases fail on 0.17.0.
+
 ## 0.17.0 — 2026-11-11
 
 **An exact check that became a bound, and `toEqual` that became `toMatchObject`.**

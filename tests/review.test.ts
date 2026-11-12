@@ -83,7 +83,7 @@ describe("context review of committed code", () => {
     expect(result.removedFindings).toEqual([]);
   });
   it("uses immutable committed content despite different checkout/index content", async () => {
-    write("auth.test.ts", "it.skip('auth');\n"); const head = commit();
+    write("auth.test.ts", "it.only('auth');\n"); const head = commit();
     write("auth.test.ts", "it('auth');\n"); git("add", ".");
     const result = await reviewChanges({ cwd: dir, base, head });
     expect(result.infractions).toHaveLength(1); expect(result.headSha).toBe(head);
@@ -91,22 +91,22 @@ describe("context review of committed code", () => {
     expect(git("diff", "--cached")).toContain("it('auth')");
   });
   it("uses the common ancestor for source and supplied base tip for policy", async () => {
-    git("checkout", "-b", "feature"); write("auth.test.ts", "it.skip('auth');\n"); const head = commit();
-    git("checkout", "main"); policy({ rules: { "test-skip": "warn", "trivial-assert": "off" } }); const baseTip = commit();
+    git("checkout", "-b", "feature"); write("auth.test.ts", "it.only('auth');\n"); const head = commit();
+    git("checkout", "main"); policy({ rules: { "test-focus": "warn", "trivial-assert": "off" } }); const baseTip = commit();
     const result = await reviewChanges({ cwd: dir, base: baseTip, head });
     expect(result.mergeBaseSha).toBe(base); expect(result.policySha).toBe(baseTip);
     expect(result.passed).toBe(true); expect(result.infractions).toHaveLength(1);
   });
   it("gates a candidate that tries disabling rules or ignoring all paths", async () => {
-    policy({ rules: { "test-skip": "error" } }); base = commit();
-    policy({ failOn: [], rules: { "test-skip": "off" }, ignorePaths: ["**/*"] });
-    write("auth.test.ts", "it.skip('auth');\n"); commit();
+    policy({ rules: { "test-focus": "error" } }); base = commit();
+    policy({ failOn: [], rules: { "test-focus": "off" }, ignorePaths: ["**/*"] });
+    write("auth.test.ts", "it.only('auth');\n"); commit();
     const result = await reviewChanges({ cwd: dir, base });
     expect(result.exitCode).toBe(1); expect(result.policyChanges).toContain(".agentroastrc.json");
     expect(result.output).toContain("Candidate policy changes were ignored");
   });
   it("ignores invalid candidate config but rejects invalid trusted config", async () => {
-    write(".agentroastrc.json", "invalid json"); write("auth.test.ts", "it.skip('auth');\n"); commit();
+    write(".agentroastrc.json", "invalid json"); write("auth.test.ts", "it.only('auth');\n"); commit();
     expect((await reviewChanges({ cwd: dir, base })).exitCode).toBe(1);
     base = git("rev-parse", "HEAD"); write("auth.test.ts", "it('auth');\n"); commit();
     await expect(reviewChanges({ cwd: dir, base })).rejects.toThrow(/Invalid/);
@@ -150,24 +150,24 @@ describe("context review of committed code", () => {
   });
   it("handles spaces, newlines, quote characters and unusual git config safely", async () => {
     git("config", "diff.noprefix", "true"); git("config", "core.quotepath", "true");
-    write('тест "with\nnewline".test.ts', "it.skip('auth');\n"); commit();
+    write('тест "with\nnewline".test.ts', "it.only('auth');\n"); commit();
     const result = await reviewChanges({ cwd: dir, base });
     expect(result.infractions[0].file).toBe('тест "with\nnewline".test.ts');
     expect(result.output).toContain('with\\u000anewline');
   });
   it("keeps repository-relative paths when invoked below root with diff.relative enabled", async () => {
-    write("src/auth.test.ts", "it.skip('auth');\n"); commit();
+    write("src/auth.test.ts", "it.only('auth');\n"); commit();
     git("config", "diff.relative", "true");
     const result = await reviewChanges({ cwd: path.join(dir, "src"), base });
     expect(result.infractions[0].file).toBe("src/auth.test.ts"); expect(result.complete).toBe(true);
   });
   it("does not use Git replacement objects to change the inspected candidate", async () => {
-    write("auth.test.ts", "it.skip('auth');\n"); const head = commit();
+    write("auth.test.ts", "it.only('auth');\n"); const head = commit();
     const badObject = git("rev-parse", "HEAD:auth.test.ts");
     write("clean.ts", "const clean = true;\n"); git("add", "clean.ts"); const cleanObject = git("rev-parse", ":clean.ts");
     git("replace", badObject, cleanObject);
     const result = await reviewChanges({ cwd: dir, base, head });
-    expect(result.infractions[0].type).toBe("test-skip");
+    expect(result.infractions[0].type).toBe("test-focus");
   });
   it("handles concurrent independent reviews without persistent shared state", async () => {
     write("auth.test.ts", "it.skip('auth');\n"); commit();
@@ -181,7 +181,7 @@ describe("context review of committed code", () => {
     expect(run(...args).status).toBe(2);
   });
   it("writes GitHub summary and machine outputs based on complete result", () => {
-    write("auth.test.ts", "it.skip('auth');\n"); commit();
+    write("auth.test.ts", "it.only('auth');\n"); commit();
     const summary = path.join(dir, "summary.md"); const outputs = path.join(dir, "outputs.txt");
     const result = spawnSync((process.env.AGENT_ROAST_TEST_NODE || process.execPath), [cli, "review", dir, "--base", base, "--format", "github"], {
       encoding: "utf8", env: { ...env, GITHUB_STEP_SUMMARY: summary, GITHUB_OUTPUT: outputs },
@@ -216,11 +216,11 @@ describe("context review of committed code", () => {
   it("--advisory reports without failing, like an empty --fail-on, and does not mix with --fail-on", () => {
     // An empty argument does not survive every shell (cmd.exe and Windows PowerShell mangle it), so --advisory is the portable spelling.
     const node = process.env.AGENT_ROAST_TEST_NODE || process.execPath;
-    write("auth.test.ts", "it.skip('auth');\n"); commit();
+    write("auth.test.ts", "it.only('auth');\n"); commit();
     expect(run("--base", base).status).toBe(1);
     const advisory = run("--base", base, "--advisory");
-    expect(advisory.status).toBe(0); expect(advisory.stdout).toContain("WARN [test-skip] auth.test.ts");
-    expect(run("--base", base, "--advisory", "--fail-on", "test-skip").status).toBe(2);
+    expect(advisory.status).toBe(0); expect(advisory.stdout).toContain("WARN [test-focus] auth.test.ts");
+    expect(run("--base", base, "--advisory", "--fail-on", "test-focus").status).toBe(2);
     expect(spawnSync(node, [cli, "check", dir], { encoding: "utf8", env }).status).toBe(1);
     expect(spawnSync(node, [cli, "check", dir, "--advisory"], { encoding: "utf8", env }).status).toBe(0);
     // The history score has no pull request to advise on; the bare command and --worktree review uncommitted work instead.

@@ -141,7 +141,7 @@ describe("the Stop hook", () => {
   });
 
   it("keeps the feedback short and lists the worst findings first", async () => {
-    write("calc.test.ts", TEST.replace("toBe(4)", "toBeDefined()") + Array.from({ length: 9 }, (_, i) => `it.skip('later ${i}', () => {});\n`).join(""));
+    write("calc.test.ts", TEST.replace("toBe(4)", "toBeDefined()") + Array.from({ length: 9 }, (_, i) => `it.only('later ${i}', () => {});\n`).join(""));
     const result = await reviewWorktreeChanges({ cwd: dir });
     const message = formatAgentFeedback(result);
     expect(message).toMatch(/… and 4 more\./);

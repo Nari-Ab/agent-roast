@@ -130,12 +130,95 @@ function testBodies(text: string, language: Language): TestBody[] {
   });
 }
 
-/** Net open brackets on a line, ignoring string contents. */
+/** The text with the inside of each regular expression literal blanked out, same length, so that a quote or a bracket in a pattern
+ * (`/'\.github\/(a|b)/`) is not read as code. A `/` opens a literal after an operator or an opening bracket, not after a value. */
+function maskRegexLiterals(text: string): string {
+  let out = "", quote = "";
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quote) {
+      out += char;
+      if (char === "\\" && i + 1 < text.length) out += text[++i];
+      else if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") { quote = char; out += char; continue; }
+    if (char === "/" && text[i + 1] !== "/" && text[i + 1] !== "*") {
+      let p = out.length - 1;
+      while (p >= 0 && /\s/.test(out[p])) p--;
+      if (p < 0 || /[(,=:[!&|?{};+\-*%~^]/.test(out[p]) || /(?:return|typeof|case)$/.test(out.slice(0, p + 1))) {
+        let j = i + 1, inClass = false, closed = false;
+        for (; j < text.length; j++) {
+          const c = text[j];
+          if (c === "\n") break;
+          if (c === "\\") { j++; continue; }
+          if (c === "[") inClass = true;
+          else if (c === "]") inClass = false;
+          else if (c === "/" && !inClass) { closed = true; break; }
+        }
+        if (closed) { out += "/" + "_".repeat(j - i - 1) + "/"; i = j; continue; }
+      }
+    }
+    out += char;
+  }
+  return out;
+}
+
+/** Net open brackets on a line, ignoring string contents, regular expression literals and whatever a backslash escapes. */
 function balance(line: string): number {
-  const bare = line.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, "");
+  const bare = maskRegexLiterals(line).replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, "").replace(/\\./g, "");
   let net = 0;
   for (const char of bare) net += "([{".includes(char) ? 1 : ")]}".includes(char) ? -1 : 0;
   return net;
+}
+
+/** `assert x, ("message")` is `assert x, "message"`: the brackets around the message are a formatter's choice too. */
+function withoutMessageParens(statement: string): string {
+  let depth = 0, quote = "";
+  for (let i = 0; i < statement.length; i++) {
+    const char = statement[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+    else if (char === "," && depth === 0) {
+      const message = statement.slice(i + 1).trim();
+      if (!message.startsWith("(") || !message.endsWith(")")) return statement;
+      let inner = 0, q = "";
+      for (let j = 0; j < message.length; j++) {
+        const c = message[j];
+        if (q) { if (c === "\\") j++; else if (c === q) q = ""; }
+        else if (c === '"' || c === "'") q = c;
+        else if (c === "(") inner++;
+        else if (c === ")" && --inner === 0 && j < message.length - 1) return statement;
+      }
+      return `${statement.slice(0, i + 1)} ${message.slice(1, -1).trim()}`;
+    }
+  }
+  return statement;
+}
+
+/** `assert (a == b)` is `assert a == b`, and so is `assert (\n a == b\n), "msg"`: formatters add and drop those brackets. */
+function withoutOuterParens(statement: string): string {
+  const start = /^\s*assert\s+/.exec(statement);
+  if (!start) return statement;
+  if (statement[start[0].length] !== "(") return withoutMessageParens(statement);
+  let depth = 0, quote = "";
+  for (let i = start[0].length; i < statement.length; i++) {
+    const char = statement[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === "(") depth++;
+    else if (char === ")" && --depth === 0) {
+      const rest = statement.slice(i + 1);
+      return /^\s*(?:,|$)/.test(rest) ? withoutMessageParens(`${statement.slice(0, start[0].length)}${statement.slice(start[0].length + 1, i)}${rest}`) : statement;
+    }
+  }
+  return statement;
 }
 
 /** Whitespace, quote style and trailing commas are formatter choices, not behavior. */
@@ -146,9 +229,10 @@ function normalize(statement: string): string {
 /** Split on `;` outside string literals, so `expect(a); expect(b);` is two statements. */
 function splitStatements(text: string): string[] {
   const pieces: string[] = [];
+  const scanned = maskRegexLiterals(text);
   let quote = "", start = 0;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  for (let i = 0; i < scanned.length; i++) {
+    const char = scanned[i];
     if (quote) {
       if (char === "\\") i++;
       else if (char === quote) quote = "";
@@ -190,7 +274,7 @@ function parseTests(text: string, language: Language): TestInfo[] {
       while (depth > 0 && i + 1 < body.length) { i++; statement += " " + body[i].trim(); depth += balance(body[i]); }
       for (const piece of language === "js" ? splitStatements(statement) : [statement]) {
         const clean = piece.replace(CALLBACK_HEADER, "");
-        if (assertionPattern.test(clean)) { raw.push(clean); assertions.push(normalize(clean)); }
+        if (assertionPattern.test(clean)) { raw.push(clean); assertions.push(normalize(language === "py" ? withoutOuterParens(clean) : clean)); }
         else setupLines.push(clean);
       }
     }
@@ -212,13 +296,15 @@ function skeleton(assertion: string): string {
 }
 
 // `toHaveBeenCalled()` says a function ran, not with what; `toEqual(expect.anything())` accepts any value that exists.
-const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)|(?<!\.not)\.(?:toHaveBeenCalled|toBeCalled)\s*\(\s*\)|\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*expect\s*\.\s*(?:anything\s*\(\s*\)|any\s*\(\s*\w+\s*\))\s*\)/;
+// `toBeUndefined()` is not here: it pins one value, absence, and an exact check turned into it is a flipped expectation (a property that
+// was removed), which public history is full of; `.not.toBeUndefined()` says "something is there" and stays.
+const WEAK_JS = /\.(?:toBeDefined|toBeTruthy|toBeFalsy)\s*\(|\.not\s*\.\s*(?:toBeNull|toBeUndefined|toThrow)\s*\(\s*\)|\.toBeGreaterThanOrEqual\s*\(\s*0\s*\)|(?<!\.not)\.(?:toHaveBeenCalled|toBeCalled)\s*\(\s*\)|\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*expect\s*\.\s*(?:anything\s*\(\s*\)|any\s*\(\s*\w+\s*\))\s*\)/;
 // "Not zero" in place of an exact count: weaker than `toHaveLength(3)`, but the reverse of `toHaveLength(0)`.
 const BOUND_JS = /\.toBeGreaterThan\s*\(\s*(?:0|-1)\s*\)|\.toBeGreaterThanOrEqual\s*\(\s*[01]\s*\)/;
 const ZERO_JS = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toHaveBeenCalledTimes)\s*\(\s*(?:0|\[\s*\]|\{\s*\}|null|undefined|false|"")\s*\)/;
 // A bare name, attribute, `is not None` or `True` only says "something exists". A call such as
 // `assert caps.has_any([...])` is a real check, so it is never the weaker side.
-const WEAK_PY = /^\s*assert\s+[\w.\[\]]+\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
+const WEAK_PY = /^\s*assert\s+[\w.]+(?:\[[^\]]*\])*\s*(?:,.*)?$|^\s*assert\s+.+\bis\s+not\s+None\s*(?:,.*)?$|^\s*assert\s+True\b/;
 // `assert len(rows) > 0` in place of `assert len(rows) == 3`; not when the old check expected nothing (`== 0`, `is None`, `not x`).
 const BOUND_PY = /^\s*assert\s+.+(?:>\s*0|>=\s*[01])\s*(?:,.*)?$/;
 // (`\b` cannot follow `]`, `}` or a quote at the end of the text, so each alternative ends in the way that fits it.)
@@ -274,6 +360,17 @@ function isExact(assertion: string, language: Language): boolean {
   return false;
 }
 
+/** Whether `value <operator> limit` holds: a bound admits the value the old check pinned only when this is true. */
+function admits(value: number, operator: string, limit: number): boolean {
+  switch (operator) {
+    case ">": return value > limit;
+    case ">=": return value >= limit;
+    case "<": return value < limit;
+    case "<=": return value <= limit;
+    default: return true;
+  }
+}
+
 /** An exact check on an expression turned into a bound on the same expression (`toBe(2)` → `toBeGreaterThanOrEqual(2)`,
  * `assert len(x) == 3` → `assert len(x) >= 3`, `set(a) == set(b)` → `set(a) <= set(b)`), or `toEqual(X)` into `toMatchObject(X)`
  * with the same argument, which lets extra properties through. An old check that expected nothing (zero, empty, None) was flipped,
@@ -289,15 +386,39 @@ function relaxes(oldAssertion: string, newAssertion: string, language: Language,
     if (/\.\s*not\s*\./.test(oldAssertion) || /\.\s*not\s*\./.test(newAssertion)) return false;
     const exact = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength)\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/.exec(oldAssertion)?.[1] ?? /assert\s*\.\s*(?:equal|strictEqual|deepEqual|deepStrictEqual)\s*\([^,]+,\s*(-?\d+(?:\.\d+)?)\s*[,)]/.exec(oldAssertion)?.[1];
     const bound = /\.(?:toBeGreaterThan|toBeGreaterThanOrEqual|toBeLessThan|toBeLessThanOrEqual)\s*\(/.test(newAssertion) || /assert\s*\.\s*ok\s*\([^;]*(?:>=|<=|>|<)/.test(newAssertion);
-    if (exact !== undefined && Number(exact) !== 0 && bound) return true;
+    if (exact !== undefined && Number(exact) !== 0 && bound) {
+      // `toBe(2)` turned into `toBeGreaterThan(2)` or `toBeGreaterThanOrEqual(3)` rejects the value the old check pinned: another expectation.
+      const matcherLimit = /\.(toBeGreaterThan|toBeGreaterThanOrEqual|toBeLessThan|toBeLessThanOrEqual)\s*\(\s*(-?\d+(?:\.\d+)?)\s*\)/.exec(newAssertion);
+      const okLimit = /assert\s*\.\s*ok\s*\([^;]*?(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)\s*\)/.exec(newAssertion);
+      const operators: Record<string, string> = { toBeGreaterThan: ">", toBeGreaterThanOrEqual: ">=", toBeLessThan: "<", toBeLessThanOrEqual: "<=" };
+      if (matcherLimit && !admits(Number(exact), operators[matcherLimit[1]], Number(matcherLimit[2]))) return false;
+      if (okLimit && !admits(Number(exact), okLimit[1], Number(okLimit[2]))) return false;
+      return true;
+    }
     const same = matcherArgument(oldAssertion, "toEqual") ?? matcherArgument(oldAssertion, "toStrictEqual");
     return same !== null && same !== "" && same === matcherArgument(newAssertion, "toMatchObject");
   }
   if (language === "py") {
     if (EMPTY_PY.test(oldAssertion)) return false;
-    const exact = /^\s*assert\s+.+?\s*==\s*\S/.test(oldAssertion) || /\bself\s*\.\s*assertEqual\s*\(/.test(oldAssertion);
-    const bound = (/^\s*assert\s+.+?\s*(?:>=|<=|>|<)\s*\S/.test(newAssertion) && !/==/.test(newAssertion.replace(/[<>]=/g, ""))) || /\bself\s*\.\s*assert(?:Greater|Less)(?:Equal)?\s*\(/.test(newAssertion);
-    return exact && bound;
+    // A compound assertion (`... and a <= b`) holds more than one check; only a plain `x == y` turned into `x >= y` is read.
+    const plain = (text: string) => !/\b(?:and|or)\b/.test(text.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, ""));
+    const operator = (text: string) => /^\s*assert\s+(?:not\s+)?.+?\s*(==|!=|>=|<=|>|<|\bin\b|\bis\b)/.exec(text)?.[1] ?? "";
+    const exact = (operator(oldAssertion) === "==" && plain(oldAssertion)) || /\bself\s*\.\s*assertEqual\s*\(/.test(oldAssertion);
+    const bound = ([">=", "<=", ">", "<"].includes(operator(newAssertion)) && plain(newAssertion)) || /\bself\s*\.\s*assert(?:Greater|Less)(?:Equal)?\s*\(/.test(newAssertion);
+    if (!exact || !bound) return false;
+    // `assert x == y` turned into `assert x > y` (or `x == 16` into `x > 16`) rejects what the old check accepted: another expectation.
+    const value = (text: string) => /==\s*(-?\d+(?:\.\d+)?|[\w.]+(?:\([^)]*\))?)\s*(?:,|$)/.exec(text)?.[1] ?? /\bassertEqual\s*\([^,]+,\s*(-?\d+(?:\.\d+)?|[\w.]+)\s*[,)]/.exec(text)?.[1];
+    const limit = (text: string): [string, string] | null => {
+      const symbol = /^\s*assert\s+(?:not\s+)?.+?\s*(>=|<=|>|<)\s*(-?\d+(?:\.\d+)?|[\w.]+(?:\([^)]*\))?)\s*(?:,|$)/.exec(text);
+      if (symbol) return [symbol[1], symbol[2]];
+      const named = /\bassert(Greater|GreaterEqual|Less|LessEqual)\s*\([^,]+,\s*(-?\d+(?:\.\d+)?|[\w.]+)\s*[,)]/.exec(text);
+      return named ? [{ Greater: ">", GreaterEqual: ">=", Less: "<", LessEqual: "<=" }[named[1]]!, named[2]] : null;
+    };
+    const pinned = value(oldAssertion), bounded = limit(newAssertion);
+    if (pinned === undefined || !bounded) return true;
+    const [operator2, edge] = bounded;
+    if (/^-?\d/.test(pinned) && /^-?\d/.test(edge)) return admits(Number(pinned), operator2, Number(edge));
+    return !(pinned === edge && (operator2 === ">" || operator2 === "<"));
   }
   return false;
 }
@@ -326,15 +447,21 @@ function pinsLess(oldAssertion: string, newAssertion: string, language: Language
   return false;
 }
 
-function isWeaker(oldAssertion: string, newAssertion: string, language: Language): boolean {
+function isWeaker(rawOld: string, rawNew: string, language: Language): boolean {
+  // The matchers read the assertion without the brackets a formatter puts around its condition or its message.
+  const oldAssertion = language === "py" ? withoutOuterParens(rawOld) : rawOld, newAssertion = language === "py" ? withoutOuterParens(rawNew) : rawNew;
   if (pinsLess(oldAssertion, newAssertion, language) || relaxes(oldAssertion, newAssertion, language)) return true;
   if (language === "js") {
     if (THROWING_QUERY.test(newAssertion) || !JS_SPECIFIC.test(oldAssertion) || WEAK_JS.test(oldAssertion) || BOUND_JS.test(oldAssertion)) return false;
-    return WEAK_JS.test(newAssertion) || (BOUND_JS.test(newAssertion) && !ZERO_JS.test(oldAssertion));
+    // `toBeGreaterThan(before)` is not an exact check, and moving from it to `toBeGreaterThan(0)` is a refactor unless the old limit was a number.
+    const limit = /\.(?:toBeGreaterThan|toBeGreaterThanOrEqual|toBeLessThan|toBeLessThanOrEqual)\s*\(\s*([^)]*)\)/.exec(oldAssertion)?.[1];
+    return WEAK_JS.test(newAssertion) || (BOUND_JS.test(newAssertion) && !ZERO_JS.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit.trim())));
   }
   if (language === "py") {
     if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || !PY_SPECIFIC.test(oldAssertion)) return false;
-    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|\bin\b|[<>]=?/.test(oldAssertion));
+    // Same for Python: `assert grown > before` to `assert grown > 0`, and a membership test turned into `> 0`, are other checks.
+    const limit = /(?:>=|<=|>|<)\s*([^\s,)]+)/.exec(oldAssertion)?.[1];
+    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|[<>]=?/.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit)));
   }
   return false;
 }
@@ -509,15 +636,15 @@ export function resolveTampering(files: FileTampering[], productionChanged: bool
   ];
 }
 
-/** A marker that says a test is expected to fail (`xfail`, `it.fails`, `test.failing`, `test.fixme`, `expectedFailure`),
- * as opposed to a plain skip. */
-export function isKnownFailureMarker(finding: Infraction): boolean {
-  return finding.type === "test-skip" && /\bxfail\b|\bexpectedFailure\b|\bfixme\b|expected to fail/i.test(finding.reason);
+/** A marker that switches a test off or says it is expected to fail (`skip`, `xfail`, `it.fails`, `test.fixme`, `#[ignore]`, `t.Skip`), in a
+ * language where the test it applies to can be found: Python, JavaScript and TypeScript, Rust and Go. */
+export function isTestMarker(finding: Infraction): boolean {
+  return finding.type === "test-skip" && /\.(?:py|[cm]?[jt]sx?|rs|go)$/i.test(finding.file ?? "");
 }
 
-/** The test a known-failure marker applies to: the `def` below a decorator or a `marks=` argument, the `def` around a
- * `pytest.xfail()`, the title of a JavaScript registration. Null when it applies to more than one test (`pytestmark`), to
- * a test with no title on the line, or to a parametrized table. */
+/** The test a marker applies to: the `def` below a decorator or a `marks=` argument, the `def` around a `pytest.skip()`, the title of a
+ * JavaScript registration, the `fn` below a Rust attribute, the `func Test...` around a Go `t.Skip()`. Null when it applies to more than
+ * one test (`pytestmark`), to a test with no title on the line, or to a parametrized table. */
 function markedTest(finding: Infraction, lines: string[]): { key: string; title: string } | null {
   const snippet = finding.lineSnippet ?? "";
   const index = (finding.lineNumber ?? 1) - 1;
@@ -539,36 +666,72 @@ function markedTest(finding: Infraction, lines: string[]): { key: string; title:
     }
     return null;
   }
+  if (/\.rs$/i.test(finding.file ?? "")) {
+    // The attribute sits above the `fn` it applies to; other attributes and comments may come in between.
+    for (let i = index; i < lines.length && i < index + 12; i++) {
+      const fn = /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?fn\s+(\w+)\s*[<(]/.exec(lines[i]);
+      if (fn) return { key: `rs:${fn[1]}`, title: fn[1] };
+    }
+    return null;
+  }
+  if (/\.go$/i.test(finding.file ?? "")) {
+    // `t.Skip()` sits inside the test: the nearest `func TestX` above it.
+    for (let i = index; i >= 0 && i > index - 400; i--) {
+      const fn = /^func\s+(?:\([^)]*\)\s*)?((?:Test|Benchmark|Fuzz|Example)\w*)\s*\(/.exec(lines[i]);
+      if (fn) return { key: `go:${fn[1]}`, title: fn[1] };
+    }
+    return null;
+  }
   if (/\.each\b/.test(snippet)) return null;
-  const title = /(['"`])((?:\\.|(?!\1)[^\\\n])+)\1/.exec(snippet);
-  return title ? { key: `js:${title[0]}`, title: title[0] } : null;
+  // A registration (`it.skip('title', () => ...)`, `test.fixme('title', { annotation }, async () => ...)`) starts with its title; the string of
+  // `test.skip(cond, 'reason')` inside a test is a reason, and the call does not start with one.
+  const title = /\b(?:it|test|describe|suite|xit|xtest|xdescribe|fit|fdescribe)\b[\w$.\s]*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1\s*[,)]/.exec(snippet);
+  if (title) return { key: `js:${title[1]}${title[2]}${title[1]}`, title: `${title[1]}${title[2]}${title[1]}` };
+  // `test.skip(true, "reason")`, `test.fail(cond, ...)` and `test.fixme()` inside a test body belong to the test around them: the nearest line above
+  // with a smaller indent, when that is a registration with a title.
+  const indent = (lines[index] ?? "").search(/\S/);
+  if (indent > 0 && /\b(?:test|it)\s*\.\s*(?:skip|fixme|fail)\s*\(/.test(snippet)) {
+    for (let i = index - 1; i >= 0 && i > index - 200; i--) {
+      if (!lines[i].trim() || lines[i].search(/\S/) >= indent) continue;
+      const owner = /^\s*(?:test|it)(?:\s*\.\s*\w+)*\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1/.exec(lines[i]);
+      return owner ? { key: `js:${owner[1]}${owner[2]}${owner[1]}`, title: `${owner[1]}${owner[2]}${owner[1]}` } : null;
+    }
+  }
+  return null;
 }
 
-/** Known-failure markers a change put on tests that were already there. A marker on a test the change added documents a bug its
- * author knows about (public history is full of them: a new test for a reported issue, marked xfail); the same marker on a test
- * that was running is how a failure gets hidden. Markers are compared per test rather than per line of text, because the
- * lines of one file's markers are often identical and the review cannot tell which of them is the new one. A marker that
- * names no single test (`pytestmark = ...`) counts when the file has more of them than before. `before` and `after` are the
- * findings of the two versions of the file; `oldText` is null for a new file. */
-export function newKnownFailureMarkers(before: Infraction[], after: Infraction[], oldText: string | null, newText: string | null): Infraction[] {
-  const markers = after.filter(isKnownFailureMarker);
+/** Skip, ignore and expected-failure markers a change put on tests that were already there. A marker on a test the change added is not a
+ * check that got weaker: it is a bug its author knows about (a new test for a reported issue, marked xfail), a test that needs a
+ * server, a device or a database and is run on purpose (Rust's `#[ignore = "requires KVM"]`, a `skip(reason="needs a model on
+ * localhost")`), or a case deferred to a later change. The same marker on a test that was running is how a failure gets hidden.
+ * Markers are compared per test rather than per line of text, because the lines of one file's markers are often identical and
+ * the review cannot tell which of them is the new one. A marker that names no single test (`pytestmark = ...`) counts when the
+ * file has more of them than before. `before` and `after` are the findings of the two versions of the file; `oldText` is null
+ * for a new file, whose tests are all new. */
+export function newTestMarkers(before: Infraction[], after: Infraction[], oldText: string | null, newText: string | null): Infraction[] {
+  const markers = after.filter(isTestMarker);
   if (!markers.length || oldText === null) return [];
   const oldLines = oldText.split(/\r?\n/), newLines = (newText ?? "").split(/\r?\n/);
   const existed = (test: { key: string; title: string }) => test.key.startsWith("py:")
     ? new RegExp(`^\\s*(?:async\\s+)?def\\s+${test.title}\\s*\\(`, "m").test(oldText)
+    : test.key.startsWith("rs:") ? new RegExp(`\\bfn\\s+${test.title}\\s*[<(]`).test(oldText)
+    : test.key.startsWith("go:") ? new RegExp(`^func\\s+(?:\\([^)]*\\)\\s*)?${test.title}\\s*\\(`, "m").test(oldText)
     : oldText.includes(test.title);
-  const markedBefore = new Set<string>();
+  const markedBefore = new Map<string, number>();
   let unnamedBefore = 0;
-  for (const finding of before.filter(isKnownFailureMarker)) {
+  for (const finding of before.filter(isTestMarker)) {
     const test = markedTest(finding, oldLines);
-    if (test) markedBefore.add(test.key); else unnamedBefore++;
+    if (test) markedBefore.set(test.key, (markedBefore.get(test.key) ?? 0) + 1); else unnamedBefore++;
   }
-  const found: Infraction[] = [], unnamed: Infraction[] = [], seen = new Set<string>();
+  const found: Infraction[] = [], unnamed: Infraction[] = [], seen = new Map<string, number>();
   for (const finding of markers) {
     const test = markedTest(finding, newLines);
     if (!test) { unnamed.push(finding); continue; }
-    if (markedBefore.has(test.key) || seen.has(test.key) || !existed(test)) continue;
-    seen.add(test.key);
+    const nth = (seen.get(test.key) ?? 0) + 1, had = markedBefore.get(test.key) ?? 0;
+    seen.set(test.key, nth);
+    // As many markers on a test as it had before are not new; one more of the same is. A test that has none yet gets one report, except that
+    // two registrations with one title are two tests (stacked decorators on one `def` are one).
+    if (nth <= had || (had === 0 && ((nth > 1 && !test.key.startsWith("js:")) || !existed(test)))) continue;
     found.push(finding);
   }
   return [...found, ...unnamed.slice(unnamedBefore)];
@@ -615,6 +778,9 @@ const GATE_SCRIPT = /^(?:pre|post)?(?:test|lint|typecheck|type-check|check|ci|ve
 const CI_RUNNER = new RegExp(
   String.raw`(?<![\w./-])(?:pytest|vitest|jest|mocha|tox|nox)(?![\w/-])` +
   String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make|dotnet|flutter)\s+(?:run\s+)?(?:-\S+\s+)*test(?![\w/])` +
+  // Monorepo runners: `nx affected --target=test`, `turbo run test`, `lerna run test`, `bazel test //...`.
+  String.raw`|(?<![\w./-])(?:nx|turbo|lerna|rush)\s+(?:run-many|affected|run|test)\b[^\n]*(?<![\w-])(?:test|tests)(?![\w-])` +
+  String.raw`|(?<![\w./-])(?:bazel\s+test|ctest|phpunit|rspec|deno\s+test)(?![\w/-])` +
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
 const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".

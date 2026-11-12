@@ -550,6 +550,10 @@ export function auditFileDiffs(
         while (previous >= 0 && /\s/.test(source[previous])) previous--;
         if (source[previous] === ".") continue;
         if (match[2] && !isTestFile(file.path)) continue;
+        // `fit()` or `xit()` with nothing between the brackets is a method that happens to have that name (a terminal addon's `fit`), not a test.
+        if (match[2] && callArguments(source, raw, match.index + match[0].length)?.length === 0) continue;
+        // A registration is a statement of its own: `expect(fit({ x: 1 }))`, `await fit("okapi")` and `const v = fit(a)` call a helper that has that name.
+        if (match[2] && previous >= 0 && (/[(,=:?[&|!+\-*%<]/.test(source[previous]) || /(?:await|return|yield|typeof|void)$/.test(source.slice(Math.max(0, previous - 6), previous + 1)))) continue;
         if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;
         if (source[match.index + match[0].length] === "\u0001" && !/\.\s*each\s*$/.test(match[3])) continue;
         // Playwright's `test.fixme(cond, why)` and `test.fail(cond, why)` take a condition like `test.skip` does.

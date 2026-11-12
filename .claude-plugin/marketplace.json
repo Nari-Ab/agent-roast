@@ -10,7 +10,7 @@
       "name": "agent-roast",
       "source": "./plugin",
       "description": "Sends Claude back to fix the code when it tries to finish with tests, assertions, coverage gates or CI steps weakened instead. Offline, no tokens.",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "category": "quality",
       "tags": [
         "testing",

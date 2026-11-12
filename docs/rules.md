@@ -58,7 +58,11 @@ forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGre
 (`assert set(a) == set(b)` to `assert set(a) <= set(b)`); and `toEqual(X)` or `toStrictEqual(X)` turned into `toMatchObject(X)` with the
 very same argument, which lets extra properties through. "The same expression" is what makes these safe to report: `expect(items)` and
 `expect(items.length)` count as one, another expression is another check, and a `toMatchObject` that was given more fields than the
-`toEqual` it replaces is not the same argument. A check that expected nothing (zero, empty, `None`) was flipped, not relaxed. The pair is
+`toEqual` it replaces is not the same argument. A check that expected nothing (zero, empty, `None`) was flipped, not relaxed. Left alone as other checks, not looser ones: a negated check with an argument (`rejects.toThrow(/a/)` turned into `rejects.not.toThrow(/b/)` says
+the error must not match), a limit that moves against another expression (`toBeGreaterThan(before.height)` turned into `toBeGreaterThan(0)` after the
+subtraction moved, or an `in` test turned into `> 0`: only a numeric limit that was lowered counts), a compound Python assertion (`a == x and b <= c`
+holds more than one check), and brackets around a whole Python assertion (formatters add and drop them). A multi-index subscript such as
+`matrix[0, 1] == 3.0` is an exact check, not a bare name followed by a message. The pair is
 found even when other assertions were added to or removed from the same test, by the expression it checks and only where the old
 assertion stood. Nothing is reported when the exact assertion is still somewhere in the file (it moved), or when the assertion that took its
 place still checks the same expression exactly with another value (`assert.equal(calls, 3)` became `assert.equal(calls, after)`, next to a
@@ -91,7 +95,9 @@ a lower coverage threshold (`lines`, `branches`, `functions`, `statements`, `fai
 strictness switch turned off, a lint rule downgraded, a CI step allowed to fail (`continue-on-error`, `allow_failure`), a
 workflow that stops running tests or stops running on pushes and pull requests, an npm `test` script that can no longer
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
-Raising a threshold, restructuring CI and moving the test step are not reported.
+Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
+`npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
+`bazel test`).
 
 More shortcuts of the same kind:
 
@@ -141,10 +147,18 @@ A test expected to fail is reported because a failure that is expected cannot fa
 `test.fixme(browserName === "webkit", "...")` expect the failure only where the condition holds. A bare marker, `reason=`,
 `strict=` or `raises=` alone, a literal `True` and a condition that mentions CI are reported. A marker that is only built
 (`skip_slow = pytest.mark.skip(...)`, the pytest documentation's `--runslow` pattern) or attached through `add_marker` is not.
-In the review (the hook, `review`, the Action) a marker only counts on a test that **was already there**: a new test written with
-`xfail` or `test.fixme` documents a bug its author knows about, and public history is full of them (in 24 repositories, 15 commits
-did it; after this rule one did, and that one marked two existing tests). The comparison is per test, by its name or title, so
-a file with many identical `@pytest.mark.xfail(` lines is read correctly. A plain skip is reported on new tests too.
+In the review (the hook, `review`, the Action) a skip, an ignore or an expected-failure marker only counts on a test that **was already
+there**. A test the same change adds is not a check that got weaker: it documents a bug its author knows about (in 24 repositories, 15
+commits wrote a new test with `xfail`), it needs a server, a device or a database and is run on purpose (Rust's
+`#[ignore = "requires KVM"]`, `@pytest.mark.skip(reason="needs a model on localhost")`), or it is a case deferred to a later change.
+Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned on, 32 were such a skip on a test the commit adds
+([benchmarks, section 9](benchmarks.md#9-repositories-nobody-had-tuned-on)). The test behind a marker is found by its name or title
+(Python, JavaScript and TypeScript), by the `fn` below the attribute (Rust) and by the `func Test...` around `t.Skip()` (Go); a file that is
+new has only new tests. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
+file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
+cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. Two gaps are known: a
+`test.skip(true, "needs admin")` inside an `if` that checks the environment is reported, because the literal hides the condition, and a
+`test.fixme(` whose title is on the next line is compared by count, which can blame a marker that was already there.
 A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
 `@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
@@ -158,7 +172,8 @@ that hides a real failure is missed unless its condition mentions `CI`.
 ## test-focus
 
 An exclusive test or suite narrows the run, so the rest of the suite is never executed while the focused tests pass.
-`it.only`, `describe.only`, `test.only`, `fit`, `fdescribe` (JavaScript/TypeScript); `fit`, `fdescribe`, `focus: true` (Ruby).
+`it.only`, `describe.only`, `test.only`, `fit`, `fdescribe` (JavaScript/TypeScript); `fit`, `fdescribe`, `focus: true` (Ruby). A method that happens
+to be called `fit()` or `xit()`, with nothing between the brackets (a terminal addon's `fit` in a test double), is not a registration.
 **Fix:** remove the focus and run the whole suite. Turn on your runner's forbid-only option in CI as well
 ([Playwright](https://playwright.dev/docs/api/class-testconfig#test-config-forbid-only), Jest, Vitest).
 
@@ -193,7 +208,8 @@ Read in one test file, in JavaScript/TypeScript (`jest.mock` and `vi.mock` at th
 and `expect(...)`, also through `const total = price(cart); expect(total)`) and in Python (`patch`, `patch.object`,
 `mocker.patch` and `monkeypatch.setattr`, against the `assert`s of the same test or `with` block). It is reported only when the
 change introduces it. Left alone: mocking a *dependency* of the code under test and asserting the code under test, a mock that
-keeps the real module (`requireActual`, `importActual`, `wraps=`), an automock nobody gave a return value (a manual mock decides),
+keeps the real module (`requireActual`, `importActual`, `wraps=`, or a factory that is handed the real module's loader and calls it,
+under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
 called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
 `mock` or `monkeypatch` (the tests of the mocking tools themselves). On 21,686 test files of 24 public repositories the only

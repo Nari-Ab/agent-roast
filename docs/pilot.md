@@ -15,7 +15,8 @@ Blocking findings are rare, warnings are not. Replaying the newest 50 commits of
 repositories that use AI coding agents, 149 of 179 had no commit that would have been blocked, and
 43 of 179 had nothing at all to list. Across 7,905 commits, 0.6% would have been blocked and
 12.1% drew a warning, mostly a test that was removed or whose expected value changed, which is
-usually deliberate. About one blocking finding in five is a false alarm. For most repositories a
+usually deliberate. On repositories that the rules were not written from, about half of the blocked commits were false alarms
+(`docs/benchmarks.md`, section 9), so read each block before you act on it. For most repositories a
 quiet trial is a normal result, and "nothing it said was worth my time" is as useful an answer as
 "it caught something".
 

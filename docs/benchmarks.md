@@ -6,12 +6,13 @@ easier to pass from changes that do not, and whether AI-signed commits trigger t
 than other commits. Everything here is reproducible, and none of it is an accuracy guarantee.
 
 **Summary.** Weakened checks are rare (about 1 in 300 test- or CI-touching commits triggers a
-block), usually deliberate and explained, and not more frequent in AI-signed commits. About one
-finding in five is a false alarm. Most of the rest are decisions a reviewer should see.
+block), usually deliberate and explained, and not more frequent in AI-signed commits. On repositories that the rules
+were not written from, about half of the blocked commits were false alarms (section 9: 69% for 0.17.0 on two samples, 51% for this
+version on a sample nobody had read); the other half are decisions a reviewer should see.
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 126/126 cheats caught, 90/90 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 131/131 cheats caught, 110/110 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -20,6 +21,7 @@ finding in five is a false alarm. Most of the rest are decisions a reviewer shou
 | 0.15.0's new checks: newest 300 commits, 24 JavaScript and Python repositories | 5 more commits of 7,200 would block (24 to 29), all deliberate; 160 line-pattern warnings in 66 commits (section 6) |
 | 0.15.0 on AI-signed commits: 9,732 sampled commits, 164 repositories | AI-signed commits that would block 0.3% to 0.6% (17 to 30 of 5,454), others 0.3% to 0.4% (13 to 19 of 4,278); of the 30 new findings 7 were false alarms (fixed in 0.16.0), 23 real loosening (section 7) |
 | 0.17.0's rule for an exact check turned into a bound: the same 9,761 commits, the 2,177 that can differ | 18 new findings in 14 commits (10 in 6 AI-signed), none lost; two false alarms found by reading them and fixed; 13 of the 29 commits that a scan found reported, up from 1; on the 7,200 commits of section 6, 1 new finding (section 8) |
+| What the rules block on repositories nobody had tuned on: four samples, 158 repositories, 44,878 commits | 0.17.0 blocked 74 of 11,604 commits on sample 1 and 65 of 10,726 on sample 4, 69% of both false alarms; this version, frozen before sample 4 was drawn, blocked 41 of 10,726: 20 for a reviewer and 21 false alarms (51%), 9 of them in one repository (section 9) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -460,6 +462,128 @@ finding (aiohttp's `assert len(result) == len(sc_cookies)` replaced by `assert l
 - JavaScript, TypeScript and Python only, and the bounds are read where the checked expression is spelled the same before and after.
 - The comparison covers commits that add one of the lines above; a bound written in a form the filter does not match is not in it.
 
+## 9. Repositories nobody had tuned on
+
+Sections 6 to 8 replay history that was read while the rules were being written. A user asks something else: what does the tool block in a
+repository it has never seen, and how often is it wrong? This section replays the rules on repositories that no earlier corpus contained,
+reads every blocked commit in its source, and fixes what was wrong. It was done four times, each time on new repositories.
+
+**Method.** The four samples hold 40, 39, 39 and 40 public repositories (24, 24, 23 and 24 JavaScript or TypeScript, 16, 15, 16 and 16
+Python). Each came from the same GitHub search: `language:` TypeScript, JavaScript or Python, 400 to 6,000 stars, pushed after 2026-10-25,
+5 to 200 MB, not archived, not a fork. Of the 300 most recently updated per language, lists, tutorials and templates were dropped by name,
+the rest was shuffled with a seeded generator, and a repository that an earlier corpus used was skipped. `benchmarks/unseen-corpus.tsv`,
+`heldout-corpus.tsv`, `third-corpus.tsv` and `fourth-corpus.tsv` list them with the revision measured. `agent-roast replay` reviewed the
+newest 300 commits of each one's first-parent history (a merged pull request is one commit; 44,878 commits in 158 repositories), each against its parent; 257 could not be compared in full and 38 failed
+to review, and are in no count below. A **blocked** commit has a finding of a blocking rule. One reader (an AI assistant) opened every
+blocked commit in its repository and sorted it; `benchmarks/section9-labels.tsv` has one row per blocked commit (repository, commit, how it was
+sorted, the cause). A **false alarm** is a block where no check got weaker and no gate was relaxed: a new test
+that is skipped, a method that happens to be called `fit`, a refactor that checks the same thing in another form. **A reviewer should see
+it** is every other block: an assertion that got weaker, a gate that was relaxed, a test that was switched off or focused, whether the
+commit says why or not.
+
+Every sample was replayed with the build that existed when it was drawn, read, and its false alarms fixed before the next one: sample 1
+with the released 0.17.0, sample 2 with the build after the fixes from sample 1, sample 3 with the build after the fixes from samples 1 and
+2, and sample 4 with this version, which was frozen before the sample was drawn and not changed after it was read. So the first row of each
+sample is an out-of-sample figure for the build that produced it, and the "0.18.0, fitted" rows are not: this version was fixed on those
+commits.
+
+| Sample | Repositories, commits | Build | Blocked commits (repositories) | False alarms | A reviewer should see |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 40, 11,604 | 0.17.0 | 74 (23) | 51 | 23 |
+| | | 0.18.0, fitted | 27 (17) | 4 | 23 |
+| 2 | 39, 11,222 | after the fixes from sample 1 | 38 (18) | 22 | 16 |
+| | | 0.18.0, fitted | 19 (14) | 4 | 15 |
+| 3 | 39, 11,326 | after the fixes from samples 1 and 2 | 49 (19) | 13 | 36 |
+| | | 0.18.0, fitted | 42 (15) | 6 | 36 |
+| 4 | 40, 10,726 | 0.17.0 | 65 (21) | 45 | 20 |
+| | | **0.18.0, not fitted** | **41 (18)** | **21** | **20** |
+
+(One of the 16 in sample 2 is a `toBe(2)` turned into `toBeGreaterThanOrEqual(3)`, which this version reads as another expectation and no
+longer blocks; the 15 are the rest.) The share of false alarms among the blocks of a build that had not seen the sample was 69% for 0.17.0
+on sample 1, 58% and 27% for the builds in between on samples 2 and 3, and 69% again for 0.17.0 on sample 4; for this version on sample 4
+it was 51%. On sample 4 every one of the 20 blocks for a reviewer is still there, and 24 false alarms are gone: 45 become 21, which is 4.2
+and 2.0 false blocks per 1,000 commits. About half is still not good enough, and that figure moves with the repositories: nine of the 21
+false alarms are in one repository, and five of the 40 repositories had only false alarms. The blocks themselves are rare, 0.4% of the
+commits on sample 4; the other half are the kind of change the tool exists for.
+
+**Sample 1: what 0.17.0 blocked.**
+
+| What was blocked | Commits | 0.18.0 |
+| --- | --- | --- |
+| A skip, ignore or expected-failure marker on a test the same commit adds: 28 `#[ignore = "requires /dev/kvm"]`-style markers on new integration tests in one Rust repository, tests that need a login or a database, a case deferred to a later change | 32 | silent |
+| A method called `fit()` read as a focused test | 4 | silent |
+| An exact check turned into `toBeUndefined()`: a property that was removed, the opposite expectation and not a looser one | 4 | silent |
+| An assertion read wrongly: brackets around a whole Python assertion, a compound `a == x and b <= c`, a limit that moved from a variable to `0`, `rejects.not.toThrow(/b/)` | 4 | silent |
+| A mock factory that keeps the real module (`vi.mock("./client", async (original) => ({ ...(await original()), ... }))`) | 2 | silent |
+| Tests that moved to a monorepo runner (`nx`, `turbo`) | 1 | silent |
+| A lint, coverage or CI gate changed | 11 | blocked |
+| An assertion that got weaker | 9 | blocked |
+| A test that was running was switched off | 3 | blocked |
+| An equivalent refactor read as a weaker check (a different expression that checks the same thing) | 4 | blocked, a false alarm |
+
+**Samples 2 and 3: the same question for a build that had not seen them.** After the fixes from sample 1, 18 of the 38 blocked commits of
+sample 2 were false alarms, of three kinds: 13 exact checks turned into `toBeUndefined()` (a flipped or equivalent expectation; sample 1 had
+shown four), 3 Python patches that were not in force or that the code under test rewires, and 2 helpers called `fit(...)`; 4 equivalent
+refactors were left, and 16 blocks were for a reviewer (6 gates, 2 tests switched off, 8 weaker assertions). After those fixes, sample 3 had 49 blocked commits and 13 false alarms: 7 of four kinds (a `test.fail(true, "reason")` inside a
+test that the commit adds, 3; an equality turned into a strict inequality against the same value, which rejects what the old check
+accepted, 2; the brackets around the message of a Python assertion, 1; a method of the patched object that runs after the patch, 1) and 6
+that this version still blocks (3 equivalent refactors and 3 test data that look like trivial assertions); 36 were for a reviewer (15
+gates, 14 tests switched off, 7 weaker assertions).
+
+**Sample 4: this version, measured as it is.** It blocked 41 of the 10,726 commits, in 18 of 40 repositories. 0.17.0 blocks 65, in 21
+repositories: the 41, and 24 more that are all false alarms: 17 skips on tests that pull requests add (all in one repository), a helper
+called `fit`, three exact checks turned into `toBeUndefined()` (a property that was removed), an equality turned into a strict inequality, an
+environment-dependent skip, and a commit that re-enabled skipped tests and was blamed for the ones left.
+
+| What was blocked by 0.18.0 | Commits |
+| --- | --- |
+| A check that got weaker: `toBe('RS485FullDuplex')` to `toBeDefined()`, `toHaveBeenCalledWith(true)` to `toHaveBeenCalled()`, `toBe(27)` to `toBeGreaterThanOrEqual(27)` in three tests, `toEqual` to `toMatchObject` in two commits, `assert data is not None and not data.refresh_pending` cut to `assert data is not None`, `assert orphan_before == 8` to `len(...) > 0`, an exact message to `toBeDefined()` | 10 |
+| A gate that changed: CI jobs commented out in a tooling migration, `mypy` `ignore_errors`, a workflow that no longer runs on push or pull request, a canary job allowed to fail, a test step moved from every push to releases only | 5 |
+| A test that was running is switched off or focused: `it.only` left in two commits titled "simplify tests", `describe.skip` in a commit titled "test: debug", four test classes skipped because a service is offline, an `expectedFailure` | 5 |
+| **False alarm:** a skip written inside a test with a run-time condition around it (`if (!isAdmin) { test.skip(true, "Requires admin access") }`): the literal `true` hides the condition that the rule would have left alone | 5 |
+| **False alarm:** `test.fixme(` with the title on the next line, so the test it belongs to is not found and markers are compared by count: it blamed a marker that was already there (two commits) and a test that the commit adds (two) | 4 |
+| **False alarm:** a step that is not a check, switched off or allowed to fail (a job that posts a comment, an artifact download) | 3 |
+| **False alarm:** an equivalent refactor or a rewritten test: `assert not any(...)` turned into `assert helper(...) is not None` when the behavior flipped, `assertTrue(x is not None)` to `assert x is not None`, a font-icon helper replaced by a selector, a test rewritten with a twin check, a validation call that now throws, a boolean check that follows its inputs | 7 |
+| **False alarm:** a manual legacy workflow deleted while the tests still run in the others | 1 |
+| **False alarm:** `monkeypatch.setattr(module, "fn", original)` followed by `install()`, which wraps `module.fn` again | 1 |
+
+Nothing in the last five rows was changed after reading it: they are the false alarms that this version still has, and the first two are
+the largest. Whether each of the 20 blocks for a reviewer is a good decision is not the tool's call; several say why in the commit
+(a service that is offline, a gate moved in a migration), and two `.only` were left in a test file.
+
+**The 24 repositories of section 6 and the 9,761 commits of section 7.** Both were measured again with this version and 0.17.0. On the 7,200
+commits of the 24 repositories, 25 commits block where 0.17.0 blocked 30; 40 findings are gone, 27 of them in one commit that rewrote
+`toStrictEqual(undefined)` into `toBeUndefined()` across a monorepo, 11 are skips or `todo`s on tests that a commit adds (one is a merge
+of an old tag), two are refactors, and none of them was a weaker check; one warning is new (an expected message edited next to a
+production change, found because brackets around a whole assertion no longer hide the pair). On the 9,761 commits of section 7, 3,963 can
+differ and were reviewed again: 0.17.0 blocks 107 (70 AI-signed), this version 86 (54). Of the 86 findings that disappeared, 80 were skips
+on tests in new files and the others a Rust `#[ignore]` on a new test, three skip markers that moved to the line of their own test, a
+refactor (`assert len(opened) == 1` replaced by a check of a writer's state), and one count that was changed and loosened at the same time
+(`assert len(PluginType) == 13` to `>= 14`), which a reader would have kept. Three findings are new: two are those skip markers and one is a
+warning for an edited expected count.
+
+**What this version still gets wrong, as found on sample 4** (listed so that they can be fixed, not as a promise):
+
+- A skip with a literal `true` inside an `if`, and a `test.fixme(` whose title is on the next line (9 commits, one repository). A
+  prettier-formatted registration puts a long title there, so the test behind the marker is not found.
+- A step that posts a comment, downloads an artifact or publishes, which the CI rules cannot tell from a check.
+- A refactor that checks the same thing with other words, which no pairing by expression can see.
+- A patch whose target is rewired by a call that is not handed the patched object.
+
+**Limits.**
+
+- One reader sorted every block, and the fixes were made from the same sorting. The rows marked fitted say nothing about other
+  repositories; only the first row of each sample and the last row of sample 4 do, and four samples are four samples: a repository with one
+  habit moves a count (32 of the 74 blocks of sample 1 are in one repository, 9 of the 21 false alarms of sample 4 in another).
+- The search sorts by the last update, so the repositories are active, and several are developed with an AI coding assistant; a quiet
+  repository blocks less.
+- The count is of blocked commits among the newest 300 of a repository, not of agent sessions. A merged pull request is reviewed against its
+  first parent as one change, as the Action reviews a pull request; a Stop hook reviews uncommitted work, which is smaller.
+- "A reviewer should see it" does not mean the change was wrong: it means a check got weaker or a gate was relaxed. Recall is not measured
+  here; section 1 and the labeled cases are what says which cheats are caught.
+- The new rule for skips has a price: a new test that is written already skipped is not reported. So has the rule for bounds: an exact count
+  that is changed and turned into a minimum in the same commit is not.
+
 ## Reproduce
 
 ```bash
@@ -477,6 +601,9 @@ node scripts/compare-agent-runs.mjs old.json new.json ./clones --list
 node scripts/scan-edited-assertions.mjs agents.json ./clones --list           # section 8: the 29 commits where an exact check became a bound
 node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/cli.js --cand dist/cli.js \
   --out diff.json --added '<the regular expression in the header of the script>'   # section 8: both builds on the commits that can differ
+node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # section 9, once per corpus:
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv; summary.json has the blocked commits per repository for both
+#   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 
 `benchmarks/agent-corpus.tsv` lists the repositories and the revision of each when it was cloned. For

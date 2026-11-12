@@ -46,13 +46,13 @@ describe("review of the working tree against HEAD", () => {
   it("sees untracked new files and a deleted test file", async () => {
     write("calc.test.ts", CALC_TEST); write("other.test.ts", "test('a', () => { expect(1 + 1).toBe(2); });\n");
     commit();
-    write("fresh.test.ts", "it.skip('later', () => { expect(compute()).toBe(1); });\n");
+    write("fresh.test.ts", "it('later', () => { expect(true).toBe(true); });\n");
     fs.rmSync(path.join(dir, "other.test.ts"));
 
     const result = await reviewWorktreeChanges({ cwd: dir });
 
-    expect(result.infractions.map(finding => [finding.type, finding.file])).toEqual(expect.arrayContaining([["test-skip", "fresh.test.ts"], ["test-removed", "other.test.ts"]]));
-    expect(result.failedRules).toEqual(["test-skip"]);
+    expect(result.infractions.map(finding => [finding.type, finding.file])).toEqual(expect.arrayContaining([["trivial-assert", "fresh.test.ts"], ["test-removed", "other.test.ts"]]));
+    expect(result.failedRules).toEqual(["trivial-assert"]);
     expect(result.exitCode).toBe(1);
   });
 
