@@ -149,7 +149,10 @@ export function analyzePythonConfig(file: string, oldText: string, newText: stri
     /^\s*python_version\s*=\s*["']?(\d+(?:\.\d+)*)/gm,
     /\bruff\s*(?:(?:===|==|~=|>=|>)\s*["']?|=\s*["'][\^~>=]*)(\d+(?:\.\d+)*)/g,
   ];
-  const bumped = versions.some(pattern => { const was = newest(oldText, pattern), now = newest(newText, pattern); return !!was && !!now && higher(was, now); });
+  // Dropping an explicit `target-version` makes ruff read the target from `requires-python`: the effective target is the one that is written, or else the one the project requires.
+  const effective = (text: string) => newest(text, versions[1]) ?? newest(text, versions[0]);
+  const bumped = versions.some(pattern => { const was = newest(oldText, pattern), now = newest(newText, pattern); return !!was && !!now && higher(was, now); })
+    || (() => { const was = effective(oldText), now = effective(newText); return !!was && !!now && higher(was, now); })();
   for (const [tool, bucket] of ignored(after)) {
     if (!configured.has(tool as "ruff") || (tool === "ruff" && bumped)) continue;
     const old = [...(was.get(tool)?.keys() ?? [])];

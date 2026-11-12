@@ -9,11 +9,11 @@ than other commits. Everything here is reproducible, and none of it is an accura
 block), usually deliberate and explained, and not more frequent in AI-signed commits. On repositories that the rules
 were not written from, between a quarter and two thirds of the blocked commits were false alarms, depending on the sample (sections 9 and 10: 69%
 for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read, 66% for this version as it was frozen on a sixth, where 52 of the
-100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, section 11); the rest are decisions a reviewer should see.
+100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, 38% for the build with its fixes on an eighth, sections 11 and 12); the rest are decisions a reviewer should see.
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 152/152 cheats caught, 136/136 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 155/155 cheats caught, 141/141 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -25,6 +25,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | What the rules block on repositories nobody had tuned on: four samples, 158 repositories, 44,878 commits | 0.17.0 blocked 74 of 11,604 commits on sample 1 and 65 of 10,726 on sample 4, 69% of both false alarms; this version, frozen before sample 4 was drawn, blocked 41 of 10,726: 20 for a reviewer and 21 false alarms (51%), 9 of them in one repository (section 9) |
 | Two more samples nobody had read (section 10): 80 repositories, 22,965 commits | 0.18.0 blocked 33 of 11,630 commits on sample 5: 24 for a reviewer and 9 false alarms (27%); this version, frozen before sample 6 was drawn, blocked 100 of 11,335: 34 and 66 (52 of the 100 in one repository, 51 of them one defect since 0.15.0, fixed afterwards: the released build blocks 44, 34 and 10) |
 | A seventh sample nobody had read (section 11): 40 repositories, 12,000 commits | the published 0.19.0 blocked 31: 16 for a reviewer and 15 false alarms (48%; 39% without one repository); 0.18.0 blocked 32; the build frozen before the sample was read blocked 32, one more and a real one; the shipped build, after the fixes from reading it, blocks 22 of those commits (17 and 5) |
+| An eighth sample nobody had read (section 12): 39 repositories, 11,081 commits | 0.20.0 as frozen, with the fixes from sample 7: 26 blocked, 16 for a reviewer and 10 false alarms (38%); the published 0.19.0: 29, 13 false (45%); the shipped build, after the fixes from reading the sample, blocks 21 of those commits (16 and 5) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -38,7 +39,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **152/152 cheats caught, 136/136 harmless changes left alone, 1/1 documented gap still
+Result: **155/155 cheats caught, 141/141 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -821,7 +822,7 @@ node scripts/scan-edited-assertions.mjs agents.json ./clones --list           # 
 node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/cli.js --cand dist/cli.js \
   --out diff.json --added '<the regular expression in the header of the script>'   # section 8: both builds on the commits that can differ
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
-#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv; summary.json has the blocked commits per repository for both
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 

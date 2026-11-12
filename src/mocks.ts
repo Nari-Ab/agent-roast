@@ -159,7 +159,8 @@ function javascript(text: string): MockedSubject[] {
     const name = binding.namespace ? call[2] : call[2] ? undefined : binding.name;
     if (!name) continue;
     // A manual mock or an automock only fakes a result once the test says what it returns.
-    const identifier = call[1].replace(/\$/g, "\\$");
+    // For a namespace import (`import * as fs from "node:fs/promises"`) it is the member that has to be configured: `vi.mocked(fs.open).mockImplementation(...)` says nothing about `fs.stat()`.
+    const identifier = (binding.namespace ? `${call[1]}\\s*\\.\\s*${call[2]}` : call[1]).replace(/\$/g, "\\$");
     const configures = new RegExp(`(?<![\\w$.])${identifier}\\b[^;]{0,80}?\\.\\s*mock(?:Return|Resolved|Rejected|Implementation)\\w*\\s*\\(`, "g");
     const configured = [...raw.matchAll(configures)].some(config => tests.every(range => !within(range, config.index) || within(range, match.index)));
     if (!mock.fake && !configured) continue;

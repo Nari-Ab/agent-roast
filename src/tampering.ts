@@ -540,7 +540,10 @@ function isWeaker(rawOld: string, rawNew: string, language: Language): boolean {
     if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || WEAK_PY.test(oldBare) || BOUND_PY.test(oldBare) || !PY_SPECIFIC.test(oldAssertion)) return false;
     // Same for Python: `assert grown > before` to `assert grown > 0`, and a membership test turned into `> 0`, are other checks.
     const limit = /(?:>=|<=|>|<)\s*([^\s,)]+)/.exec(oldAssertion)?.[1];
-    return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|[<>]=?/.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit)));
+    // An old check that expected nothing (`is None`, `not x`, `== 0`, `== []`) turned into a weak one (`is not None`, a bare name) is a flipped expectation. A compound check that has a `not` among its clauses
+    // (`assert data is not None and not data.pending` turned into `assert data is not None`) expects more than nothing: the clause that was dropped is a check that got weaker.
+    const expectsNothing = EMPTY_PY.test(oldAssertion) && !/\b(?:and|or)\b/.test(oldAssertion.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, ""));
+    return (WEAK_PY.test(newAssertion) && !expectsNothing) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|[<>]=?/.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit)));
   }
   return false;
 }
@@ -885,9 +888,74 @@ const CI_RUNNER = new RegExp(
   String.raw`|(?<![\w./-])(?:(?:python[\d.]*|node|bash|sh|zsh|ruby|pwsh|tsx|ts-node)(?:\s+-\S+)*\s+|\./)(?:[\w.-]+/)*(?:(?:run[_-]?)?tests?(?:[_-](?:all|suite|runner|unit|ci))?|test_[\w-]+|[\w-]+_test)\.(?:py|sh|bash|js|mjs|cjs|ts|rb|ps1)(?![\w-])` +
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
 // The shell builtin `test -f summary.md && cat summary.md` checks a file: it has the word on the line and runs no tests.
-const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*-[bcdefghkLnOGprsStuwxzN](?=\s)/g;
+const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*(?:-[bcdefghkLnOGprsStuwxzN](?=\s)|["$'])/g;
 /** Whether a line of a CI file runs a test command. A trailing comment is not part of the command: `run: exit 0 # Skip unnecessary test runs for bots`. */
 const ciRuns = (line: string): boolean => CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(/\s#.*$/, ""));
+// A key whose value is a block of commands: `run: |`, a folded `run: >-`, or a GitLab `script:` list. Groups: the indent (and `- `) before the key, its name, its block indicator.
+const COMMAND_BLOCK = /^(\s*(?:-\s+)?)(run|script|before_script|after_script)\s*:\s*([|>])?[+-]?\d*\s*(?:#.*)?$/;
+const indentOf = (line: string): number => line.length - line.trimStart().length;
+// A command of a block that only prints (`echo "Running tests"`) runs none, whatever the word after it is.
+const PRINTS = /^(?:echo|printf)\b/;
+// In a literal block (`run: |`) a line is shell, where the word `test` is as often a directory or a message (`mkdir test`, `echo "ZIP test PASS"`) as a command: only a line that
+// runs a tool with `test` as its first argument counts (`hvigorw test`, `terraform test`), after the words that wrap a command, unless the tool only handles files or is a keyword of the
+// shell or of a script that sits in the block (`for test in tests:`, `assert test[...]`), and not an argument (`-expect test=1`).
+const NOT_A_TOOL = "mkdir|rmdir|cd|rm|ls|cat|cp|mv|touch|chmod|chown|echo|printf|export|source|git|docker|find|tar|zip|unzip|grep|sed|awk|diff|head|tail|wc|stat|du|tree|set|test|curl|wget|ssh|scp|rsync|ping|open|sleep|kill"
+  + "|for|while|until|if|elif|else|then|do|done|case|in|assert|return|import|from|def|class|print|raise|yield|with|local|declare|readonly|unset|eval|await|let|const|var|function|new|delete|throw|and|or|not|is|lambda|try|except|finally|pass|del";
+const TOOL_TEST = new RegExp(
+  String.raw`^(?:(?:sudo|time|exec|command|env)(?:\s+-\S+)*\s+|\w+=(?:"[^"]*"|'[^']*'|[^\s"']*)\s+)*(?!(?:${NOT_A_TOOL})\b)(?!-)[\w./-]+\s+test(?![\w/.=\[(-])`);
+/** The commands that a key of COMMAND_BLOCK opens: a folded block is one command, the items of a GitLab `script:` list are one each (a list may stand at the indent of its key), and the lines
+ * of a literal block are the ones that run a tool with `test` as its first argument (TOOL_TEST). A `run:` with nothing after it is not a block of commands: it is a job that is called `run`. */
+function blockCommands(lines: string[], at: number, key: RegExpExecArray): string[] {
+  const keyIndent = key[1].length, found: string[] = [];
+  if (key[3] === ">") {
+    for (let next = at + 1; next < lines.length; next++) {
+      const text = lines[next].trim();
+      if (!text) continue;
+      if (indentOf(lines[next]) <= keyIndent) break;
+      if (!text.startsWith("#")) found.push(text);
+    }
+    return [found.join(" ")];
+  }
+  if (key[3] === "|") {
+    for (let next = at + 1; next < lines.length; next++) {
+      const text = lines[next].trim().replace(/\s*\\$/, "");
+      if (!text) continue;
+      if (indentOf(lines[next]) <= keyIndent) break;
+      if (TOOL_TEST.test(text)) found.push(text);
+    }
+    return found;
+  }
+  if (key[3] || key[2] === "run") return [];
+  let itemIndent = -1;
+  for (let next = at + 1; next < lines.length; next++) {
+    const text = lines[next].trim();
+    if (!text || text.startsWith("#")) continue;
+    const indent = indentOf(lines[next]);
+    if (itemIndent < 0) {
+      if (!text.startsWith("- ") || indent < keyIndent) break;
+      itemIndent = indent;
+    }
+    if (indent < itemIndent || (indent === itemIndent && !text.startsWith("- "))) break;
+    if (indent === itemIndent) found.push(text.slice(2).trim());
+  }
+  return found;
+}
+/** The lines of a CI file that run a test command, comments left out. The lines of a folded block (`run: >-`) are one command, and an item of a GitLab `script:` list is one: both are read
+ * as if they stood after `run:` (`xvfb-run ... hvigorw test -p module=dimina` is a test run, as it is on one line). The lines of a literal block (`run: |`) are shell, where a word
+ * `test` is as often a directory or a message (`mkdir test`, `echo "ZIP test PASS"`), so only a runner that is known by name, or a tool with `test` as its first argument, counts there:
+ * the same step is then one test step whether it is written in a folded block or a literal one. */
+function ciTestLines(text: string): string[] {
+  const lines = text.split(/\r?\n/), found: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    if (ciRuns(line)) found.push(line);
+    const key = COMMAND_BLOCK.exec(line);
+    if (!key) continue;
+    for (const command of blockCommands(lines, i, key)) if (command && !PRINTS.test(command) && !ciRuns(command) && ciRuns(`run: ${command}`)) found.push(command);
+  }
+  return found;
+}
 const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
@@ -946,7 +1014,7 @@ function triggerSection(text: string): string | null {
 export function gatingTestCommands(file: string, text: string): string[] {
   if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
   const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
-  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && ciRuns(line))
+  return ciTestLines(text)
     .map(line => `${line.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
 }
 
@@ -961,7 +1029,7 @@ export function ciTestSteps(file: string, oldText: string | null, newText: strin
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
   const commandsBefore = gatingTestCommands(file, was), commandsAfter = gatingTestCommands(file, now);
   const after = commandsAfter.length;
-  return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, ciRuns) : 0, commandsBefore, commandsAfter };
+  return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter };
 }
 
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
@@ -1019,7 +1087,6 @@ function scopeCommands(scope: string[]): string[] {
  * test command anywhere in it, and `nonCheck` that it is one step that uses an action from NON_CHECK_ACTION and runs nothing. */
 function lenientSteps(text: string): Map<string, LenientStep> {
   const lines = text.split(/\r?\n/);
-  const indentOf = (line: string) => line.length - line.trimStart().length;
   const found = new Map<string, LenientStep>();
   lines.forEach((line, i) => {
     if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
@@ -1038,7 +1105,7 @@ function lenientSteps(text: string): Map<string, LenientStep> {
     const start = /^\s*-\s+if:/.test(line) ? i : Math.max(j, 0), level = indentOf(lines[start]);
     let end = start + 1;
     while (end < lines.length && (!lines[end].trim() || lines[end].trim().startsWith("#") || indentOf(lines[end]) > level)) end++;
-    const scope = lines.slice(start, end), runsChecks = matchingLines(scope.join("\n"), ciRuns) > 0;
+    const scope = lines.slice(start, end), runsChecks = ciTestLines(scope.join("\n")).length > 0;
     const uses = scope.filter(item => /^\s*(?:-\s+)?uses:/.test(item));
     const nonCheck = !runsChecks && uses.length === 1 && NON_CHECK_ACTION.test(uses[0]) && !scope.some(item => /^\s*(?:-\s+)?run:/.test(item));
     const commands = scopeCommands(scope);
