@@ -101,8 +101,8 @@ describe("a registration that a formatter wrapped after its opening bracket stil
 
 describe("a job or step that is switched off in a workflow that gates nothing", () => {
   const file = ".github/workflows/notes.yml";
-  const workflow = (on: string, job = "", step = "") =>
-    `name: notes\non:\n${on}\njobs:\n  post:\n    runs-on: ubuntu-latest\n${job}    steps:\n      - name: Test\n        run: npm test\n${step}      - name: Post\n        run: ./post.sh\n`;
+  const workflow = (on: string, job = "", step = "", run = "./post-comment.sh") =>
+    `name: notes\non:\n${on}\njobs:\n  post:\n    runs-on: ubuntu-latest\n${job}    steps:\n      - name: Post\n        run: ${run}\n${step}      - name: Tidy\n        run: ./tidy.sh\n`;
   const reasons = (before: string, after: string, path = file) => analyzeGuardFile(path, before, after, "HEAD").map(f => f.reason);
   const triggers = {
     "a completed workflow": "  workflow_run:\n    workflows: [release]\n    types: [completed]\n  workflow_dispatch:",
@@ -111,10 +111,15 @@ describe("a job or step that is switched off in a workflow that gates nothing", 
     "a manual dispatch": "  workflow_dispatch:",
   };
 
-  it.each(Object.entries(triggers))("leaves a job switched off in a workflow that runs on %s alone", (_, on) => {
+  it.each(Object.entries(triggers))("leaves a job that is not a check, switched off in a workflow that runs on %s alone", (_, on) => {
     expect(reasons(workflow(on), workflow(on, "    if: false\n"))).toEqual([]);
     expect(reasons(workflow(on), workflow(on, "", "        continue-on-error: true\n"))).toEqual([]);
-    expect(reasons(workflow(on), workflow(on).replace("run: npm test", "run: npm test || true"))).toEqual([]);
+  });
+
+  it.each(Object.entries(triggers))("still reads a test command that is switched off or allowed to fail in a workflow that runs on %s alone", (_, on) => {
+    expect(reasons(workflow(on, "", "", "npm test"), workflow(on, "    if: false\n", "", "npm test"))).toEqual(["CI step is now switched off"]);
+    expect(reasons(workflow(on, "", "", "npm test"), workflow(on, "", "", "npm test").replace("run: npm test", "run: npm test\n        continue-on-error: true"))).toEqual(["CI step is now allowed to fail"]);
+    expect(reasons(workflow(on, "", "", "npm test"), workflow(on, "", "", "npm test || true"))).toEqual(["Test command can no longer fail the CI step"]);
   });
 
   it.each([
@@ -123,10 +128,9 @@ describe("a job or step that is switched off in a workflow that gates nothing", 
     ["a pull request and a schedule", "  pull_request:\n  schedule:\n    - cron: '0 3 * * *'"],
     ["a reusable workflow", "  workflow_call:"],
     ["a flow list of triggers", "  [push, workflow_dispatch]"],
-  ])("still reads a job switched off in a workflow that runs on %s", (_, on) => {
+  ])("still reads a job that is not a check, switched off in a workflow that runs on %s", (_, on) => {
     expect(reasons(workflow(on), workflow(on, "    if: false\n"))).toEqual(["CI step is now switched off"]);
     expect(reasons(workflow(on), workflow(on, "", "        continue-on-error: true\n"))).toEqual(["CI step is now allowed to fail"]);
-    expect(reasons(workflow(on), workflow(on).replace("run: npm test", "run: npm test || true"))).toEqual(["Test command can no longer fail the CI step"]);
   });
 
   it("reads a workflow that was gating before the change as gating", () => {
@@ -135,9 +139,9 @@ describe("a job or step that is switched off in a workflow that gates nothing", 
   });
 
   it("reads a file with no trigger section it can parse, and a GitLab pipeline, as gating", () => {
-    const bare = "jobs:\n  post:\n    steps:\n      - name: Test\n        run: npm test\n";
+    const bare = "jobs:\n  post:\n    steps:\n      - name: Post\n        run: ./post.sh\n";
     expect(reasons(bare, bare.replace("    steps:", "    if: false\n    steps:"))).toEqual(["CI step is now switched off"]);
-    const gitlab = "test:\n  script:\n    - npm test\n";
+    const gitlab = "test:\n  script:\n    - ./post.sh\n";
     expect(reasons(gitlab, `${gitlab}  allow_failure: true\n`, ".gitlab-ci.yml")).toEqual(["CI step is now allowed to fail"]);
   });
 });
@@ -205,6 +209,13 @@ describe("a mock that another test configures does not fake what this test calls
   it("still reads a test that configures the mock itself", () => {
     const same = "describe('activate', () => {\n  it('is true', async () => {\n    vi.spyOn(api, 'activate').mockResolvedValue(true);\n    expect(await activate(rc)).toBe(true);\n  });\n});\n";
     expect(subjects(head + same)).toEqual(["../src/api::activate"]);
+  });
+
+  it("does not take a hook of another describe for a configuration of this one", () => {
+    const hooked = "describe('both steps in one call', () => {\n  beforeEach(() => {\n    vi.spyOn(api, 'activate').mockResolvedValue(true);\n  });\n  it('calls activate', async () => {\n    expect(await both(rc)).toBe(true);\n  });\n});\n\n";
+    expect(subjects(head + hooked + real)).toEqual([]);
+    expect(subjects(head + real + hooked)).toEqual([]);
+    expect(subjects(`${head}describe('activate', () => {\n  beforeEach(() => {\n    vi.spyOn(api, 'activate').mockResolvedValue(true);\n  });\n  it('is true', async () => {\n    expect(await activate(rc)).toBe(true);\n  });\n});\n`)).toEqual(["../src/api::activate"]);
   });
 
   it("still reads a mock that a hook or the top of the file configures", () => {

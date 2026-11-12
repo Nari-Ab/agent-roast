@@ -892,11 +892,12 @@ const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true|^\s*(?:-\s+)?if
 // `npm test || true` ends the step with success whatever the tests did: `continue-on-error` written in shell.
 const SHELL_SWALLOW = /\|\|\s*(?:true|exit\s+0|:|echo\b)|;\s*(?:true|exit\s+0)\b/;
 
-/** Tolerated-failure markers per enclosing step or job, keyed by that step's own line. */
-function lenientSteps(text: string): Map<string, { count: number; line: number }> {
+/** Tolerated-failure markers per enclosing step or job, keyed by that step's own line; `runsChecks` says whether that step or job runs a
+ * test command anywhere in it. */
+function lenientSteps(text: string): Map<string, { count: number; line: number; runsChecks: boolean }> {
   const lines = text.split(/\r?\n/);
   const indentOf = (line: string) => line.length - line.trimStart().length;
-  const found = new Map<string, { count: number; line: number }>();
+  const found = new Map<string, { count: number; line: number; runsChecks: boolean }>();
   lines.forEach((line, i) => {
     if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
     let j = i - 1;
@@ -910,8 +911,13 @@ function lenientSteps(text: string): Map<string, { count: number; line: number }
       while (j >= 0 && (!lines[j].trim() || lines[j].trim().startsWith("#") || indentOf(lines[j]) >= indentOf(line))) j--;
       identity = j >= 0 ? lines[j].trim() : "";
     }
+    // The step or job it belongs to: its own first line down to the line before the next one at the same level or above.
+    const start = /^\s*-\s+if:/.test(line) ? i : Math.max(j, 0), level = indentOf(lines[start]);
+    let end = start + 1;
+    while (end < lines.length && (!lines[end].trim() || lines[end].trim().startsWith("#") || indentOf(lines[end]) > level)) end++;
+    const runsChecks = matchingLines(lines.slice(start, end).join("\n"), CI_RUNNER) > 0;
     const entry = found.get(identity);
-    if (entry) entry.count++; else found.set(identity, { count: 1, line: i + 1 });
+    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; } else found.set(identity, { count: 1, line: i + 1, runsChecks });
   });
   return found;
 }
@@ -979,13 +985,16 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
   if (/(?:^|\/)(?:pyproject\.toml|setup\.cfg|tox\.ini|\.?ruff\.toml|\.flake8|\.?mypy\.ini|\.?pylintrc)$/i.test(file)) {
     analyzePythonConfig(file, oldText, newText, (line, snippet, reason) => { out.push(finding("guard-weakened", file, line, snippet, reason, commit)); });
   }
-  if (CI_FILE.test(file) && (gatesChanges(file, oldText) || gatesChanges(file, newText))) {
+  if (CI_FILE.test(file)) {
     // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
-    // same change is a new best-effort check, not a weakened one.
+    // same change is a new best-effort check, not a weakened one. In a workflow that gates nothing (see gatesChanges) only a step or job
+    // that runs tests counts: a job that posts a comment after a release is not a check, a nightly test run is.
+    const gating = gatesChanges(file, oldText) || gatesChanges(file, newText);
     // A step written as `- run: npm test` is the same step as `run: npm test` under a new `- if: false` item.
     const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).flatMap(line => [line.trim(), line.trim().replace(/^-\s+/, "")]));
     const newLines = newText.split(/\r?\n/);
     for (const [identity, now] of lenientSteps(newText)) {
+      if (!gating && !now.runsChecks) continue;
       if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
         const marker = (newLines[now.line - 1] ?? "").trim();
         out.push(finding("guard-weakened", file, now.line, marker, /^(?:-\s+)?if:/.test(marker) ? "CI step is now switched off" : "CI step is now allowed to fail", commit));

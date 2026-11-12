@@ -63,9 +63,10 @@ function javascript(text: string): MockedSubject[] {
     if (end > 0) callbacks.push([open, end]);
   }
 
-  // A test sees what is configured in it, in a hook around it, or outside every test: not what a sibling test configures.
+  // A test sees what is configured in it, in a hook of a block around it, or outside every block: not what a sibling test, or a hook of
+  // a sibling `describe`, configures.
   const tests: Range[] = [];
-  for (const match of code.matchAll(/(?<![\w$.])(?:it|test)(?:\s*\.\s*\w+)*\s*\(/g)) {
+  for (const match of code.matchAll(/(?<![\w$.])(?:it|test|describe)(?:\s*\.\s*\w+)*\s*\(/g)) {
     const open = match.index + match[0].length - 1;
     const end = closing(code, open);
     if (end > 0) tests.push([open, end]);
