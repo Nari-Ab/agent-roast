@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.22.0 — 2026-11-13
+
+**Three more agents can be sent back to fix the code: Gemini CLI, GitHub Copilot and Factory Droid.**
+
+`agent-roast hook install gemini`, `copilot` and `droid` guard three more agents. Each one runs a hook when its agent has finished a turn, and each documents that the hook may answer with a decision and a reason that goes back to the model: what the Stop hooks of Claude Code, Codex and Cursor do.
+The hook is the same review of everything that is not committed yet, and the same rule about sending an agent back **once**: the next input of the same agent says that it is already continuing because of a hook (`stop_hook_active`), and then the hook only warns the person.
+
+- **Gemini CLI** (`hook install gemini`, `.gemini/settings.json`, or `~/.gemini/settings.json` with `--global`). Gemini CLI's `AfterAgent` hook runs once per turn, after the model's final response, and `{"decision": "deny", "reason": "..."}` rejects the response and retries the turn with the reason as the new prompt.
+  The entry is `{"matcher": "*", "hooks": [{"name": "agent-roast", "type": "command", "command": "...", "timeout": 60000}]}` under `hooks.AfterAgent` (Gemini CLI counts the timeout in milliseconds). Intact checks answer `{}`, the warning is a `systemMessage`, other events are ignored. Gemini CLI warns the first time it sees a project hook.
+- **GitHub Copilot** (`hook install copilot`, `.github/hooks/agent-roast.json`, or `~/.copilot/hooks/agent-roast.json`). Copilot loads the hook files of `.github/hooks` in the Copilot CLI, in VS Code's agent mode and, from the default branch, in the cloud agent. The hook is registered under `Stop`, the alias of `agentStop` that writes the VS Code-compatible input,
+  and `{"decision": "block", "reason": "..."}` forces another turn (Copilot ends the turn after eight blocks in a row; this hook sends one). Copilot documents no field for a message to the person, so the warning is its display-only progress line. The file is `{"version": 1, "hooks": {"Stop": [{"type": "command", "command": "...", "timeoutSec": 60}]}}`.
+- **Factory Droid** (`hook install droid`, `.factory/hooks.json`, or `~/.factory/hooks.json`). Droid's `Stop` hook takes Claude Code's input and its `{"decision": "block", "reason": "..."}` answer, and its hooks.json is keyed by event name at the top of the file.
+- `hook uninstall` and `hook status` know the three agents, installing again refreshes the pinned version, other settings and other hooks are kept, a settings file with comments (Gemini CLI's may have them) is left alone with a message as an unreadable one is for the other agents, and `hook install` with no names also picks a repository that has a `.gemini`, `.github/hooks` or `.factory` folder.
+- **What is not covered.** Like the other three integrations these follow the documented protocol and are tested with simulated hook input; there was no live session of any of the three. Whether the hook fires in a non-interactive run (`gemini -p`, `copilot -p`, `droid exec`) is not documented. Google's Antigravity CLI, which the Gemini CLI documentation says replaced it for unpaid-tier
+  users on 18 June 2026, has hooks of its own that are not covered, and neither is Copilot's cloud agent, whose sandbox has a restricted network that `npx` may not get through. `docs/integrations.md` has a section for each.
+
 ## 0.21.0 — 2026-11-13
 
 **Ten false alarms fixed that an eighth and a ninth sample showed, two shapes that a search of 126,486 commits found, and a catalog of cheats that someone else wrote.**
