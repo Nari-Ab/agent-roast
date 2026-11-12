@@ -99,8 +99,9 @@ workflow that stops running tests or stops running on pushes and pull requests, 
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
 Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
-`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`). The shell
-builtin `test -f summary.md` checks a file and is not a test run. A workflow gates changes when it runs on a push or a pull request (or is a
+`bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`) and a package script that runs
+the tests with coverage (`yarn coverage`, `npm run coverage`). The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
+line is not part of the command (`run: exit 0 # Skip unnecessary test runs`). A workflow gates changes when it runs on a push or a pull request (or is a
 reusable workflow, `workflow_call`, that one of those may call); the triggers are read from its `on:` section, not from the whole file, where a
 Docker step's `push: true` is not a trigger, and a `push:` that lists only `tags:` (no `branches:`) is a release pipeline that runs when a version is
 tagged, so it does not gate: tests that it runs do not count as tests that gate, and tests removed from it, or a trigger moved from a tag push to a
@@ -131,7 +132,9 @@ More shortcuts of the same kind:
   (`strict`, `disallow_untyped_defs`, `check_untyped_defs`, `warn_return_any`, ...) turned from true to false;
   `ignore_errors = true` added for a module; a pylint `fail-under` lowered. A tool that was not configured before is being
   adopted, and its first ignore list is not reported; a stricter setting, a code removed from an ignore list and a reordered
-  list are not reported either. `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
+  list are not reported either. Each `[[tool.mypy.overrides]]` element is a table of its own, named by its `module`, so `check_untyped_defs = false` for
+  `tests.*` next to `true` for another module is two settings, not one that was turned off (until 0.19.0 it was read as one, and a repository whose overrides
+  were written that way blocked on every commit that touched `pyproject.toml`). `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
 
 The same rule covers a test harness that rewrites what the runner reports. In `conftest.py`, `sitecustomize.py` and test files,
 `report.outcome = "passed"` (any object, outcome set to the string `passed`), `call.excinfo = None` and `session.exitstatus = 0`
@@ -146,7 +149,7 @@ A test was switched off. The runner reports success without executing the behavi
 | Language | Reported |
 | --- | --- |
 | JavaScript/TypeScript | `it.skip`, `describe.skip`, `xit`, `xdescribe`, `test.todo`, Playwright `test.skip(true)` or with only a title; tests expected to fail: `it.fails` (Vitest), `test.failing` (Jest, AVA), Playwright `test.fixme` and `test.fail` |
-| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure`; `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
+| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure` (and the same decorator under another module's name, `@test.expectedFailure`); `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
 | Go | `t.Skip`, `t.Skipf`, `t.SkipNow` as a statement of a test or sub-test |
 | Rust | `#[ignore]`, `#[ignore = "reason"]` |
 | Java, Kotlin | `@Ignore`, `@Disabled`, `@Test(enabled = false)` |
