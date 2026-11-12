@@ -76,6 +76,34 @@ describe("installing the agent hook", () => {
     expect(settings.hooks.Stop[0].hooks[0].command).toBe(hookCommand("claude"));
   });
 
+  it("writes Gemini CLI's own format: an AfterAgent group with a name, a matcher and a timeout in milliseconds, and keeps the rest of the settings", () => {
+    expect(hookCommand("gemini")).toBe(`npx --yes agent-roast@${packageVersion()} hook run --agent gemini`);
+    write(".gemini/settings.json", JSON.stringify({ theme: "dark", hooks: { BeforeTool: [{ matcher: "write_file", hooks: [{ type: "command", command: "./check.sh" }] }] } }, null, 2));
+    const [change] = installHooks({ cwd: dir, agents: ["gemini"], home });
+    expect(change).toMatchObject({ agent: "gemini", scope: "project", action: "updated", file: path.join(dir, ".gemini/settings.json") });
+    const settings = read(".gemini/settings.json");
+    expect(settings.theme).toBe("dark");
+    expect(settings.hooks.BeforeTool).toHaveLength(1);
+    expect(settings.hooks.AfterAgent).toEqual([{ matcher: "*", hooks: [{ name: "agent-roast", type: "command", command: hookCommand("gemini"), timeout: 60000 }] }]);
+    expect(installHooks({ cwd: dir, agents: ["gemini"], home })[0].action).toBe("unchanged");
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "gemini" && row.scope === "project")).toMatchObject({ installed: true, advisory: false });
+    expect(hookConfigPath("gemini", "global", dir, home)).toBe(path.join(home, ".gemini", "settings.json"));
+    expect(() => hookConfigPath("gemini", "local", dir, home)).toThrow(/no hook file that stays out of the repository/);
+  });
+
+  it("refreshes a pinned Gemini CLI command in place and removes it again, leaving other hooks", () => {
+    installHooks({ cwd: dir, agents: ["gemini"], home });
+    const older = read(".gemini/settings.json");
+    older.hooks.AfterAgent[0].hooks[0].command = "npx --yes agent-roast@0.1.0 hook run --agent gemini";
+    older.hooks.AfterAgent.push({ matcher: "*", hooks: [{ name: "mine", type: "command", command: "echo done" }] });
+    write(".gemini/settings.json", JSON.stringify(older));
+    expect(installHooks({ cwd: dir, agents: ["gemini"], home })[0].action).toBe("updated");
+    expect(read(".gemini/settings.json").hooks.AfterAgent).toHaveLength(2);
+    expect(read(".gemini/settings.json").hooks.AfterAgent[0].hooks[0].command).toBe(hookCommand("gemini"));
+    expect(uninstallHooks({ cwd: dir, agents: ["gemini"], home })[0].action).toBe("removed");
+    expect(read(".gemini/settings.json").hooks.AfterAgent).toEqual([{ matcher: "*", hooks: [{ name: "mine", type: "command", command: "echo done" }] }]);
+  });
+
   it("writes Cursor's and Codex's own formats", () => {
     installHooks({ cwd: dir, agents: ["cursor", "codex"], home });
     expect(read(".cursor/hooks.json")).toEqual({ version: 1, hooks: { stop: [{ command: hookCommand("cursor"), timeout: 60, loop_limit: 2 }] } });
@@ -124,10 +152,10 @@ describe("installing the agent hook", () => {
   });
 
   it("reports where the hook is installed", () => {
-    installHooks({ cwd: dir, agents: ["codex"], home });
+    installHooks({ cwd: dir, agents: ["codex", "gemini"], home });
     const rows = hookStatus({ cwd: dir, home });
-    expect(rows.filter(row => row.installed).map(row => [row.agent, row.scope])).toEqual([["codex", "project"]]);
-    expect(rows).toHaveLength(7);
+    expect(rows.filter(row => row.installed).map(row => [row.agent, row.scope])).toEqual([["codex", "project"], ["gemini", "project"]]);
+    expect(rows).toHaveLength(9);
     expect(hookConfigPath("claude", "project", dir, home)).toBe(path.join(dir, ".claude/settings.json"));
   });
 });
