@@ -91,6 +91,33 @@ describe("installing the agent hook", () => {
     expect(() => hookConfigPath("gemini", "local", dir, home)).toThrow(/no hook file that stays out of the repository/);
   });
 
+  it("writes GitHub Copilot's own file: a version, and a flat list under Stop with the timeout in seconds", () => {
+    const [change] = installHooks({ cwd: dir, agents: ["copilot"], home });
+    expect(change).toMatchObject({ agent: "copilot", scope: "project", action: "created", file: path.join(dir, ".github/hooks/agent-roast.json") });
+    expect(read(".github/hooks/agent-roast.json")).toEqual({ version: 1, hooks: { Stop: [{ type: "command", command: hookCommand("copilot"), timeoutSec: 60 }] } });
+    expect(installHooks({ cwd: dir, agents: ["copilot"], home })[0].action).toBe("unchanged");
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "copilot" && row.scope === "project")).toMatchObject({ installed: true, advisory: false });
+    expect(hookConfigPath("copilot", "global", dir, home)).toBe(path.join(home, ".copilot", "hooks", "agent-roast.json"));
+    expect(hookConfigPath("copilot", "global", dir, home, { COPILOT_HOME: "/data/copilot" })).toBe(path.join("/data/copilot", "hooks", "agent-roast.json"));
+    expect(uninstallHooks({ cwd: dir, agents: ["copilot"], home })[0].action).toBe("removed");
+    expect(read(".github/hooks/agent-roast.json")).toEqual({ version: 1 });
+  });
+
+  it("writes Factory Droid's hooks.json keyed by event name, keeping its other events", () => {
+    write(".factory/hooks.json", JSON.stringify({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./guard.sh" }] }] }));
+    const [change] = installHooks({ cwd: dir, agents: ["droid"], home });
+    expect(change).toMatchObject({ agent: "droid", scope: "project", action: "updated", file: path.join(dir, ".factory/hooks.json") });
+    const hooks = read(".factory/hooks.json");
+    expect(hooks.hooks).toBeUndefined();
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.Stop).toEqual([{ hooks: [{ type: "command", command: hookCommand("droid"), timeout: 60 }] }]);
+    expect(installHooks({ cwd: dir, agents: ["droid"], home })[0].action).toBe("unchanged");
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "droid" && row.scope === "project")).toMatchObject({ installed: true });
+    expect(hookConfigPath("droid", "global", dir, home)).toBe(path.join(home, ".factory", "hooks.json"));
+    expect(uninstallHooks({ cwd: dir, agents: ["droid"], home })[0].action).toBe("removed");
+    expect(read(".factory/hooks.json")).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./guard.sh" }] }] });
+  });
+
   it("refreshes a pinned Gemini CLI command in place and removes it again, leaving other hooks", () => {
     installHooks({ cwd: dir, agents: ["gemini"], home });
     const older = read(".gemini/settings.json");
@@ -152,10 +179,10 @@ describe("installing the agent hook", () => {
   });
 
   it("reports where the hook is installed", () => {
-    installHooks({ cwd: dir, agents: ["codex", "gemini"], home });
+    installHooks({ cwd: dir, agents: ["codex", "gemini", "copilot", "droid"], home });
     const rows = hookStatus({ cwd: dir, home });
-    expect(rows.filter(row => row.installed).map(row => [row.agent, row.scope])).toEqual([["codex", "project"], ["gemini", "project"]]);
-    expect(rows).toHaveLength(9);
+    expect(rows.filter(row => row.installed).map(row => [row.agent, row.scope])).toEqual([["codex", "project"], ["gemini", "project"], ["copilot", "project"], ["droid", "project"]]);
+    expect(rows).toHaveLength(13);
     expect(hookConfigPath("claude", "project", dir, home)).toBe(path.join(dir, ".claude/settings.json"));
   });
 });

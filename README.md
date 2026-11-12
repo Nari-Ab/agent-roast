@@ -37,7 +37,7 @@ npx agent-roast          # review what you have not committed yet (on a clean tr
 ## Stop your coding agent from doing it
 
 ```bash
-npx agent-roast hook install          # Claude Code, Codex, Cursor and Gemini CLI
+npx agent-roast hook install          # Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot and Factory Droid
 ```
 
 For Claude Code there is also a plugin: `/plugin install agent-roast --marketplace Nari-Ab/agent-roast`. Any agent that speaks
