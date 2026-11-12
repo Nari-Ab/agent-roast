@@ -475,7 +475,8 @@ the rest was shuffled with a seeded generator, and a repository that an earlier 
 `heldout-corpus.tsv`, `third-corpus.tsv` and `fourth-corpus.tsv` list them with the revision measured. `agent-roast replay` reviewed the
 newest 300 commits of each one's first-parent history (a merged pull request is one commit; 44,878 commits in 158 repositories), each against its parent; 257 could not be compared in full and 38 failed
 to review, and are in no count below. A **blocked** commit has a finding of a blocking rule. One reader (an AI assistant) opened every
-blocked commit in its repository and sorted it. A **false alarm** is a block where no check got weaker and no gate was relaxed: a new test
+blocked commit in its repository and sorted it; `benchmarks/section9-labels.tsv` has one row per blocked commit (repository, commit, how it was
+sorted, the cause). A **false alarm** is a block where no check got weaker and no gate was relaxed: a new test
 that is skipped, a method that happens to be called `fit`, a refactor that checks the same thing in another form. **A reviewer should see
 it** is every other block: an assertion that got weaker, a gate that was relaxed, a test that was switched off or focused, whether the
 commit says why or not.
