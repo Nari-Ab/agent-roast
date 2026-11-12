@@ -317,6 +317,16 @@ const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toCo
 // Testing Library's getBy*/findBy* queries throw when nothing matches, so `toBeTruthy()` on one is still a presence check.
 const THROWING_QUERY = /\b(?:get|find)(?:All)?By\w*\s*\(/;
 
+const PRESENCE_PREDICATE = /\.(?:exists|isVisible|isExisting|isDisplayed)\(\)$/;
+/** `expect(wrapper.find(".menu").exists()).toBe(true)` and `expect(document.querySelector(".menu")).not.toBeNull()` both say the element is
+ * there: a boolean that says so, and a query that finds it (or a predicate that says so again, with `toBeTruthy()`). Written in the other
+ * direction, or with anything else as the new subject, it is a different check. */
+function samePresence(oldAssertion: string, newAssertion: string): boolean {
+  if (!/\.toBe\s*\(\s*true\s*\)\s*;?\s*$/.test(oldAssertion) || !/\.(?:not\s*\.\s*toBeNull|toBeTruthy|toBeDefined|toBeInTheDocument)\s*\(\s*\)\s*;?\s*$/.test(newAssertion)) return false;
+  const was = checkedExpression(oldAssertion, "js"), now = checkedExpression(newAssertion, "js");
+  return !!was && !!now && PRESENCE_PREDICATE.test(was) && (PRESENCE_PREDICATE.test(now) || /(?:querySelector|queryBy\w*|getBy\w*|findBy\w*|\.find|\.get|\$)\(/.test(now));
+}
+
 /** What an assertion checks: the argument of `expect(...)`, the left side of `assert x == 1`, the first argument of
  * `assert.equal(...)`. Whitespace and a trailing `.length` are dropped, so `items`, `items.length` and `len(items)` compare equal. */
 function checkedExpression(assertion: string, language: Language): string | null {
@@ -480,6 +490,7 @@ function pinsLess(oldAssertion: string, newAssertion: string, language: Language
 function isWeaker(rawOld: string, rawNew: string, language: Language): boolean {
   // The matchers read the assertion without the brackets a formatter puts around its condition or its message.
   const oldAssertion = language === "py" ? withoutOuterParens(rawOld) : rawOld, newAssertion = language === "py" ? withoutOuterParens(rawNew) : rawNew;
+  if (language === "js" && samePresence(oldAssertion, newAssertion)) return false;
   if (pinsLess(oldAssertion, newAssertion, language) || relaxes(oldAssertion, newAssertion, language)) return true;
   if (language === "js") {
     if (THROWING_QUERY.test(newAssertion) || !JS_SPECIFIC.test(oldAssertion) || WEAK_JS.test(oldAssertion) || BOUND_JS.test(oldAssertion)) return false;
@@ -718,7 +729,8 @@ function markedTest(finding: Infraction, lines: string[]): { key: string; title:
   // A registration (`it.skip('title', () => ...)`, `test.fixme('title', { annotation }, async () => ...)`) starts with its title; the string of
   // `test.skip(cond, 'reason')` inside a test is a reason, and the call does not start with one. A formatter wraps a long registration after
   // its opening bracket, so the title may be the first thing on the next line.
-  const title = /\b(?:it|test|describe|suite|xit|xtest|xdescribe|fit|fdescribe)\b[\w$.\s]*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1\s*[,)]/.exec(titleOnNextLine(snippet, lines, index));
+  // `it.todo(` has no callback, so its title on the next line is the last thing in the joined text: nothing follows it before the line ends.
+  const title = /\b(?:it|test|describe|suite|xit|xtest|xdescribe|fit|fdescribe)\b[\w$.\s]*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1\s*(?:[,)]|$)/.exec(titleOnNextLine(snippet, lines, index));
   if (title) return { key: `js:${title[1]}${title[2]}${title[1]}`, title: `${title[1]}${title[2]}${title[1]}` };
   // `test.skip(true, "reason")`, `test.fail(cond, ...)` and `test.fixme()` inside a test body belong to the test around them: the nearest line above
   // with a smaller indent that is a registration with a title (a wrapped registration puts its callback on a line of its own, one level in).
@@ -825,7 +837,14 @@ const CI_RUNNER = new RegExp(
   // Monorepo runners: `nx affected --target=test`, `turbo run test`, `lerna run test`, `bazel test //...`.
   String.raw`|(?<![\w./-])(?:nx|turbo|lerna|rush)\s+(?:run-many|affected|run|test)\b[^\n]*(?<![\w-])(?:test|tests)(?![\w-])` +
   String.raw`|(?<![\w./-])(?:bazel\s+test|ctest|phpunit|rspec|deno\s+test)(?![\w/-])` +
+  // Python's own runners and the browser runners: `python3 -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`.
+  String.raw`|(?<![\w./-])python[\d.]*\s+-m\s+(?:unittest|pytest|nose2?)(?![\w/-])` +
+  String.raw`|(?<![\w./-])(?:nosetests|nose2|py\.test|stestr|behave|jasmine|playwright\s+test|cypress\s+run|karma\s+start|hatch\s+(?:run\s+)?test|swift\s+test)(?![\w/-])` +
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
+// The shell builtin `test -f summary.md && cat summary.md` checks a file: it has the word on the line and runs no tests.
+const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*-[bcdefghkLnOGprsStuwxzN](?=\s)/g;
+/** Whether a line of a CI file runs a test command. */
+const ciRuns = (line: string): boolean => CI_RUNNER.test(line.replace(SHELL_TEST, " "));
 const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
@@ -843,9 +862,28 @@ const CI_NON_GATE = /^\s*(?:schedule|release|workflow_dispatch|workflow_run|repo
  * One whose triggers are all of the kinds in CI_NON_GATE gates nothing, so a step there that is switched off or allowed to fail loosens no gate.
  * A trigger section that cannot be read, and every GitLab CI file, count as gating. */
 function gatesChanges(file: string, text: string): boolean {
-  const triggers = triggerSection(text) ?? text;
+  const section = triggerSection(text), triggers = gatingTriggers(text) ?? text;
   if (/\.gitlab-ci/.test(file) || CI_GATE.test(triggers) || /\bworkflow_call\b/.test(triggers)) return true;
-  return !CI_NON_GATE.test(triggers);
+  // A workflow whose only push trigger is a version tag (`push: tags: ['v*']`) is a release pipeline: it judges no change.
+  return section !== null && triggers !== section ? false : !CI_NON_GATE.test(triggers);
+}
+
+/** The trigger section of a workflow without its `push:` blocks that fire on tags alone: `push: tags: ['v*']` runs when a version is released,
+ * not when a change is pushed or reviewed. A `push:` with `branches` (or `branches-ignore`) stays, and so does one with no filter at all. */
+function gatingTriggers(text: string): string | null {
+  const section = triggerSection(text);
+  if (section === null) return null;
+  const lines = section.split(/\r?\n/), kept: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = /^(\s*)push\s*:\s*(?:#.*)?$/.exec(lines[i]);
+    if (!head) { kept.push(lines[i]); continue; }
+    let end = i + 1;
+    while (end < lines.length && (!lines[end].trim() || lines[end].search(/\S/) > head[1].length)) end++;
+    const block = lines.slice(i + 1, end).join("\n");
+    if (!(/^\s*tags\s*:/m.test(block) && !/^\s*branches(?:-ignore)?\s*:/m.test(block))) kept.push(...lines.slice(i, end));
+    i = end - 1;
+  }
+  return kept.join("\n");
 }
 
 /** The trigger section of a workflow: the lines under a top-level `on:` up to the next top-level key, so that `push: true` in the `with:` of a
@@ -860,11 +898,12 @@ function triggerSection(text: string): string | null {
 }
 
 function gatingTestLines(file: string, text: string): number {
-  return /\.gitlab-ci/.test(file) || CI_GATE.test(triggerSection(text) ?? text) ? matchingLines(text, CI_RUNNER) : 0;
+  return /\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text) ? matchingLines(text, ciRuns) : 0;
 }
 
-function matchingLines(text: string, pattern: RegExp): number {
-  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && pattern.test(line)).length;
+function matchingLines(text: string, pattern: RegExp | ((line: string) => boolean)): number {
+  const matches = typeof pattern === "function" ? pattern : (line: string) => pattern.test(line);
+  return text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && matches(line)).length;
 }
 
 /** Test-step counts for one changed CI file; null when it is not a CI file. */
@@ -872,7 +911,7 @@ export function ciTestSteps(file: string, oldText: string | null, newText: strin
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
   const after = gatingTestLines(file, now);
-  return { file, before: gatingTestLines(file, was), after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, CI_RUNNER) : 0 };
+  return { file, before: gatingTestLines(file, was), after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? matchingLines(now, ciRuns) : 0 };
 }
 
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
@@ -892,12 +931,25 @@ const LENIENT = /continue-on-error:\s*true|allow_failure:\s*true|^\s*(?:-\s+)?if
 // `npm test || true` ends the step with success whatever the tests did: `continue-on-error` written in shell.
 const SHELL_SWALLOW = /\|\|\s*(?:true|exit\s+0|:|echo\b)|;\s*(?:true|exit\s+0)\b/;
 
+// A step that only moves files, signs in, publishes, comments or reports coverage checks nothing: letting it fail (a flaky upload, a login that
+// is not configured on a fork, a release attachment that GitHub refuses) loosens no gate. Anything not listed here may be a check.
+const NON_CHECK_ACTION = new RegExp(String.raw`^\s*(?:-\s+)?uses:\s*["']?(?:` + [
+  String.raw`actions/(?:upload-artifact|download-artifact|upload-pages-artifact|deploy-pages|cache|attest[\w-]*|checkout|setup-[\w-]+)`,
+  String.raw`docker/(?:login-action|metadata-action|build-push-action|setup-[\w-]+)`,
+  String.raw`azure/login`, String.raw`aws-actions/(?:configure-aws-credentials|amazon-ecr-login)`, String.raw`google-github-actions/(?:auth|setup-gcloud)`,
+  String.raw`softprops/action-gh-release`, String.raw`ncipollo/release-action`, String.raw`pypa/gh-action-pypi-publish`, String.raw`JS-DevTools/npm-publish`, String.raw`peaceiris/actions-gh-pages`,
+  String.raw`peter-evans/[\w-]+`, String.raw`marocchino/sticky-pull-request-comment`, String.raw`slackapi/slack-github-action`,
+  String.raw`codecov/codecov-action`, String.raw`coverallsapp/github-action`,
+].join("|") + String.raw`)(?:/[\w./-]+)?@`, "i");
+
+interface LenientStep { count: number; line: number; runsChecks: boolean; nonCheck: boolean }
+
 /** Tolerated-failure markers per enclosing step or job, keyed by that step's own line; `runsChecks` says whether that step or job runs a
- * test command anywhere in it. */
-function lenientSteps(text: string): Map<string, { count: number; line: number; runsChecks: boolean }> {
+ * test command anywhere in it, and `nonCheck` that it is one step that uses an action from NON_CHECK_ACTION and runs nothing. */
+function lenientSteps(text: string): Map<string, LenientStep> {
   const lines = text.split(/\r?\n/);
   const indentOf = (line: string) => line.length - line.trimStart().length;
-  const found = new Map<string, { count: number; line: number; runsChecks: boolean }>();
+  const found = new Map<string, LenientStep>();
   lines.forEach((line, i) => {
     if (line.trim().startsWith("#") || !LENIENT.test(line)) return;
     let j = i - 1;
@@ -915,9 +967,11 @@ function lenientSteps(text: string): Map<string, { count: number; line: number; 
     const start = /^\s*-\s+if:/.test(line) ? i : Math.max(j, 0), level = indentOf(lines[start]);
     let end = start + 1;
     while (end < lines.length && (!lines[end].trim() || lines[end].trim().startsWith("#") || indentOf(lines[end]) > level)) end++;
-    const runsChecks = matchingLines(lines.slice(start, end).join("\n"), CI_RUNNER) > 0;
+    const scope = lines.slice(start, end), runsChecks = matchingLines(scope.join("\n"), ciRuns) > 0;
+    const uses = scope.filter(item => /^\s*(?:-\s+)?uses:/.test(item));
+    const nonCheck = !runsChecks && uses.length === 1 && NON_CHECK_ACTION.test(uses[0]) && !scope.some(item => /^\s*(?:-\s+)?run:/.test(item));
     const entry = found.get(identity);
-    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; } else found.set(identity, { count: 1, line: i + 1, runsChecks });
+    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; entry.nonCheck &&= nonCheck; } else found.set(identity, { count: 1, line: i + 1, runsChecks, nonCheck });
   });
   return found;
 }
@@ -994,7 +1048,7 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
     const before = lenientSteps(oldText), existing = new Set(oldText.split(/\r?\n/).flatMap(line => [line.trim(), line.trim().replace(/^-\s+/, "")]));
     const newLines = newText.split(/\r?\n/);
     for (const [identity, now] of lenientSteps(newText)) {
-      if (!gating && !now.runsChecks) continue;
+      if (now.nonCheck || (!gating && !now.runsChecks)) continue;
       if (identity && existing.has(identity) && now.count > (before.get(identity)?.count ?? 0)) {
         const marker = (newLines[now.line - 1] ?? "").trim();
         out.push(finding("guard-weakened", file, now.line, marker, /^(?:-\s+)?if:/.test(marker) ? "CI step is now switched off" : "CI step is now allowed to fail", commit));
@@ -1002,7 +1056,7 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
       }
     }
     const swallowing = (text: string) => text.split(/\r?\n/).map((line, index) => ({ line: line.trim(), index }))
-      .filter(item => !item.line.startsWith("#") && CI_RUNNER.test(item.line) && SHELL_SWALLOW.test(item.line));
+      .filter(item => !item.line.startsWith("#") && ciRuns(item.line) && SHELL_SWALLOW.test(item.line));
     const was = swallowing(oldText), now = swallowing(newText);
     // A `continue-on-error: true` that went away in the same change was the same tolerance written another way.
     const tolerance = (text: string) => text.split(/\r?\n/).filter(line => !line.trim().startsWith("#") && /continue-on-error:\s*true|allow_failure:\s*true/.test(line)).length;
