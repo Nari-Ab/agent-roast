@@ -161,7 +161,7 @@ It is a review aid. It cannot prove who wrote a change or that code is correct, 
 
 [Rules](docs/rules.md) · [Integrations](docs/integrations.md) · [Reference](docs/reference.md) (commands, exit codes,
 configuration, exceptions, baselines, limits) · [Comparison](docs/comparison.md) · [Measurements](docs/benchmarks.md) ·
-[Try it on your repository](docs/pilot.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+[Real blocks](docs/examples.md) · [Try it on your repository](docs/pilot.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 Found a finding that was wrong, or a shortcut it missed? That is the most useful report there is:
 [open an issue](https://github.com/Nari-Ab/agent-roast/issues/new/choose).
