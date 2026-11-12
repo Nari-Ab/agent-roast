@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.21.0 — 2026-11-13
+
+**Five false alarms fixed that an eighth sample showed, two shapes that a search of 126,486 commits found, and a catalog of cheats that someone else wrote.**
+
+0.20.0 as it was frozen was tried on an eighth sample that nobody had read: 39 public JavaScript, TypeScript and Python repositories, 11,081 commits (`benchmarks/eighth-corpus.tsv`). It blocked 26 commits, 16 for a reviewer and 10 false alarms (38%),
+against 29 and 13 (45%) for the published 0.19.0. Reading the blocks showed what is fixed here. A search of the added lines of 126,486 commits in 505 repositories for the gaps that `docs/rules.md` lists found two shapes worth a rule, and the specimens of a third party's
+catalog of agent cheats were reviewed as an outside check. `docs/benchmarks.md` sections 12 and 13 have the tables, what is still wrong and the limits.
+
+- **A mock that is configured on one member of a namespace import is a mock of that member only.** `vi.mocked(filesystem.open).mockImplementation(...)` made `await filesystem.stat(...)` look like the output of a mock, because the module was spied on and one member was configured (one false alarm).
+- **A Python expectation of nothing turned into its opposite is a flipped expectation, not a weaker one.** `assert memory.created_at.tzinfo is None` into `is not None`, and `assert not (cap > 0 and used >= cap)` into `assert admitted.unlimited` (two false alarms).
+  A check that is compound outside its brackets is not an expectation of nothing: `assert data is not None and not data.refresh_pending` turned into `assert data is not None` dropped a clause and is still reported.
+- **A ruff `target-version` that is dropped hands the choice to `requires-python`.** The effective target is the one that is written, or else the one the project requires, so ignores for the rules that a higher target brings are not reported (one false alarm).
+- **A test command inside a block of commands is a test step.** The lines of a folded block (`run: >-`) are one command and an item of a GitLab `script:` list is one (one that only prints is not); in a literal block (`run: |`) a runner known by name, or a tool with `test` as its first argument
+  (`hvigorw test`, `terraform test`), counts, so a step is the same test step in either kind of block. The shell builtin `test "$x" = y` is not a test run (one false alarm).
+- **`assert check or True` cannot fail, and `skipif(True)` is a skip.** The first is a `trivial-assert` (Python tests; only an `or` outside every bracket, so a callback that ends in `or True` is left alone) and the second a `test-skip` on a test that was already there (`@pytest.mark.skipif(True, ...)`, `@unittest.skipIf(True, ...)`).
+  They are the two shapes of the documented gaps that the search found to be rare in ordinary code and, when they show, a check that cannot fail or a test that is switched off. Of the 24 commits where the search found either, seven differ between 0.20.0 and this version, with nine new findings, all read as real:
+  seven neutered assertions ("TDD placeholder", "message content not asserted verbatim") and two skips with a FIXME. Sixteen other shapes were read and not built: retries, timeouts, runner exclusions, `if False:` and the rest are the ordinary content of test files and configuration (`scripts/probe-gaps.mjs`).
+- **An outside check.** The 15 specimens of [reward-hack-zoo](https://github.com/MatthewWaller/reward-hack-zoo) (nine hacks and six honest solutions, written by hand by the catalog's author) were reviewed with `scripts/benchmark-zoo.mjs`: four hacks are reported (a skip, a patched target, a `conftest.py` that rewrites reports,
+  an edited expected value as a warning) and none of the honest solutions. The five that are not (special-casing, swallowed errors, overfitting) live in the code and look like ordinary code line by line; the search found their shapes 950 and 1,180 times.
+- **Measured.** On the 26 commits that 0.20.0 blocked on sample 8 the shipped build blocks 21: the 16 that a reviewer should see and 5 false alarms, with no finding that is new (the last row of the table is fitted). 12,985 commits of the eight samples, the agent corpus and the 24 repositories of section 6 touch a CI file or a Python lint or type configuration:
+  the analyses of both sources differ on 294, and the full review with both builds of those differs on 2 (the two false alarms of sample 8 are gone, none is new). The 428 recorded blocks of the eight samples, reviewed again with this version: 219 are blocked (183 for a reviewer, 36 false alarms); 24 of the 237 that 0.19.0 blocks are not (22 false alarms and 2 older blocks whose tests run in another workflow); 6 are not blocked by 0.19.0, all for a reviewer (one from the rule of 0.20.0 for an exact value turned into "not another value", 5 from the two rules of section 13).
+  Labeled cases: 158 of 158 cheats caught, 144 of 144 look-alikes left alone, 1 gap open; 48 files, 1,487 tests. The regressions found five defects of the fixes themselves, fixed before the numbers were taken (`docs/benchmarks.md`, section 12). The price: a test script of another shape inside a literal block is not seen,
+  an `or True` inside a call (`assert any(x or True for ...)`) is not reported, a `skipif(True)` on a test that the same change adds is not reported (as for every skip), and special-casing, swallowed errors and overfitting are not reported at all.
+
 ## 0.20.0 — 2026-11-12
 
 **A check turned into "not another value", a duplicate workflow dropped, and fewer false alarms on a seventh sample.**

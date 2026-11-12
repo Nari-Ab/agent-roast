@@ -57,11 +57,11 @@ A block where no check got weaker. Four were found by reading these samples and 
 
 ## What a first run shows
 
-The first thing `npx agent-roast replay` shows on a repository is the newest 50 commits. On the 278 public JavaScript, TypeScript and Python repositories of the seven samples of [the benchmarks](benchmarks.md) (79,843 commits replayed):
+The first thing `npx agent-roast replay` shows on a repository is the newest 50 commits. On the 317 public JavaScript, TypeScript and Python repositories of the eight samples of [the benchmarks](benchmarks.md) (90,924 commits replayed):
 
-- **Blocks:** 26 repositories (9%) list at least one, 32 in all. A reviewer should see 23 of the 32; 9 are false alarms (28%), in 8 repositories (3%), and in 6 of those
-  (2%) every block is a false alarm. In the newest 300 commits it is 101 repositories (36%), 195 blocks, 33 false alarms (17%). These figures are for 0.20.0, which was fixed from
-  those samples, so they flatter it. Out of sample is the seventh alone with the published 0.19.0, which had not seen it: 4 of 40 repositories (10%) show a block in the newest 50 commits, 4 blocks, 1 false alarm.
+- **Blocks:** 30 repositories (9%) list at least one, 37 in all. A reviewer should see 26 of the 37; 11 are false alarms (30%), in 10 repositories (3%), and in 7 of those
+  (2%) every block is a false alarm. In the newest 300 commits it is 115 repositories (36%), 219 blocks, 36 false alarms (16%). These figures are for 0.21.0, which was fixed from
+  those samples, so they flatter it. Out of sample is the eighth alone with 0.20.0 as it was frozen, which had not seen it: 6 of 39 repositories (15%) show a block in the newest 50 commits, 6 blocks, 4 false alarms.
 - **Warnings** (a test that disappeared, an expected value that was edited, a line pattern): a median of 3 commits of the 50 per repository, none in 29% of the repositories, 10% of the commits on average. They never stop anything.
 - One reader sorted every block, and the share of false alarms moved between a quarter and two thirds from one sample to the next
   ([section 11](benchmarks.md#11-a-seventh-sample-and-two-things-that-were-missing)), so treat these as a first estimate for a repository like those, not as a promise.

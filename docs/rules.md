@@ -230,7 +230,7 @@ Reported in JavaScript/TypeScript, Python, Go, Rust (`assert!(true)`), Java and 
 `self.assertTrue(run() == run() or True)`. Only an `or` outside every bracket is read, so a callback that says it handled the call
 (`assert registry.register(lambda item: seen.append(item) or True)`) and `identity(x or True)` are left alone. A search of the added lines of 126,486 commits in 505 public repositories found the shape in 13 commits of 8 repositories;
 the rule reports seven assertions in six commits of four of them, each one a check that had been neutered ("message content not asserted verbatim", "TDD placeholder"), and leaves the rest alone: a callback, a call, the fixtures of a testing tool's own tests
-and the first commit of a clone ([benchmarks, section 13](benchmarks.md#13-a-probe-of-what-no-rule-sees)).
+and the first commit of a clone ([benchmarks, section 13](benchmarks.md#13-a-probe-of-what-no-rule-sees-and-a-catalog-of-cheats-that-someone-else-wrote)).
 
 **A test that checks its own mock.** The same rule reports a test that replaces the function it checks with a mock and then
 asserts on what the mock returns. That cannot fail whatever the real code does:
