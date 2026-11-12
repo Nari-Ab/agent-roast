@@ -97,7 +97,11 @@ workflow that stops running tests or stops running on pushes and pull requests, 
 fail, and pytest's `xfail_strict` switched from true to false (tests marked xfail then pass whether or not they fail).
 Raising a threshold, restructuring CI and moving the test step are not reported. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
-`bazel test`).
+`bazel test`). A workflow gates changes when it runs on a push or a pull request (or is a reusable workflow, `workflow_call`, that one of those
+may call); the triggers are read from its `on:` section, not from the whole file, where a Docker step's `push: true` is not a trigger. In a
+workflow that runs only on a schedule, a release, a manual dispatch or after another workflow (a job that posts a comment after a release, a
+nightly canary), a step or job that is switched off or allowed to fail is reported only when it runs tests; the price is a gate-like job
+there that does not.
 
 More shortcuts of the same kind:
 
@@ -156,9 +160,11 @@ Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned o
 (Python, JavaScript and TypeScript), by the `fn` below the attribute (Rust) and by the `func Test...` around `t.Skip()` (Go); a file that is
 new has only new tests. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
 file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
-cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. Two gaps are known: a
-`test.skip(true, "needs admin")` inside an `if` that checks the environment is reported, because the literal hides the condition, and a
-`test.fixme(` whose title is on the next line is compared by count, which can blame a marker that was already there.
+cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. A registration that a formatter
+wrapped after its opening bracket (`test.fixme(` with the title on the next line) is read like one on a single line, and a
+`test.skip(true, "needs admin")` that sits under an `if`, `else`, `case`, `catch` or after `cond &&` is a run-time condition, like
+`test.skip(isAdmin, ...)`; the condition counts only when it is in the lines the review can see, and one that mentions CI, or is plainly
+true (`if (true)`), still hides the test and is reported.
 A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
 `@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
