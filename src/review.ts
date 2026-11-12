@@ -1,11 +1,11 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
-import { analyzeGuardFile, analyzeTestFile, ciTestSteps, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
+import { analyzeGuardFile, analyzeTestFile, ciTestSteps, gatingTestCommands, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
 import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
-import { assertNotAborted, changedTreeFiles, readBlob, reviewPolicy, reviewRefs, stagedSnapshot, worktreeSnapshot } from "./snapshot.js";
+import { assertNotAborted, changedTreeFiles, ciFilesAt, readBlob, reviewPolicy, reviewRefs, stagedSnapshot, worktreeSnapshot } from "./snapshot.js";
 import type { TreeChange, WorktreeSnapshot } from "./snapshot.js";
 import { formatReviewMarkdown, formatReviewTerminal, formatGithubAnnotations } from "./renderer.js";
 import { formatSarif } from "./sarif.js";
@@ -181,7 +181,21 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
   await snapshot?.verify();
   result.complete = result.skippedFiles.length === 0;
   const rules = policy.config.rules ?? {};
-  result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings, ...resolveCiTestSteps(ciCounts, refs.headSha)].filter(finding => rules[finding.type] !== "off"));
+  // A workflow that lost its test steps may only have been a duplicate: the test commands that the workflows this change did not touch still run are read only then.
+  const elsewhere = new Set<string>();
+  if (ciCounts.some(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)) {
+    const touched = new Set(changes.flatMap(change => [change.oldPath, change.newPath]));
+    // The tree to read them from: the head commit, or HEAD for a review of the index or the working tree (whose head is a digest, not a commit);
+    // a file that this change did not touch is the same there.
+    const tree = /^[a-f0-9]{40,64}$/.test(refs.headSha) ? refs.headSha : refs.baseSha;
+    try {
+      for (const file of (await ciFilesAt(cwd, tree, options.signal)).filter(candidate => !touched.has(candidate.path)).slice(0, 100)) {
+        try { for (const command of gatingTestCommands(file.path, new TextDecoder().decode(await readBlob(cwd, file.oid, options.signal, 512 * 1024)))) elsewhere.add(command); }
+        catch (error) { assertNotAborted(options.signal); }
+      }
+    } catch (error) { assertNotAborted(options.signal); }
+  }
+  result.infractions.push(...[...resolveTampering(tamperingFiles, productionChanged), ...guardFindings, ...resolveCiTestSteps(ciCounts, refs.headSha, elsewhere)].filter(finding => rules[finding.type] !== "off"));
   const exceptions = applyExceptions(result.infractions, options.ignoreExceptions ? [] : policy.config.exceptions, new Date(), existingCounts);
   result.infractions = exceptions.findings;
   result.suppressedFindings = exceptions.suppressedFindings;

@@ -147,6 +147,16 @@ export async function readBlob(cwd: string, oid: string, signal?: AbortSignal, l
   return buffer;
 }
 
+/** The CI files of a commit's tree, with their blob ids: the GitHub Actions workflows and the root GitLab pipeline. Empty for a commit that does not exist yet. */
+export async function ciFilesAt(cwd: string, sha: string, signal?: AbortSignal): Promise<{ path: string; oid: string }[]> {
+  if (!/^[a-f0-9]{40,64}$/.test(sha)) return [];
+  const raw = await readGit(cwd, ["ls-tree", "-r", "-z", "--full-tree", sha, "--", ".github/workflows", ".gitlab-ci.yml"], signal, 1024 * 1024);
+  return raw.toString().split("\0").filter(Boolean).flatMap(entry => {
+    const match = /^100(?:644|755) blob ([a-f0-9]{40,64})\t(.+\.ya?ml)$/.exec(entry);
+    return match ? [{ path: match[2], oid: match[1] }] : [];
+  });
+}
+
 /** Policy comes from the explicitly supplied base branch tip, not the candidate tree. */
 export async function reviewPolicy(cwd: string, baseSha: string, signal?: AbortSignal): Promise<{ config: AgentRoastConfig; filename: string | null }> {
   const raw = await readGit(cwd, ["ls-tree", "--full-tree", "-z", baseSha, "--", ...CONFIG_FILENAMES], signal, 8192);

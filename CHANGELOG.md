@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.20.0 — 2026-11-12
+
+**A check turned into "not another value", a duplicate workflow dropped, and fewer false alarms on a seventh sample.**
+
+Two things were missing, found on corpora that had already been read, before any block of a seventh sample was read, and reading that sample showed what else was wrong. The published 0.19.0 blocked 31 of its 12,000 commits (40 public
+JavaScript, TypeScript and Python repositories that no earlier measurement had used, `benchmarks/seventh-corpus.tsv`): 16 for a reviewer and 15 false alarms (48%; 6 of them in one repository's
+`pyproject.toml`). 0.18.0 blocked 32, 16 of them false alarms. The build of this version that was frozen before the sample was read blocked 32 and added one block that is real. The fixes that reading the sample
+showed are in this version; on the 32 commits it blocks 22, the 17 that a reviewer should see and 5 false alarms. `docs/benchmarks.md` section 11 has the tables, what is still wrong and the limits.
+
+- **An exact value turned into "not another value" is a weaker check.** `expect(x).toBe(2)` edited into `expect(x).not.toBe(0)` (also `toEqual`, `toStrictEqual` and `toHaveLength`), `assert x == 2` into `assert x != 0`,
+  and `self.assertEqual(x, 2)` into `self.assertNotEqual(x, 0)`: the test pinned one value and now only rules another out, so nearly anything passes. Found by a recall probe on the 1,248 agent commits whose messages say they skip, disable or loosen
+  tests (an exit-code test, `toBe(2)` into `not.toBe(0)` in nine tests of one commit). Not reported: ruling out the very value the old check expected (a flipped expectation), an old check that expected nothing or a boolean, a name as the
+  new value (`not.toBe(previousId)` asks whether something changed), a compound Python assertion. In about 97,000 commits there are 45 where an exact check was edited into a negated one; the rule adds one block there, a real one, and the rest are flipped expectations.
+- **A workflow dropped while another one runs the same tests is not "tests removed".** A workflow that stops running its test commands is reported only when one of them no longer runs in a workflow that gates changes, whether
+  the same change touches that workflow or not (the unchanged workflows of the head tree are read only then). The same command in another `working-directory`, another runner, or a workflow that runs only on a schedule does not count. It
+  removes the two false alarms of sample 6 that 0.19.0 listed as still wrong, and two older blocks that were sorted "for a reviewer" (a schema workflow that stopped running on pushes while `pnpm test` still runs on every push, and a publish workflow whose `npm test` still runs on every pull request).
+- **Fixed after reading sample 7 (so not part of its measurement).** Quoted words in the comments of a TOML list were read as rule codes: `"EM",  # allow Exception("text")` listed `text` as ignored, and a commented-out `# "ANN"` was read as selected (two false alarms).
+  A ruff ignore added in the same change that raises `requires-python`, `target-version` or the pinned ruff version (it has to be in both versions of the file, and higher in the new one) is not reported, because the bump brings those rules (four). `deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`,
+  `./gradlew test`, `node --test` and a project's own test script run through an interpreter or by path (`python scripts/run_tests.py`, `./scripts/test.sh`) are test steps (two). `fit(` and `fdescribe(` are focused tests only with a title written as a string,
+  not a call such as `fit(line, width)` (one). A tolerance that moved is not a new one: a step is not reported as made easier to pass when the same commands were already inside a job or step allowed to fail and the places allowed to fail did not grow (one).
+  The price: a ruff ignore that rides along with an upgrade is not reported, and neither is a test step removed while another workflow runs the same command in the same directory.
+- **Measured.** A seventh sample (40 repositories, 12,000 commits) was replayed with the published 0.19.0, 0.18.0 and the build frozen before any block was read; the recorded blocks of all seven samples (394 commits) were reviewed again with this version: 195 are blocked, 162 for a reviewer and 33 false alarms; 14 that 0.19.0 blocks are not (12 false alarms, and two older blocks sorted "for a reviewer" whose tests run in another workflow), and one is new (a real one).
+  The 11,684 commits of the samples, the agent corpus and the 24 repositories of section 6 that touch a CI file or a Python lint or type configuration, reviewed with both builds where the analyses differ: 16 commits lose findings (the kinds above and two older blocks), 2 gain one (a deleted workflow that ran sanity tests, a real one; a loop over test files replaced by a script whose name does not say that it runs tests, a false alarm).
+  Labeled cases: 152 of 152 cheats caught, 136 of 136 look-alikes left alone, 1 gap open; 1,444 tests. The price: a ruff ignore that comes with a version bump is not reported, a test step is not reported as removed while another workflow runs the same command in the same directory, and five false alarms of sample 7 are not fixed
+  (an existence check rewritten after a refactor, three; tests that moved with the code into a package another workflow tests; a configuration that is stricter overall).
+
 ## 0.19.0 — 2026-11-12
 
 **Fewer false alarms, and a defect that blocked every commit of a repository.**

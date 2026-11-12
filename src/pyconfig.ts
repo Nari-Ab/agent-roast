@@ -48,11 +48,16 @@ export function configEntries(text: string, toml: boolean): Entry[] {
   return entries;
 }
 
+/** A value without its comments, which may quote words of their own: `"EM",  # allow Exception("text")` keeps the code and drops the rest. Strings are
+ * kept whole, so a `#` inside one does not start a comment. */
+const withoutComments = (value: string) => value.replace(/"(?:\\.|[^"\\\n])*"|'[^'\n]*'|[#;][^\n]*/g, found => (found[0] === "#" || found[0] === ";" ? "" : found));
+
 /** The members of a list value: the quoted strings of a TOML array, or the words and codes of an INI list. */
 function members(value: string): string[] {
-  const quoted = [...value.matchAll(/"((?:\\.|[^"\\\n])*)"|'([^'\n]*)'/g)].map(match => (match[1] ?? match[2]).trim()).filter(Boolean);
+  const code = withoutComments(value);
+  const quoted = [...code.matchAll(/"((?:\\.|[^"\\\n])*)"|'([^'\n]*)'/g)].map(match => (match[1] ?? match[2]).trim()).filter(Boolean);
   if (quoted.length) return quoted;
-  return value.replace(/[#;].*$/gm, "").split(/[\s,]+/).map(word => word.trim()).filter(Boolean);
+  return code.split(/[\s,]+/).map(word => word.trim()).filter(Boolean);
 }
 
 /** Does a rule selector (`ALL`, `E`, `E5`, `E501`) cover a rule code? A selector is a prefix inside one linter: `B` is bugbear and
@@ -121,8 +126,32 @@ export function analyzePythonConfig(file: string, oldText: string, newText: stri
     const base = explicit.length ? explicit : tool === "ruff" ? ["E4", "E7", "E9", "F"] : ["E", "F", "W", "C90"];
     return [...base, ...extra].some(selected => covers(selected, code) || covers(code, selected));
   };
+  // A bump of the Python version or of ruff itself brings rules of its own (`UP006` applies once the project needs Python 3.9, `RUF022` came with ruff 0.8):
+  // ignoring them in the same change keeps the checks that were in force, it does not switch any off.
+  // Raised, not just changed: a setting that is in both versions of the file, with a higher number in the new one (the highest of several, for a pin written twice).
+  // `py38` reads as 3.8 and `py311` as 3.11.
+  const versionParts = (text: string) => /^\d{2,}$/.test(text) ? [Number(text[0]), Number(text.slice(1))] : text.split(".").map(Number);
+  const higher = (was: number[], now: number[]) => {
+    for (let index = 0; index < Math.max(was.length, now.length); index++) if ((now[index] ?? 0) !== (was[index] ?? 0)) return (now[index] ?? 0) > (was[index] ?? 0);
+    return false;
+  };
+  const newest = (text: string, pattern: RegExp): number[] | null => {
+    let best: number[] | null = null;
+    for (const match of text.matchAll(pattern)) {
+      const parts = versionParts(match[1]);
+      if (!best || higher(best, parts)) best = parts;
+    }
+    return best;
+  };
+  const versions = [
+    /^\s*requires-python\s*=\s*["'][<>=!~^\s]*(\d+(?:\.\d+)*)/gm,
+    /^\s*target-version\s*=\s*["']?(?:py)?(\d+(?:\.\d+)*)/gm,
+    /^\s*python_version\s*=\s*["']?(\d+(?:\.\d+)*)/gm,
+    /\bruff\s*(?:(?:===|==|~=|>=|>)\s*["']?|=\s*["'][\^~>=]*)(\d+(?:\.\d+)*)/g,
+  ];
+  const bumped = versions.some(pattern => { const was = newest(oldText, pattern), now = newest(newText, pattern); return !!was && !!now && higher(was, now); });
   for (const [tool, bucket] of ignored(after)) {
-    if (!configured.has(tool as "ruff")) continue;
+    if (!configured.has(tool as "ruff") || (tool === "ruff" && bumped)) continue;
     const old = [...(was.get(tool)?.keys() ?? [])];
     const fresh = [...bucket].filter(([code]) => !old.some(known => covers(known, code)) && enforced(tool, code));
     if (fresh.length) report(Math.min(...fresh.map(([, line]) => line)), `${tool} ignore: ${fresh.slice(0, 4).map(([code]) => "+" + code).join(", ")}${fresh.length > 4 ? ", …" : ""}`, "Lint or type checks switched off in the configuration");
