@@ -212,17 +212,68 @@ function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }
 // `fixme` and `fail` are Playwright's; `fails` is Vitest's and `failing` Jest's and AVA's: tests expected to fail, which cannot fail the run.
 const JS_TEST_API = /(?<![\w$.])(?:(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe|failing|sequential))*\s*\.\s*(skip|todo|only|fixme|failing|fails|fail)|((?:xit|xtest|xdescribe|fit|fdescribe)))\b((?:\s*\.\s*(?:each|failing|concurrent|serial|parallel|sequential))*)\s*(?=\(|\u0001)/g;
 
+const MENTIONS_CI = /\bCI\b|\bisCI\b|GITHUB_ACTIONS/;
+
 /** `test.skip(browserName === 'webkit', 'reason')` gates a test on its environment, so it is not a disabled test.
- * A title, a bare `skip()` and `skip(true)` switch a test off; so does a condition that mentions CI, which is how
- * a failing test gets hidden from the pipeline. `open` is the offset of the call's parenthesis; a hunk gap or an
- * unclosed call leaves the context unknown and the skip is reported. */
-function isConditionalSkip(source: string, raw: string, open: number): boolean {
+ * A title, a bare `skip()` and `skip(true)` switch a test off, unless an `if` decides at run time whether the call is reached
+ * (see isUnderRuntimeCondition); so does a condition that mentions CI, which is how a failing test gets hidden from the
+ * pipeline. `open` is the offset of the call's parenthesis and `start` the offset of the call; a hunk gap or an unclosed call
+ * leaves the context unknown and the skip is reported. */
+function isConditionalSkip(source: string, raw: string, open: number, start: number): boolean {
   const args = callArguments(source, raw, open);
   if (!args) return false;
   const isString = (arg: string) => /^(['"`])[\s\S]*\1$/.test(arg);
-  if (!args.length || isString(args[0]) || args[0] === "true") return false;
+  if (!args.length || args[0] === "true") return isUnderRuntimeCondition(source, raw, start);
+  if (isString(args[0])) return false;
   if (args.length > 1 && !isString(args.at(-1)!)) return false;
-  return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(args[0]);
+  return !MENTIONS_CI.test(args[0]);
+}
+
+const TEST_REGISTRATION = /^(?:await\s+)?(?:test|it|describe|suite|beforeAll|beforeEach|afterAll|afterEach)\b/;
+
+/** `if (!isAdmin) { test.skip(true, 'needs an admin') }` asks the environment before it skips, which is what `test.skip(isAdmin, ...)`
+ * does in one call; only `test.skip(true, ...)` written straight into a test, a hook or a `describe` switches that one off. The call
+ * counts as guarded when an `if` (also `else if`, `else`, `case`, `catch`, `cond && ...`) on its line, or the nearest less indented
+ * line above it, decides whether it is reached; a condition that mentions CI, or is plainly true, hides the test and is no guard.
+ * `start` is the offset of the call; `source` and `raw` are the same text with and without the string literals blanked. A hunk gap (NUL)
+ * before the guard leaves the context unknown. */
+function isUnderRuntimeCondition(source: string, raw: string, start: number): boolean {
+  const alwaysTrue = (text: string) => /^\s*(?:true|1|!\s*0|!\s*false)\s*$/.test(text);
+  const indentOf = (text: string) => text.length - text.trimStart().length;
+  const lineStartOf = (offset: number) => Math.max(source.lastIndexOf("\n", offset - 1), source.lastIndexOf("\0", offset - 1)) + 1;
+  const mentionsCi = (from: number, to: number) => MENTIONS_CI.test(raw.slice(from, to));
+  const lineStart = lineStartOf(start);
+  const head = source.slice(lineStart, start).trimEnd();
+  if (head.endsWith(")")) {
+    // `if (!ready) test.skip(true, '...')` and `} else if (!ready) test.skip(...)`: the condition is in front of the call.
+    let depth = 0, opening = -1;
+    for (let i = head.length - 1; i >= 0; i--) {
+      if (head[i] === ")") depth++;
+      else if (head[i] === "(" && --depth === 0) { opening = i; break; }
+    }
+    if (opening >= 0 && /(?:^|[\s}])if\s*$/.test(head.slice(0, opening))) {
+      return !mentionsCi(lineStart + opening + 1, lineStart + head.length - 1) && !alwaysTrue(head.slice(opening + 1, -1));
+    }
+  } else if (/(?:^|[\s}])else$/.test(head)) return true;
+  else if (head.endsWith("&&")) return !mentionsCi(lineStart, start) && !alwaysTrue(head.slice(0, -2).replace(/^[\s{}]+/, ""));
+  const lineEnd = source.slice(start).search(/[\n\0]/);
+  let limit = indentOf(source.slice(lineStart, lineEnd < 0 ? undefined : start + lineEnd)), at = lineStart;
+  for (let steps = 0; steps < 200 && at > 0; steps++) {
+    if (source[at - 1] === "\0") return false;
+    const previous = lineStartOf(at - 1), line = source.slice(previous, at - 1);
+    const lineRaw = raw.slice(previous, at - 1);
+    at = previous;
+    if (!line.trim() || indentOf(line) >= limit) continue;
+    const header = line.trim();
+    if (/^(?:\}\s*)?(?:else\s+)?if\s*\(/.test(header)) {
+      return !MENTIONS_CI.test(lineRaw) && !alwaysTrue(/\bif\s*\((.*)\)\s*\{?\s*$/.exec(header)?.[1] ?? "");
+    }
+    // `else`, `catch`, `case x:` and the `) {` that ends a condition written over several lines are guards whose condition is out of sight.
+    if (/^(?:\}\s*)?(?:else|catch)\b|^(?:case\b|default\s*:)|^\)\s*\{?\s*$/.test(header)) return true;
+    if (TEST_REGISTRATION.test(header)) return false;
+    limit = indentOf(line);
+  }
+  return false;
 }
 
 /** The arguments, as written in `raw`, of the call whose parenthesis sits at `open` in `source`. Null when `open` is not a
@@ -557,7 +608,7 @@ export function auditFileDiffs(
         if (/\bfunction$/.test(source.slice(Math.max(0, previous - 8), previous + 1))) continue;
         if (source[match.index + match[0].length] === "\u0001" && !/\.\s*each\s*$/.test(match[3])) continue;
         // Playwright's `test.fixme(cond, why)` and `test.fail(cond, why)` take a condition like `test.skip` does.
-        if ((match[1] === "skip" || match[1] === "fixme" || match[1] === "fail") && !match[3] && isConditionalSkip(source, raw, match.index + match[0].length)) continue;
+        if ((match[1] === "skip" || match[1] === "fixme" || match[1] === "fail") && !match[3] && isConditionalSkip(source, raw, match.index + match[0].length, match.index)) continue;
         const focus = match[1] === "only" || match[2] === "fit" || match[2] === "fdescribe";
         const expectedToFail = match[1] === "failing" || match[1] === "fails" || match[1] === "fail";
         infractions.push({ type: focus ? "test-focus" : "test-skip", file: file.path, ...evidence(match.index, match[0].length),

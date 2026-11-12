@@ -63,6 +63,14 @@ function javascript(text: string): MockedSubject[] {
     if (end > 0) callbacks.push([open, end]);
   }
 
+  // A test sees what is configured in it, in a hook around it, or outside every test: not what a sibling test configures.
+  const tests: Range[] = [];
+  for (const match of code.matchAll(/(?<![\w$.])(?:it|test)(?:\s*\.\s*\w+)*\s*\(/g)) {
+    const open = match.index + match[0].length - 1;
+    const end = closing(code, open);
+    if (end > 0) tests.push([open, end]);
+  }
+
   /** True when nothing encloses `index`: not a function body, a block or a call's arguments. */
   const programLevel = (index: number) => {
     let depth = 0;
@@ -145,7 +153,8 @@ function javascript(text: string): MockedSubject[] {
     if (!name) continue;
     // A manual mock or an automock only fakes a result once the test says what it returns.
     const identifier = call[1].replace(/\$/g, "\\$");
-    const configured = new RegExp(`(?<![\\w$.])${identifier}\\b[^;]{0,80}?\\.\\s*mock(?:Return|Resolved|Rejected|Implementation)\\w*\\s*\\(`).test(raw);
+    const configures = new RegExp(`(?<![\\w$.])${identifier}\\b[^;]{0,80}?\\.\\s*mock(?:Return|Resolved|Rejected|Implementation)\\w*\\s*\\(`, "g");
+    const configured = [...raw.matchAll(configures)].some(config => tests.every(range => !within(range, config.index) || within(range, match.index)));
     if (!mock.fake && !configured) continue;
     const key = `${binding.specifier}::${name}`;
     if (found.has(key)) continue;
@@ -291,6 +300,8 @@ function python(text: string): MockedSubject[] {
       const receiver = new RegExp(`(?<![\\w.])${patch.object.replace(/[.$]/g, "\\$&")}\\s*\\.\\s*(?!${attribute}\\b)\\w+\\s*\\(`);
       if (receiver.test(code.slice(patch.end + 1, match.index))) continue;
     }
+    // A call such as `cpu_kernels.install()` between the patch and the assertion may wrap the patched function again.
+    if (/(?<![\w$])(?:[A-Za-z_]\w*\s*\.\s*)*_*(?:install|wrap|instrument|inject|hook|swap|rewire|reload)\w*\s*\(/.test(code.slice(patch.end + 1, match.index))) continue;
     const line = lineOf(patch.index);
     found.set(key, {
       key, line, snippet: lines[line - 1].trim().slice(0, 120),

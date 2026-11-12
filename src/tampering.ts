@@ -423,6 +423,36 @@ function relaxes(oldAssertion: string, newAssertion: string, language: Language,
   return false;
 }
 
+/** The arguments of a call as written, split at the commas that are not inside brackets or a string. */
+function splitArguments(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0, quote = "", start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+    else if (char === "," && depth === 0) { parts.push(text.slice(start, i).trim()); start = i + 1; }
+  }
+  parts.push(text.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+/** The pytest form of the unittest assertions whose strength it matters to compare: `self.assertTrue(x)` is `assert x`,
+ * `self.assertIsNotNone(x)` is `assert x is not None`, `self.assertGreater(x, 0)` is `assert x > 0`. Null for any other statement. */
+function unittestAsAssert(statement: string): string | null {
+  const call = /^\s*self\s*\.\s*assert(True|IsNotNone|GreaterEqual|Greater)\s*\(([\s\S]*)\)\s*;?\s*$/.exec(statement);
+  if (!call) return null;
+  const [first, second] = splitArguments(call[2]);
+  if (!first) return null;
+  if (call[1] === "True") return `assert ${first}`;
+  if (call[1] === "IsNotNone") return `assert ${first} is not None`;
+  return second === undefined ? null : `assert ${first} ${call[1] === "Greater" ? ">" : ">="} ${second}`;
+}
+
 /** The same kind of check with less pinned down: `toThrow("bad input")` → `toThrow()`, `raises(ValueError, match="x")` →
  * `raises(Exception)`, `assertRaisesRegex(ValueError, "x")` → `assertRaises(ValueError)`. */
 function pinsLess(oldAssertion: string, newAssertion: string, language: Language): boolean {
@@ -458,7 +488,9 @@ function isWeaker(rawOld: string, rawNew: string, language: Language): boolean {
     return WEAK_JS.test(newAssertion) || (BOUND_JS.test(newAssertion) && !ZERO_JS.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit.trim())));
   }
   if (language === "py") {
-    if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || !PY_SPECIFIC.test(oldAssertion)) return false;
+    // `self.assertTrue(x is not None)` turned into `assert x is not None` is the same check in another style, not a looser one.
+    const oldBare = unittestAsAssert(oldAssertion) ?? oldAssertion;
+    if (WEAK_PY.test(oldAssertion) || BOUND_PY.test(oldAssertion) || WEAK_PY.test(oldBare) || BOUND_PY.test(oldBare) || !PY_SPECIFIC.test(oldAssertion)) return false;
     // Same for Python: `assert grown > before` to `assert grown > 0`, and a membership test turned into `> 0`, are other checks.
     const limit = /(?:>=|<=|>|<)\s*([^\s,)]+)/.exec(oldAssertion)?.[1];
     return WEAK_PY.test(newAssertion) || (BOUND_PY.test(newAssertion) && !EMPTY_PY.test(oldAssertion) && /==|[<>]=?/.test(oldAssertion) && (limit === undefined || /^-?\d+(?:\.\d+)?$/.test(limit)));
@@ -684,20 +716,32 @@ function markedTest(finding: Infraction, lines: string[]): { key: string; title:
   }
   if (/\.each\b/.test(snippet)) return null;
   // A registration (`it.skip('title', () => ...)`, `test.fixme('title', { annotation }, async () => ...)`) starts with its title; the string of
-  // `test.skip(cond, 'reason')` inside a test is a reason, and the call does not start with one.
-  const title = /\b(?:it|test|describe|suite|xit|xtest|xdescribe|fit|fdescribe)\b[\w$.\s]*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1\s*[,)]/.exec(snippet);
+  // `test.skip(cond, 'reason')` inside a test is a reason, and the call does not start with one. A formatter wraps a long registration after
+  // its opening bracket, so the title may be the first thing on the next line.
+  const title = /\b(?:it|test|describe|suite|xit|xtest|xdescribe|fit|fdescribe)\b[\w$.\s]*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1\s*[,)]/.exec(titleOnNextLine(snippet, lines, index));
   if (title) return { key: `js:${title[1]}${title[2]}${title[1]}`, title: `${title[1]}${title[2]}${title[1]}` };
   // `test.skip(true, "reason")`, `test.fail(cond, ...)` and `test.fixme()` inside a test body belong to the test around them: the nearest line above
-  // with a smaller indent, when that is a registration with a title.
-  const indent = (lines[index] ?? "").search(/\S/);
-  if (indent > 0 && /\b(?:test|it)\s*\.\s*(?:skip|fixme|fail)\s*\(/.test(snippet)) {
-    for (let i = index - 1; i >= 0 && i > index - 200; i--) {
-      if (!lines[i].trim() || lines[i].search(/\S/) >= indent) continue;
-      const owner = /^\s*(?:test|it)(?:\s*\.\s*\w+)*\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1/.exec(lines[i]);
-      return owner ? { key: `js:${owner[1]}${owner[2]}${owner[1]}`, title: `${owner[1]}${owner[2]}${owner[1]}` } : null;
+  // with a smaller indent that is a registration with a title (a wrapped registration puts its callback on a line of its own, one level in).
+  // A `describe` or a `step` around the call is not the test.
+  let limit = (lines[index] ?? "").search(/\S/);
+  if (limit > 0 && /\b(?:test|it)\s*\.\s*(?:skip|fixme|fail)\s*\(/.test(snippet)) {
+    for (let i = index - 1; i >= 0 && i > index - 200 && limit > 0; i--) {
+      if (!lines[i].trim() || lines[i].search(/\S/) >= limit) continue;
+      limit = lines[i].search(/\S/);
+      const owner = /^\s*(?:test|it)(?:\s*\.\s*(?!describe\b|step\b)\w+)*\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\\n])+)\1/.exec(titleOnNextLine(lines[i], lines, i));
+      if (owner) return { key: `js:${owner[1]}${owner[2]}${owner[1]}`, title: `${owner[1]}${owner[2]}${owner[1]}` };
+      if (/^\s*(?:await\s+)?(?:test|it)\s*\.\s*describe\b|^\s*(?:describe|suite)\b/.test(lines[i])) return null;
     }
   }
   return null;
+}
+
+/** `text` (the line `lines[index]`, or the evidence of a finding that starts on it), with the line after it appended when `text` ends at an
+ * opening bracket and that line starts with a string: `test.fixme(` / `'title',` is the registration of the test called "title". */
+function titleOnNextLine(text: string, lines: string[], index: number): string {
+  if (!/\(\s*$/.test(text)) return text;
+  const next = (lines[index + 1] ?? "").trim();
+  return /^(['"`])/.test(next) ? `${text} ${next}` : text;
 }
 
 /** Skip, ignore and expected-failure markers a change put on tests that were already there. A marker on a test the change added is not a
@@ -791,8 +835,32 @@ export interface CiTestCount { file: string; before: number; after: number; reus
 // A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
 const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
 
+// A workflow whose triggers are all of the kinds that run without a change to judge: a schedule, a release, a manual or API dispatch, or the
+// completion of another workflow (a job that posts a comment or a discussion after a release, a nightly run).
+const CI_NON_GATE = /^\s*(?:schedule|release|workflow_dispatch|workflow_run|repository_dispatch)\s*:/m;
+
+/** Whether a workflow gates changes: it runs on pushes or pull requests, or is a reusable workflow (`workflow_call`) that one of those may call.
+ * One whose triggers are all of the kinds in CI_NON_GATE gates nothing, so a step there that is switched off or allowed to fail loosens no gate.
+ * A trigger section that cannot be read, and every GitLab CI file, count as gating. */
+function gatesChanges(file: string, text: string): boolean {
+  const triggers = triggerSection(text) ?? text;
+  if (/\.gitlab-ci/.test(file) || CI_GATE.test(triggers) || /\bworkflow_call\b/.test(triggers)) return true;
+  return !CI_NON_GATE.test(triggers);
+}
+
+/** The trigger section of a workflow: the lines under a top-level `on:` up to the next top-level key, so that `push: true` in the `with:` of a
+ * Docker build step is not read as a trigger. Null when the file has no such section (a GitLab pipeline, an unreadable file). */
+function triggerSection(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(line => /^["']?on["']?\s*:/.test(line));
+  if (start < 0) return null;
+  let end = start + 1;
+  while (end < lines.length && (!lines[end].trim() || /^[\s#-]/.test(lines[end]))) end++;
+  return lines.slice(start, end).join("\n");
+}
+
 function gatingTestLines(file: string, text: string): number {
-  return /\.gitlab-ci/.test(file) || CI_GATE.test(text) ? matchingLines(text, CI_RUNNER) : 0;
+  return /\.gitlab-ci/.test(file) || CI_GATE.test(triggerSection(text) ?? text) ? matchingLines(text, CI_RUNNER) : 0;
 }
 
 function matchingLines(text: string, pattern: RegExp): number {
@@ -911,7 +979,7 @@ export function analyzeGuardFile(file: string, oldText: string | null, newText: 
   if (/(?:^|\/)(?:pyproject\.toml|setup\.cfg|tox\.ini|\.?ruff\.toml|\.flake8|\.?mypy\.ini|\.?pylintrc)$/i.test(file)) {
     analyzePythonConfig(file, oldText, newText, (line, snippet, reason) => { out.push(finding("guard-weakened", file, line, snippet, reason, commit)); });
   }
-  if (CI_FILE.test(file)) {
+  if (CI_FILE.test(file) && (gatesChanges(file, oldText) || gatesChanges(file, newText))) {
     // Tolerating failure on a step that already existed makes a gate easier to pass. A step or job added in the
     // same change is a new best-effort check, not a weakened one.
     // A step written as `- run: npm test` is the same step as `run: npm test` under a new `- if: false` item.
