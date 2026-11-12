@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { auditFileDiffs } from "../src/metrics.js";
-import { analyzeGuardFile, analyzeTestFile, newKnownFailureMarkers } from "../src/tampering.js";
+import { analyzeGuardFile, analyzeTestFile, newTestMarkers } from "../src/tampering.js";
 
 const scan = (text: string, filename: string) =>
   auditFileDiffs([{ path: filename, addedLines: text.split("\n").map((line, index) => ({ line, lineNumber: index + 1 })) }]).infractions;
@@ -420,11 +420,11 @@ describe("an exact check relaxed on the same expression", () => {
   });
 });
 
-describe("known-failure markers count only on tests that were already there", () => {
+describe("skip, ignore and expected-failure markers count only on tests that were already there", () => {
   // The review audits the whole text of each version of a file, so these tests do the same.
   const audit = (text: string, file: string) => auditFileDiffs([{ path: file, addedLines: text.split("\n").map((line, index) => ({ line, lineNumber: index + 1 })) }]).infractions;
   const added = (before: string | null, after: string, file = "test_a.py") =>
-    newKnownFailureMarkers(before === null ? [] : audit(before, file), audit(after, file), before, after).map(f => f.lineNumber);
+    newTestMarkers(before === null ? [] : audit(before, file), audit(after, file), before, after).map(f => f.lineNumber);
 
   it("drops a marker on a test the change added, keeps one on a test that was there", () => {
     const before = "def test_old():\n    assert f() == 1\n";
@@ -476,9 +476,38 @@ describe("known-failure markers count only on tests that were already there", ()
     expect(added(before, after, "cart.spec.ts")).toEqual([1]);
   });
 
-  it("never touches a plain skip or another rule", () => {
-    const skip = "@pytest.mark.skip\ndef test_a(): pass\n";
-    expect(newKnownFailureMarkers([], audit(skip, "test_a.py"), "def test_a(): pass\n", skip)).toEqual([]);
+  it("treats a plain skip like the other markers: it counts on a test that was there, not on one the change adds", () => {
+    const before = "def test_a(): pass\n";
+    const after = "@pytest.mark.skip\ndef test_a(): pass\n\n\n@pytest.mark.skip(reason=\"needs a model on localhost\")\ndef test_b(): pass\n";
+    expect(added(before, after)).toEqual([1]);
+    // A new file is all new tests.
+    expect(added(null, after)).toEqual([]);
+  });
+
+  it("finds the test behind a Rust attribute and a Go skip", () => {
+    const rust = (extra: string) => `#[test]\nfn old() {}\n${extra}`;
+    expect(added(rust(""), '#[test]\n#[ignore = "flaky"]\nfn old() {}\n\n#[test]\n#[ignore = "requires KVM"]\nfn brand_new() {}\n', "tests/vm.rs")).toEqual([2]);
+    const go = 'func TestOld(t *testing.T) {\n\tt.Log(1)\n}\n';
+    expect(added(go, 'func TestOld(t *testing.T) {\n\tt.Skip("later")\n}\n\nfunc TestNew(t *testing.T) {\n\tt.Skip("needs docker")\n}\n', "svc_test.go")).toEqual([2]);
+  });
+
+  it("reads a JavaScript title from a registration, not from the reason of test.skip(cond, reason) inside a test", () => {
+    const before = 'test("renders", async () => {\n  await page.goto("/");\n});\n';
+    const after = 'test("renders", async () => {\n  test.skip(true, "flaky");\n  await page.goto("/");\n});\n\ntest.skip("brand new", async () => {});\n';
+    expect(added(before, after, "cart.spec.ts")).toEqual([2]);
+  });
+
+  it("finds the test around a test.fail(cond, reason) inside it", () => {
+    const before = 'test("lists albums", async ({ page }) => {\n  await page.goto("/");\n});\n';
+    const after = 'test("lists albums", async ({ page }) => {\n  test.fail(true, "later");\n  await page.goto("/");\n});\n\ntest("opens one", async ({ page }) => {\n  test.fail(true, "Not implemented yet");\n  await page.goto("/x");\n});\n';
+    expect(added(before, after, "albums.spec.ts")).toEqual([2]);
+  });
+
+  it("finds the title of a registration that has an options object before its body", () => {
+    const before = 'test("old", async () => {});\n';
+    const after = 'test("old", async () => {});\n\ntest.fixme("CD-053 shared worker", { annotation: { type: "issue" } }, async () => {});\n';
+    expect(added(before, after, "cdp.spec.ts")).toEqual([]);
+    expect(added(before, 'test.fixme("old", { tag: "@slow" }, async () => {});\n', "cdp.spec.ts")).toEqual([1]);
   });
 });
 

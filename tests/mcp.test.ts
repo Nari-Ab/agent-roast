@@ -117,12 +117,12 @@ describe("the MCP server, protocol", () => {
 describe("the MCP server, tools", () => {
   it("review_worktree sends back what to undo, in the words the Stop hook uses", async () => {
     weaken();
-    write("calc.test.ts", TEST.replace("toBe(4)", "toBeDefined()") + "it.skip('later', () => {});\n");
+    write("calc.test.ts", TEST.replace("toBe(4)", "toBeDefined()") + "it.only('later', () => {});\n");
     const answer = await tool("review_worktree");
     expect(answer.isError).toBe(false);
     expect(answer.text).toContain("agent-roast: the uncommitted changes make the checks easier to pass");
     expect(answer.text).toContain("calc.test.ts:2 [assertion-weakened]");
-    expect(answer.text).toContain("[test-skip]");
+    expect(answer.text).toContain("[test-focus]");
     expect(answer.text).toMatch(/Do not skip, delete, loosen or silence/);
   });
 

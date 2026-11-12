@@ -67,6 +67,8 @@ describe("Python: a test that asserts on what it patched", () => {
     ["unittest assertions", 'import pkg.cart as cart\n\n\nclass T(TestCase):\n    @patch("pkg.cart.total", return_value=42)\n    def test_total(self, mock_total):\n        self.assertEqual(cart.total(), 42)\n', "pkg.cart.total"],
     ["the same target patched in two tests, asserted in the second", 'import pkg.cart as cart\n\n\ndef test_a(monkeypatch):\n    monkeypatch.setattr(cart, "total", lambda: 1)\n    run()\n\n\ndef test_b(monkeypatch):\n    monkeypatch.setattr(cart, "total", lambda: 42)\n    assert cart.total() == 42\n', "pkg.cart.total"],
     ["a monkeypatch with a dotted string", 'import os\n\n\ndef test_x(monkeypatch):\n    monkeypatch.setattr("os.getcwd", lambda: "/x")\n    assert os.getcwd() == "/x"\n', "os.getcwd"],
+    ["a patch that is started", 'import pkg.cart as cart\n\n\ndef test_total():\n    patch.object(cart, "total", return_value=42).start()\n    assert cart.total() == 42\n', "pkg.cart.total"],
+    ["a with statement whose items run over several lines", 'import pkg.cart as cart\n\n\ndef test_total():\n    with patch.object(cart, "tax", return_value=1), \\\n            patch.object(cart, "total", return_value=42):\n        assert cart.total() == 42\n', "pkg.cart.total"],
   ])("reports %s", (_name, text, key) => {
     expect(keys(text, "test_cart.py")).toEqual([key]);
   });
@@ -80,6 +82,10 @@ describe("Python: a test that asserts on what it patched", () => {
     ["an assertion about calls", 'import pkg.cart as cart\n\n\ndef test_a(mocker):\n    m = mocker.patch("pkg.cart.total", return_value=42)\n    run()\n    assert m.called\n    m.assert_called_once()\n'],
     ["another function is asserted on", 'import pkg.cart as cart\n\n\ndef test_a(monkeypatch):\n    monkeypatch.setattr(cart, "tax", lambda: 1)\n    assert cart.total() == 42\n'],
     ["a docstring that shows the pattern", 'import pkg.cart as cart\n\n\ndef test_a():\n    """monkeypatch.setattr(cart, "total", f); assert cart.total() == 1"""\n    assert cart.total() == 42\n'],
+    ["a patcher that is only assigned, entered later", 'import pkg.cart as cart\n\n\ndef test_a():\n    stuck = patch.object(cart, "total", return_value=42)\n    with stuck:\n        run()\n    assert cart.total() == 1\n'],
+    ["after a with statement whose items run over several lines", 'import pkg.cart as cart\n\n\ndef test_a():\n    with patch.object(cart, "tax", return_value=1), \\\n            patch.object(cart, "total", return_value=42):\n        run()\n    state = cart.total()\n    assert state == 1\n'],
+    ["another method of the patched object runs, and may wire the patched one again", 'import pkg.ops as ops\n\n\ndef test_a(monkeypatch):\n    monkeypatch.setattr(ops.Op, "forward", compute)\n    ops.Op.register()\n    assert ops.Op.forward(None) is False\n'],
+    ["the patched object is handed to the code under test, which wraps it again", 'import pkg.cart as cart\n\n\ndef test_a(monkeypatch):\n    monkeypatch.setattr(cart, "total", lambda: 42)\n    launcher.install(cart, rule)\n    assert cart.total() == []\n'],
   ])("leaves alone: %s", (_name, text) => {
     expect(keys(text, "test_cart.py")).toEqual([]);
   });

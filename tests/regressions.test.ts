@@ -40,18 +40,18 @@ describe("configuration as an executable policy", () => {
   it("honors explicit failOn, including an empty array", () => {
     config({ failOn: [] });
     git("add", "."); git("commit", "-m", "trusted advisory policy");
-    writeFileSync(path.join(dir, "auth.test.ts"), 'it.skip("auth", () => {});\n');
+    writeFileSync(path.join(dir, "auth.test.ts"), 'it.only("auth", () => {});\n');
     git("add", ".");
     const result = run("--staged", "--json");
     expect(result.status).toBe(0);
     expect(JSON.parse(result.stdout).infractions).toHaveLength(1);
-    expect(run("--staged", "--fail-on", "test-skip").status).toBe(1);
+    expect(run("--staged", "--fail-on", "test-focus").status).toBe(1);
   });
 
   it("honors warn/off levels without accidentally adding the default blocker", () => {
-    config({ rules: { "test-skip": "warn", "trivial-assert": "off", "type-escape": "off" } });
+    config({ rules: { "test-focus": "warn", "trivial-assert": "off", "type-escape": "off" } });
     git("add", "."); git("commit", "-m", "trusted warning policy");
-    writeFileSync(path.join(dir, "auth.test.ts"), 'it.skip("auth", () => {});\nconst x = foo as any;\n');
+    writeFileSync(path.join(dir, "auth.test.ts"), 'it.only("auth", () => {});\nconst x = foo as any;\n');
     git("add", ".");
     const result = run("--staged", "--format", "github");
     expect(result.status).toBe(0);

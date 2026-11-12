@@ -74,13 +74,13 @@ describe("exception workflow in current source and trusted reviews", () => {
     expect(run.status).toBe(1); expect(JSON.parse(run.stdout).suppressedFindings).toEqual([]);
   });
   it("never honors a candidate-only exception in committed or staged reviews", async () => {
-    write("README.md", "baseline"); const base = commit();
+    write("README.md", "baseline"); write("auth.test.ts", "it('temporary');\n"); const base = commit();
     write("auth.test.ts", finding.lineSnippet! + "\n"); policy(); git("add", ".");
     const staged = await reviewStagedChanges({ cwd: dir }); expect(staged.exitCode).toBe(1); expect(staged.suppressedFindings).toEqual([]);
     commit(); const result = await reviewChanges({ cwd: dir, base }); expect(result.exitCode).toBe(1); expect(result.policyChanges).toContain(".agentroastrc.json");
   });
   it("uses trusted reviewed policy and preserves duplicate occurrence limits", async () => {
-    policy(); const base = commit();
+    policy(); write("auth.test.ts", "it('temporary');\n"); const base = commit();
     write("auth.test.ts", (finding.lineSnippet! + "\n").repeat(2)); commit();
     const result = await reviewChanges({ cwd: dir, base, format: "sarif" });
     expect(result.exitCode).toBe(1); expect(result.infractions).toHaveLength(1); expect(result.suppressedFindings).toHaveLength(1);

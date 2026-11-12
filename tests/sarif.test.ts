@@ -43,7 +43,7 @@ describe("portable SARIF reporting", () => {
     expect(run.invocations[0].toolExecutionNotifications[0].level).toBe("error");
   });
   it("emits only introduced review findings and records committed comparison scope", async () => {
-    fs.writeFileSync(path.join(dir, "auth.test.ts"), "it.skip('old');\n"); git("add", "."); git("commit", "-m", "base"); const base = git("rev-parse", "HEAD");
+    fs.writeFileSync(path.join(dir, "auth.test.ts"), "it.skip('old');\nit('new');\n"); git("add", "."); git("commit", "-m", "base"); const base = git("rev-parse", "HEAD");
     fs.writeFileSync(path.join(dir, "auth.test.ts"), "it.skip('old');\nit.skip('new');\n"); git("add", "."); git("commit", "-m", "head");
     const result = await reviewChanges({ cwd: dir, base, format: "sarif" }); const run = JSON.parse(result.output).runs[0];
     expect(run.results).toHaveLength(1); expect(run.results[0].baselineState).toBe("new");

@@ -85,6 +85,10 @@ function javascript(text: string): MockedSubject[] {
     const args = end > 0 ? raw.slice(open, end) : "";
     // A factory that spreads the real module keeps the real function; the others are replaced wholesale.
     if (/requireActual|importActual|importOriginal/.test(args)) continue;
+    // So does a factory that is handed the real module's loader and calls it, whatever the parameter is called:
+    // `vi.mock("./client", async (original) => ({ ...(await original<typeof import("./client")>()), send: vi.fn() }))`.
+    const loader = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(args)?.[2];
+    if (loader && new RegExp(`(?<![\\w$.])${loader.replace(/\$/g, "\\$")}\\s*(?:<[^\\n]*?>)?\\s*\\(`).test(args.slice(args.indexOf(loader) + loader.length))) continue;
     // `{ spy: true }` is vitest's automock that still calls the real function.
     const factory = /^\(\s*(['"`])[^'"`\n]+\1\s*,/.test(args) && !/,\s*\{\s*spy\s*:\s*true\b/.test(args);
     if (!mocked.has(specifier)) mocked.set(specifier, { index: match.index, fake: factory });
@@ -218,8 +222,20 @@ function python(text: string): MockedSubject[] {
     return [line, end];
   };
 
+  /** The `with` statement a line belongs to when it sits in that statement's header, which may run over several lines
+   * (`with a(), \\\n        b():`); null for a line anywhere else. */
+  const headerLine = (line: number): number | null => {
+    for (let k = line; k >= 0 && k > line - 8; k--) {
+      if (!/^\s*with\b/.test(codeLines[k] ?? "")) continue;
+      const head = codeLines.slice(k, line).join("\n");
+      const open = (head.match(/[([{]/g) ?? []).length - (head.match(/[)\]}]/g) ?? []).length;
+      return k === line || open > 0 || codeLines.slice(k, line).every(text => /\\\s*$/.test(text)) ? k : null;
+    }
+    return null;
+  };
+
   // The same target is often patched in several tests; each patch is in force in its own function or block.
-  const patched = new Map<string, { index: number; scope: Range | null }[]>();
+  const patched = new Map<string, { index: number; end: number; object: string | null; scope: Range | null }[]>();
   const patchCall = /(?<![\w.])(?:(?:mock|unittest\s*\.\s*mock)\s*\.\s*)?patch(\s*\.\s*object)?\s*\(|(?<![\w.])mocker\s*\.\s*patch(\s*\.\s*object)?\s*\(|(?<![\w.])monkeypatch\s*\.\s*setattr\s*\(/g;
   for (const match of code.matchAll(patchCall)) {
     const open = match.index + match[0].length - 1;
@@ -233,7 +249,14 @@ function python(text: string): MockedSubject[] {
     const key = target ? target[2] : parts ? `${expandObject(parts[1])}.${parts[3]}` : undefined;
     if (!key || !DOTTED.test(key)) continue;
     const line = lineIndex(match.index);
-    patched.set(key, [...(patched.get(key) ?? []), { index: match.index, scope: blockOf(line) ?? scopeOf(line) }]);
+    // A fixture's `mocker.patch` and `monkeypatch.setattr` are in force at once. `patch(...)` is when it is a decorator, an item of a `with`
+    // statement (also on a continuation line), or started; a patcher that is only assigned (`stuck = patch.object(...)`) is entered somewhere else.
+    const fixture = /^(?:mocker|monkeypatch)/.test(match[0]);
+    const header = headerLine(line);
+    const inForce = fixture || /^\s*@/.test(codeLines[line] ?? "") || header !== null
+      || /^\s*\.\s*start\s*\(/.test(code.slice(end + 1)) || /enter_context\s*\(\s*$/.test(code.slice(Math.max(0, match.index - 40), match.index));
+    if (!inForce) continue;
+    patched.set(key, [...(patched.get(key) ?? []), { index: match.index, end, object: parts ? parts[1] : null, scope: (header !== null ? blockOf(header) : null) ?? blockOf(line) ?? scopeOf(line) }]);
   }
   if (!patched.size) return [];
 
@@ -257,6 +280,17 @@ function python(text: string): MockedSubject[] {
     const patch = patched.get(key)?.find(item => item.scope && within(item.scope, at)
       && (at >= lineIndex(item.index) || /^\s*@/.test(codeLines[lineIndex(item.index)] ?? "")));
     if (!patch) continue;
+    // Code that is handed the patched object (`launcher.install(gw, ...)`) may wrap or swap the attribute again after the patch.
+    if (patch.object) {
+      const handed = new RegExp(`(?<![\\w.])(?!(?:[\\w.]*\\.)?(?:patch|object|setattr)\\b)[A-Za-z_][\\w.]*\\(\\s*(?:[^()]*,\\s*)?${patch.object.replace(/[.$]/g, "\\$&")}\\s*[,)]`);
+      if (handed.test(code.slice(patch.end + 1, match.index))) continue;
+    }
+    // The code under test may be a method of the patched object (`Op._register()` rewires `Op.forward`): another method of it called after the patch.
+    if (patch.object) {
+      const attribute = key.slice(key.lastIndexOf(".") + 1);
+      const receiver = new RegExp(`(?<![\\w.])${patch.object.replace(/[.$]/g, "\\$&")}\\s*\\.\\s*(?!${attribute}\\b)\\w+\\s*\\(`);
+      if (receiver.test(code.slice(patch.end + 1, match.index))) continue;
+    }
     const line = lineOf(patch.index);
     found.set(key, {
       key, line, snippet: lines[line - 1].trim().slice(0, 120),

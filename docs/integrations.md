@@ -88,7 +88,7 @@ Or without the plugin system: `npx agent-roast hook install claude`, which write
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.17.0 hook run --agent claude", "timeout": 60 } ] }
+      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.18.0 hook run --agent claude", "timeout": 60 } ] }
     ]
   }
 }
@@ -141,15 +141,15 @@ earlier and the per-request metadata of 2026-07-28, and Claude Code's own connec
 | `stop_hook` | The Stop hook's check and answer, for plugin hooks of type `mcp_tool`. Meant to be called by a hook, not by hand. |
 
 ```bash
-claude mcp add agent-roast -- npx --yes agent-roast@0.17.0 mcp      # Claude Code
-codex mcp add agent-roast -- npx --yes agent-roast@0.17.0 mcp       # Codex
+claude mcp add agent-roast -- npx --yes agent-roast@0.18.0 mcp      # Claude Code
+codex mcp add agent-roast -- npx --yes agent-roast@0.18.0 mcp       # Codex
 ```
 
 Cursor reads `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project, and other clients take the same
 command and arguments:
 
 ```json
-{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.17.0", "mcp"] } } }
+{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.18.0", "mcp"] } } }
 ```
 
 The tools read only the project the server was started in and other worktrees of the same repository; a path outside it is
@@ -184,7 +184,7 @@ repos:
         name: agent-roast
         entry: agent-roast review --staged
         language: node
-        additional_dependencies: ["agent-roast@0.17.0"]
+        additional_dependencies: ["agent-roast@0.18.0"]
         pass_filenames: false
         always_run: true
 ```
@@ -247,10 +247,10 @@ with `github/codeql-action/upload-sarif`. Source snippets are left out of SARIF.
 
 ```bash
 # GitLab merge request pipeline (full history: GIT_DEPTH: 0)
-npx agent-roast@0.17.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
+npx agent-roast@0.18.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
 
 # Anything else
-npx agent-roast@0.17.0 review --base origin/main --format github   # or json, markdown, sarif
+npx agent-roast@0.18.0 review --base origin/main --format github   # or json, markdown, sarif
 ```
 
 Before putting it in CI, see what it would have said about your recent history: `npx agent-roast replay`.

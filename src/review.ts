@@ -1,7 +1,7 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
-import { analyzeGuardFile, analyzeTestFile, ciTestSteps, isGuardFile, isKnownFailureMarker, newKnownFailureMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
+import { analyzeGuardFile, analyzeTestFile, ciTestSteps, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
 import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
@@ -163,8 +163,8 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
         const fingerprint = findingFingerprint(finding);
         existingCounts.set(fingerprint, (existingCounts.get(fingerprint) ?? 0) + 1);
       }
-      // Known-failure markers are judged per test (see newKnownFailureMarkers), not by whichever identical line the comparison matched.
-      result.infractions.push(...compared.introduced.filter(finding => !isKnownFailureMarker(finding)), ...newKnownFailureMarkers(before, after, oldText, newText));
+      // Skip, ignore and expected-failure markers are judged per test (see newTestMarkers), not by whichever identical line the comparison matched.
+      result.infractions.push(...compared.introduced.filter(finding => !isTestMarker(finding)), ...newTestMarkers(before, after, oldText, newText));
       result.removedFindings.push(...compared.removed);
       result.unchangedCount += compared.unchanged;
       result.beforeFindings += before.length;
