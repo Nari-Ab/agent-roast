@@ -103,7 +103,7 @@ policy. SARIF omits snippets; uploading it is a separate optional action.
 
 Since 0.12.0 the same review runs on uncommitted work, so it can act at the moment a shortcut is
 made instead of after a commit. `npx agent-roast` reviews what you have not committed yet, and
-`npx agent-roast hook install` adds a Stop hook to Claude Code, Codex or Cursor: when the agent is
+`npx agent-roast hook install` adds a Stop hook to Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot or Factory Droid: when the agent is
 about to finish with a weakened check, it is sent back once to fix the code, and a second attempt
 produces a warning for you instead of a loop. `npx agent-roast demo` shows the output on a scripted
 example. See [the integration guide](../integrations.md).

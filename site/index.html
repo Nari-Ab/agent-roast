@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agent-roast — stop AI agents from weakening your tests</title>
-  <meta name="description" content="Your AI agent made the tests pass. Did it fix the code, or the tests? agent-roast catches weakened assertions, skipped tests, lowered coverage gates and relaxed CI as an agent hook for Claude Code, Codex and Cursor, a pre-commit check and a GitHub Action. Offline, no tokens.">
+  <meta name="description" content="Your AI agent made the tests pass. Did it fix the code, or the tests? agent-roast catches weakened assertions, skipped tests, lowered coverage gates and relaxed CI as an agent hook for Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot and Factory Droid, a pre-commit check and a GitHub Action. Offline, no tokens.">
   <link rel="canonical" href="https://nari-ab.github.io/agent-roast/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="agent-roast">
   <meta property="og:title" content="agent-roast — stop AI agents from weakening your tests">
-  <meta property="og:description" content="Your AI agent made the tests pass. Did it fix the code, or the tests? Offline guard for Claude Code, Codex and Cursor, plus a pre-commit check and a GitHub Action.">
+  <meta property="og:description" content="Your AI agent made the tests pass. Did it fix the code, or the tests? Offline guard for Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot and Factory Droid, plus a pre-commit check and a GitHub Action.">
   <meta property="og:url" content="https://nari-ab.github.io/agent-roast/">
   <meta property="og:image" content="https://nari-ab.github.io/agent-roast/assets/social-preview.png">
   <meta property="og:image:width" content="1280">
@@ -193,7 +193,7 @@
       <section class="ci-gate" id="agent-guard">
         <div class="section-head">
           <h2>Stop the agent before it finishes</h2>
-          <p>When Claude Code, Codex or Cursor is about to finish, agent-roast reviews everything it changed. If a check got weaker, the agent is sent back once to fix the code instead.</p>
+          <p>When Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot or Factory Droid is about to finish, agent-roast reviews everything it changed. If a check got weaker, the agent is sent back once to fix the code instead.</p>
         </div>
 
         <div class="ci-gate-grid">
@@ -259,7 +259,7 @@
       <!-- CI Quality Gate Section -->
       <section class="ci-gate" id="ci-gate">
         <div class="section-head">
-          <div class="badge-v02">Published v0.21.0</div>
+          <div class="badge-v02">Published v0.22.0</div>
           <h2>Review new shortcuts in pull requests</h2>
           <p>Compare full changed source with policy from the trusted base commit. One pull request comment, annotations, a job summary and SARIF keep findings available for review.</p>
         </div>

@@ -10,7 +10,7 @@ agent-roast can stop a weakened check at five points. Use as many as you like; t
 | **A pull request is opened** | The check fails, annotates and comments | [GitHub Action](#github-actions) |
 | **Any time** | You look | `npx agent-roast`, `npx agent-roast replay` |
 
-- [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [AGENTS.md and CLAUDE.md](#agentsmd-and-claudemd) · [MCP server](#mcp-server)
+- [Claude Code](#claude-code) · [Codex](#codex) · [Cursor](#cursor) · [Gemini CLI](#gemini-cli) · [GitHub Copilot](#github-copilot) · [Factory Droid](#factory-droid) · [AGENTS.md and CLAUDE.md](#agentsmd-and-claudemd) · [MCP server](#mcp-server)
 - [Git hook and pre-commit](#git-hooks) · [GitHub Actions](#github-actions) · [other CI](#other-ci) · [the API](#programmatic-use)
 
 ---
@@ -19,10 +19,10 @@ agent-roast can stop a weakened check at five points. Use as many as you like; t
 
 ```bash
 npx agent-roast hook install            # the agents that already have a folder in this repository
-npx agent-roast hook install claude     # or name them: claude, codex, cursor
+npx agent-roast hook install claude     # or name them: claude, codex, cursor, gemini, copilot, droid
 ```
 
-`hook install` adds a **Stop hook** to the agent's own settings. It keeps everything else in the file, can be run again to
+`hook install` adds a **Stop hook** (for Gemini CLI an `AfterAgent` hook, for GitHub Copilot a hook file of its own) to the agent's own settings. It keeps everything else in the file, can be run again to
 refresh the pinned version, and refuses to touch a file it cannot parse. Add `--global` for every repository of your user,
 `--local` for Claude Code's untracked `.claude/settings.local.json`, `--dry-run` to preview, `--advisory` to
 [only warn](#try-it-without-blocking-anything), and `--instructions` to also write a short "keep the checks honest" paragraph
@@ -68,7 +68,7 @@ instead. Cursor has no channel for a message to the person, so there the warning
 - It sees uncommitted changes. If an agent commits before it stops, the hook has nothing to review; the pull request check does.
 - It reviews the files that changed since `HEAD`, up to 1,000 files and 2 MiB per file.
 
-> **Status.** The three integrations follow each agent's documented hook protocol and are tested against simulated hook input
+> **Status.** The six integrations follow each agent's documented hook protocol and are tested against simulated hook input
 > (`tests/hook.test.ts`). They have not yet been exercised in long live sessions with every agent. If you see something
 > unexpected, please [open an issue](https://github.com/Nari-Ab/agent-roast/issues/new/choose).
 
@@ -88,7 +88,7 @@ Or without the plugin system: `npx agent-roast hook install claude`, which write
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.21.0 hook run --agent claude", "timeout": 60 } ] }
+      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.22.0 hook run --agent claude", "timeout": 60 } ] }
     ]
   }
 }
@@ -114,6 +114,44 @@ npx agent-roast hook install cursor     # writes .cursor/hooks.json
 
 Cursor's `stop` hook answers with `{"followup_message": "..."}`, which Cursor submits as the next message. The hook sends one
 follow-up (`loop_limit: 2` is set as a backstop).
+
+### Gemini CLI
+
+```bash
+npx agent-roast hook install gemini     # writes .gemini/settings.json (--global: ~/.gemini/settings.json)
+```
+
+Gemini CLI's `AfterAgent` hook runs once per turn, after the model's final response, and may answer `{"decision": "deny", "reason": "..."}`: Gemini CLI
+documents that as rejecting the response and retrying the turn, with the reason as the new prompt. The hook sends **one** retry. The next `AfterAgent`
+input carries `stop_hook_active: true`, so the hook only warns the person (`{"systemMessage": "..."}`) and the two do not loop. When the checks are intact it answers `{}`.
+The entry it writes is `{"matcher": "*", "hooks": [{"name": "agent-roast", "type": "command", "command": "npx --yes agent-roast@<version> hook run --agent gemini", "timeout": 60000}]}`
+under `hooks.AfterAgent` (Gemini CLI counts the timeout in milliseconds).
+
+Gemini CLI warns the first time it sees a project hook, and again when the command of one changes; `/hooks panel` lists them. A `.gemini/settings.json` that has comments is
+not valid JSON for the installer, which leaves it alone and says so: add the entry by hand. Not covered: whether `AfterAgent` fires for a non-interactive `gemini -p` run (its
+documentation does not say), and Google's Antigravity CLI: the Gemini CLI documentation says that it replaced Gemini CLI for unpaid-tier and Google One users on 18 June 2026, and its hooks are not covered here.
+
+### GitHub Copilot
+
+```bash
+npx agent-roast hook install copilot    # writes .github/hooks/agent-roast.json (--global: ~/.copilot/hooks/agent-roast.json)
+```
+
+GitHub Copilot loads every `*.json` file of `.github/hooks` (version 1) in the Copilot CLI, in VS Code's agent mode and, from the default branch, in the cloud agent. The hook is registered under `Stop`,
+the PascalCase alias of `agentStop`, which makes Copilot write the VS Code-compatible input that Claude Code's dialect shares. The entry is `{"type": "command", "command": "npx --yes agent-roast@<version> hook run --agent copilot", "timeoutSec": 60}`.
+`{"decision": "block", "reason": "..."}` forces another turn with the reason as its prompt (Copilot ends the turn after 8 blocks in a row, and this hook sends one); an input with `stop_hook_active: true` only gets a warning, printed as the
+display-only progress line that Copilot documents (`{"type": "progress", "message": "..."}`), because it documents no field for a message to the person. Exit code 2 does not block `agentStop`, so the hook never uses it. Copilot reads hook files when it starts: restart it after installing.
+Not covered: whether `agentStop` fires in a non-interactive `copilot -p` run (the documentation does not say), and the cloud agent, whose sandbox has a restricted network that `npx` may not get through.
+
+### Factory Droid
+
+```bash
+npx agent-roast hook install droid      # writes .factory/hooks.json (--global: ~/.factory/hooks.json)
+```
+
+Droid's `Stop` hook takes Claude Code's input and its `{"decision": "block", "reason": "..."}` answer. `hooks.json` is keyed by event name at the top of the file (no `hooks` wrapper and no version) and the entry is
+`{"Stop": [{"hooks": [{"type": "command", "command": "npx --yes agent-roast@<version> hook run --agent droid", "timeout": 60}]}]}`. Droid takes a snapshot of its hooks at startup, so restart it after installing; `/hooks` shows them. Droid's documentation does not
+say what `droid exec` does with hooks.
 
 ### AGENTS.md and CLAUDE.md
 
@@ -141,15 +179,15 @@ earlier and the per-request metadata of 2026-07-28, and Claude Code's own connec
 | `stop_hook` | The Stop hook's check and answer, for plugin hooks of type `mcp_tool`. Meant to be called by a hook, not by hand. |
 
 ```bash
-claude mcp add agent-roast -- npx --yes agent-roast@0.21.0 mcp      # Claude Code
-codex mcp add agent-roast -- npx --yes agent-roast@0.21.0 mcp       # Codex
+claude mcp add agent-roast -- npx --yes agent-roast@0.22.0 mcp      # Claude Code
+codex mcp add agent-roast -- npx --yes agent-roast@0.22.0 mcp       # Codex
 ```
 
 Cursor reads `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project, and other clients take the same
 command and arguments:
 
 ```json
-{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.21.0", "mcp"] } } }
+{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.22.0", "mcp"] } } }
 ```
 
 The tools read only the project the server was started in and other worktrees of the same repository; a path outside it is
@@ -184,7 +222,7 @@ repos:
         name: agent-roast
         entry: agent-roast review --staged
         language: node
-        additional_dependencies: ["agent-roast@0.21.0"]
+        additional_dependencies: ["agent-roast@0.22.0"]
         pass_filenames: false
         always_run: true
 ```
@@ -247,10 +285,10 @@ with `github/codeql-action/upload-sarif`. Source snippets are left out of SARIF.
 
 ```bash
 # GitLab merge request pipeline (full history: GIT_DEPTH: 0)
-npx agent-roast@0.21.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
+npx agent-roast@0.22.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
 
 # Anything else
-npx agent-roast@0.21.0 review --base origin/main --format github   # or json, markdown, sarif
+npx agent-roast@0.22.0 review --base origin/main --format github   # or json, markdown, sarif
 ```
 
 Before putting it in CI, see what it would have said about your recent history: `npx agent-roast replay`.

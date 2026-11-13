@@ -61,7 +61,7 @@ The first thing `npx agent-roast replay` shows on a repository is the newest 50 
 
 - **Blocks:** 32 repositories (9%) list at least one, 39 in all. A reviewer should see 27 of the 39; 12 are false alarms (31%), in 11 repositories (3%), and in 8 of those
   (2%) every block is a false alarm. In the newest 300 commits it is 134 repositories (38%), 260 blocks, 49 false alarms (19%). These figures are for 0.21.0, which was fixed from
-  those samples, so they flatter it. Out of sample is the ninth alone with 0.21.0 as it was frozen, which had not seen it: 4 of 39 repositories (10%) show a block in the newest 50 commits, 4 blocks, 3 false alarms.
+  those samples, so they flatter it. Out of sample is the ninth alone with 0.21.0 as it was frozen, which had not seen it: 4 of 39 repositories (10%) show a block in the newest 50 commits, 4 blocks, 3 false alarms; the tenth alone, with 0.21.0 as it ships, which had not seen it either, gives 4 of 40 (10%), 6 blocks, 2 false alarms.
 - **Warnings** (a test that disappeared, an expected value that was edited, a line pattern): a median of 3 commits of the 50 per repository, none in 29% of the repositories, 10% of the commits on average. They never stop anything.
 - One reader sorted every block, and the share of false alarms moved between a quarter and two thirds from one sample to the next
   ([section 11](benchmarks.md#11-a-seventh-sample-and-two-things-that-were-missing)), so treat these as a first estimate for a repository like those, not as a promise.

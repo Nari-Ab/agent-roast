@@ -8,8 +8,8 @@ import { readGit } from "./snapshot.js";
 import type { Infraction, ReviewResult } from "./types.js";
 
 /** Coding agents that can run a command when they are about to finish and feed its answer back. */
-export type HookAgent = "claude" | "codex" | "cursor";
-export const HOOK_AGENTS: readonly HookAgent[] = ["claude", "codex", "cursor"];
+export type HookAgent = "claude" | "codex" | "cursor" | "gemini" | "copilot" | "droid";
+export const HOOK_AGENTS: readonly HookAgent[] = ["claude", "codex", "cursor", "gemini", "copilot", "droid"];
 
 export interface HookOptions {
   /** Which agent is calling. Detected from its input when omitted. */
@@ -38,9 +38,11 @@ const PAUSE_FILE = "agent-roast-hook-paused";
 const LISTED = 6;
 const LISTED_WARNINGS = 3;
 
-/** Cursor identifies its workspace; Claude Code and Codex use the same JSON dialect for Stop hooks. */
+/** Cursor identifies its workspace, Gemini CLI's AfterAgent input carries the final text of the model; Claude Code and Codex use the same JSON dialect for Stop hooks, and so do GitHub Copilot
+ * (registered under `Stop`, its VS Code-compatible event) and Factory Droid: their hook files always say which agent is calling, because nothing in that input does. */
 function detectAgent(input: Record<string, unknown>): HookAgent {
   if ("workspace_roots" in input || "cursor_version" in input || "conversation_id" in input) return "cursor";
+  if (input.hook_event_name === "AfterAgent" || "prompt_response" in input) return "gemini";
   if ("turn_id" in input) return "codex";
   return "claude";
 }
@@ -49,7 +51,7 @@ function inputCwd(agent: HookAgent, input: Record<string, unknown>, env: NodeJS.
   const roots = input.workspace_roots;
   if (agent === "cursor" && Array.isArray(roots) && typeof roots[0] === "string") return roots[0];
   if (typeof input.cwd === "string" && input.cwd) return input.cwd;
-  return env.CLAUDE_PROJECT_DIR || env.CURSOR_PROJECT_DIR || process.cwd();
+  return env.CLAUDE_PROJECT_DIR || env.CURSOR_PROJECT_DIR || env.GEMINI_PROJECT_DIR || env.FACTORY_PROJECT_DIR || process.cwd();
 }
 
 function clip(text: string, limit: number): string {
@@ -149,8 +151,9 @@ export async function runHook(rawInput: string, options: HookOptions = {}): Prom
   if (["off", "0", "false"].includes(mode)) return outcome("skip");
   const advisory = options.advisory === true || mode === "advisory";
   const agent = options.agent ?? detectAgent(input);
-  const event = String(input.hook_event_name ?? "Stop");
-  if (event.toLowerCase() !== "stop") return outcome("skip");
+  // The event that fires when the agent is about to finish: `Stop` for Claude Code and Codex, `stop` for Cursor, `AfterAgent` for Gemini CLI.
+  const finishing = agent === "gemini" ? "afteragent" : "stop";
+  if (String(input.hook_event_name ?? finishing).toLowerCase() !== finishing) return outcome("skip");
   if (agent === "cursor" && typeof input.status === "string" && input.status !== "completed") return outcome("skip");
 
   const cwd = options.cwd ?? inputCwd(agent, input, env);
@@ -167,15 +170,19 @@ export async function runHook(rawInput: string, options: HookOptions = {}): Prom
   } finally {
     clearTimeout(timer);
   }
-  if (!result.failedRules.length) return outcome("pass", agent === "cursor" ? "{}\n" : "", "", result);
+  if (!result.failedRules.length) return outcome("pass", agent === "cursor" || agent === "gemini" ? "{}\n" : "", "", result);
 
-  // Claude Code and Codex set stop_hook_active when the agent is already continuing because of a Stop hook; Cursor counts follow-ups.
+  // Claude Code, Codex, Gemini CLI, GitHub Copilot and Factory Droid set stop_hook_active when the agent is already continuing because of a hook of this kind; Cursor counts follow-ups.
   const alreadyAsked = input.stop_hook_active === true || (typeof input.loop_count === "number" && input.loop_count > 0);
   if (alreadyAsked || advisory) {
     const warning = formatUserWarning(result);
     // Cursor has no channel for a message to the person, so an advisory warning goes to the hook's log.
-    return outcome("warn", agent === "cursor" ? "{}\n" : JSON.stringify({ systemMessage: warning }) + "\n", agent === "cursor" && advisory ? `${warning}\n` : "", result);
+    // GitHub Copilot documents no field for a message to the person, only a display-only progress line.
+    const notice = agent === "copilot" ? { type: "progress", message: warning } : { systemMessage: warning };
+    return outcome("warn", agent === "cursor" ? "{}\n" : JSON.stringify(notice) + "\n", agent === "cursor" && advisory ? `${warning}\n` : "", result);
   }
   const message = formatAgentFeedback(result);
-  return outcome("block", JSON.stringify(agent === "cursor" ? { followup_message: message } : { decision: "block", reason: message }) + "\n", "", result);
+  // Gemini CLI documents `deny` (and accepts `block` as an alias): the reason goes back to the model as a new prompt and the turn is retried.
+  const answer = agent === "cursor" ? { followup_message: message } : { decision: agent === "gemini" ? "deny" : "block", reason: message };
+  return outcome("block", JSON.stringify(answer) + "\n", "", result);
 }

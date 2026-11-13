@@ -15,6 +15,12 @@ const write = (file: string, text: string) => { const dest = path.join(dir, file
 const TEST = "import { add } from './calc';\ntest('adds', () => {\n  expect(add(1, 2)).toBe(3);\n  expect(add(2, 2)).toBe(4);\n});\n";
 const weaken = () => write("calc.test.ts", TEST.replace("toBe(4)", "toBeDefined()"));
 const stop = (extra: Record<string, unknown> = {}) => JSON.stringify({ hook_event_name: "Stop", stop_hook_active: false, session_id: "s", cwd: dir, ...extra });
+// What Gemini CLI writes to the stdin of an AfterAgent hook (geminicli.com/docs/hooks/reference): the common fields and the three of the event.
+const afterAgent = (extra: Record<string, unknown> = {}) => JSON.stringify({ session_id: "s", transcript_path: "/tmp/transcript.json", cwd: dir, hook_event_name: "AfterAgent", timestamp: "2026-11-13T00:00:00Z", prompt: "make the tests pass", prompt_response: "Done.", stop_hook_active: false, ...extra });
+// GitHub Copilot registered under `Stop` writes the VS Code-compatible input; registered under `agentStop` it writes camelCase (docs.github.com, Copilot CLI hooks reference). Factory Droid's Stop input has Claude Code's common fields.
+const copilotStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ hook_event_name: "Stop", session_id: "s", timestamp: "2026-11-13T00:00:00Z", cwd: dir, transcript_path: "/tmp/t.json", stop_reason: "end_turn", stop_hook_active: false, ...extra });
+const copilotAgentStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ sessionId: "s", timestamp: 1790000000000, cwd: dir, transcriptPath: "/tmp/t.json", stopReason: "end_turn", stop_hook_active: false, ...extra });
+const droidStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ session_id: "s", transcript_path: "/tmp/session.jsonl", cwd: dir, permission_mode: "auto-low", hook_event_name: "Stop", stop_hook_active: false, tool_execution_count: 3, elapsed_time: 12, ...extra });
 const cursorStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ hook_event_name: "stop", status: "completed", loop_count: 0, conversation_id: "c", workspace_roots: [dir], ...extra });
 
 beforeEach(() => {
@@ -55,6 +61,59 @@ describe("the Stop hook", () => {
     expect(JSON.parse(first.stdout)).toEqual({ followup_message: expect.stringContaining("[assertion-weakened]") });
     expect((await runHook(cursorStop({ loop_count: 1 }), { env: {} })).stdout).toBe("{}\n");
     expect((await runHook(cursorStop({ status: "aborted" }), { env: {} })).action).toBe("skip");
+  });
+
+  it("speaks Gemini CLI's dialect: deny with a reason sends the turn back once, and a hook that is already in a retry only warns", async () => {
+    weaken();
+    const first = await runHook(afterAgent(), { env: {} });
+    expect(first).toMatchObject({ action: "block", exitCode: 0, stderr: "" });
+    const answer = JSON.parse(first.stdout);
+    expect(Object.keys(answer)).toEqual(["decision", "reason"]);
+    expect(answer.decision).toBe("deny");
+    expect(answer.reason).toContain("calc.test.ts:2 [assertion-weakened]");
+    expect(answer.reason).toMatch(/Do not skip, delete, loosen or silence/);
+    const retry = await runHook(afterAgent({ stop_hook_active: true }), { env: {} });
+    expect(retry.action).toBe("warn");
+    expect(JSON.parse(retry.stdout)).toEqual({ systemMessage: expect.stringMatching(/weakens checks \(assertion-weakened\).*calc\.test\.ts:2/) });
+  });
+
+  it("tells Gemini CLI nothing, as an empty object, when the checks are intact, and ignores its other events", async () => {
+    expect(await runHook(afterAgent(), { env: {} })).toMatchObject({ action: "pass", stdout: "{}\n", exitCode: 0 });
+    weaken();
+    for (const event of ["BeforeTool", "AfterTool", "SessionEnd"]) expect((await runHook(afterAgent({ hook_event_name: event }), { env: {} })).action).toBe("skip");
+  });
+
+  it("finds Gemini CLI by its input and reviews the folder it names, or the project folder of its environment", async () => {
+    weaken();
+    expect((await runHook(afterAgent(), { env: {} })).action).toBe("block");
+    expect((await runHook(afterAgent({ cwd: undefined }), { env: { GEMINI_PROJECT_DIR: dir } })).action).toBe("block");
+    // A Claude Code input has no prompt_response and an event called Stop: it is not taken for Gemini CLI.
+    expect(JSON.parse((await runHook(stop(), { env: {} })).stdout).decision).toBe("block");
+  });
+
+  it("answers GitHub Copilot in Claude Code's dialect under both of its event names, and tells the person with a progress line", async () => {
+    weaken();
+    for (const input of [copilotStop(), copilotAgentStop()]) {
+      const first = await runHook(input, { agent: "copilot", env: {} });
+      expect(first).toMatchObject({ action: "block", exitCode: 0, stderr: "" });
+      expect(JSON.parse(first.stdout)).toEqual({ decision: "block", reason: expect.stringContaining("calc.test.ts:2 [assertion-weakened]") });
+    }
+    const retry = await runHook(copilotStop({ stop_hook_active: true }), { agent: "copilot", env: {} });
+    expect(retry.action).toBe("warn");
+    expect(JSON.parse(retry.stdout)).toEqual({ type: "progress", message: expect.stringMatching(/weakens checks \(assertion-weakened\).*calc\.test\.ts:2/) });
+    expect(retry.stdout.trim().split("\n")).toHaveLength(1);
+    expect((await runHook(copilotStop(), { agent: "copilot", env: {}, advisory: true })).action).toBe("warn");
+  });
+
+  it("answers Factory Droid in Claude Code's dialect and reviews the project folder of its environment", async () => {
+    weaken();
+    const first = await runHook(droidStop(), { agent: "droid", env: {} });
+    expect(JSON.parse(first.stdout)).toEqual({ decision: "block", reason: expect.stringContaining("[assertion-weakened]") });
+    expect((await runHook(droidStop({ cwd: undefined }), { agent: "droid", env: { FACTORY_PROJECT_DIR: dir } })).action).toBe("block");
+    const retry = await runHook(droidStop({ stop_hook_active: true }), { agent: "droid", env: {} });
+    expect(JSON.parse(retry.stdout)).toEqual({ systemMessage: expect.stringContaining("weakens checks") });
+    git("checkout", "--", "calc.test.ts");
+    expect(await runHook(droidStop(), { agent: "droid", env: {} })).toMatchObject({ action: "pass", stdout: "" });
   });
 
   it("answers Codex like Claude Code, whose Stop dialect it shares", async () => {
@@ -157,6 +216,12 @@ describe("the Stop hook", () => {
     expect(JSON.parse(blocked.stdout).decision).toBe("block");
     const detected = run(cursorStop());
     expect(JSON.parse(detected.stdout)).toHaveProperty("followup_message");
+    const gemini = run(afterAgent());
+    expect(gemini.status).toBe(0);
+    expect(JSON.parse(gemini.stdout)).toMatchObject({ decision: "deny", reason: expect.stringContaining("[assertion-weakened]") });
+    expect(run(afterAgent(), "--agent", "gemini", "--advisory").stdout).toContain("systemMessage");
+    expect(JSON.parse(run(copilotStop(), "--agent", "copilot").stdout).decision).toBe("block");
+    expect(JSON.parse(run(droidStop(), "--agent", "droid").stdout).decision).toBe("block");
     // Exit status 2 would tell an agent to block, so a setup mistake must not use it.
     expect(run("{}", "--agent", "nobody").status).toBe(1);
     git("checkout", "--", "calc.test.ts");
