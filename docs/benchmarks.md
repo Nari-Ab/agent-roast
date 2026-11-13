@@ -9,7 +9,7 @@ than other commits. Everything here is reproducible, and none of it is an accura
 block), usually deliberate and explained, and not more frequent in AI-signed commits. On repositories that the rules
 were not written from, between a quarter and two thirds of the blocked commits were false alarms, depending on the sample (sections 9 and 10: 69%
 for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read, 66% for this version as it was frozen on a sixth, where 52 of the
-100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, 38% for the build with its fixes on an eighth, 39% for 0.21.0 as frozen on a ninth, sections 11 to 14); the rest are decisions a reviewer should see.
+100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, 38% for the build with its fixes on an eighth, 39% for 0.21.0 as frozen on a ninth and 33% for 0.21.0 as shipped on a tenth, sections 11 to 15); the rest are decisions a reviewer should see.
 
 | Measurement | Result |
 | --- | --- |
@@ -28,6 +28,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | An eighth sample nobody had read (section 12): 39 repositories, 11,081 commits | 0.20.0 as frozen, with the fixes from sample 7: 26 blocked, 16 for a reviewer and 10 false alarms (38%); the published 0.19.0: 29, 13 false (45%); the shipped build, after the fixes from reading the sample, blocks 21 of those commits (16 and 5) |
 | What the rules miss (section 13): the added lines of 126,486 commits in 505 repositories, and a catalog of cheats that someone else wrote | 18 shapes of the documented gaps searched, two built (`assert … or True`, `skipif(True)`: nine new findings in seven commits, all read as real); reward-hack-zoo: 4 of the 9 hacks reported, none of the 6 honest solutions, and the five that are not live in the code (special-casing, swallowed errors, overfitting) |
 | A ninth sample nobody had read (section 14): 39 repositories, 11,286 commits | 0.20.0 as published and 0.21.0 as frozen blocked the same 46: 28 for a reviewer and 18 false alarms (39%); the shipped build, after the fixes from reading the sample, blocks 41 of those commits (28 and 13) |
+| A tenth sample nobody had read (section 15): 40 repositories, 11,191 commits | the published 0.20.0 blocked 39: 26 for a reviewer and 13 false alarms (33%); 0.21.0 as shipped, with the fixes of samples 8 and 9, blocked the same 39 and one more, a real one (27 and 13); not fitted to this sample, so the 33% is out of sample |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -989,6 +990,53 @@ would be for a reviewer, which makes the share 33%.
 - The build that ships is not the build that was measured: it has five more fixes from reading the sample and three from reading the code of those fixes once more (installers of tools, a test step that may fail left out by its line, a bounded regular expression; `CHANGELOG.md`), covered by tests and by the reviews above, not by a new sample.
 - The same price as in sections 9 to 13 holds.
 
+## 15. A tenth sample: the build that ships, on repositories it had not seen
+
+0.21.0 as it ships (the build of pull request #28, with the fixes of samples 8 and 9 and the three of reading the code once more) and the published 0.20.0 were replayed on a tenth sample, drawn after both were frozen, with the search, the replay, the reader and the definitions of sections 9 to 14.
+Neither build was changed after the first block was read. Unlike the ninth, this sample was used for no fix of the build it measures: both rows below are out of sample.
+
+**Method.** Sample 10 holds 40 repositories (24 JavaScript or TypeScript, 16 Python; none left out by hand), `benchmarks/tenth-corpus.tsv` with the revision measured, none in an earlier corpus; 11,191 of the newest commits of their first-parent histories were reviewed against
+their parents (13 could not be compared in full and 5 failed to review, and are in no count).
+
+| Build | Blocked commits (repositories) | False alarms | A reviewer should see |
+| --- | --- | --- | --- |
+| **0.20.0, as published** | **39 (20)** | **13 (33%)** | **26** |
+| **0.21.0, as shipped** | **40 (20)** | **13 (33%)** | **27** |
+
+The shipped build blocks the 39 commits that 0.20.0 blocks and one more, a real one: `assert module.weight.device == replacement.device or True  # copy_ owns placement` in a new test of `TransformerLensOrg/TransformerLens`, the first block of the new rule for `or True` on a sample that was drawn after the rule was written. No commit that 0.20.0 blocks is let
+through: none of the ten false alarms that 0.21.0 fixed showed here, as the fixes of one sample changed no block of another in sections 12 to 14. The share of false alarms is now 69%, 58%, 27%, 69%, 51%, 27%, 66%, 48%, 38%, 39% and **33%** (one figure for each sample, and two for sample 4):
+at the low end of the range again, for a build that was not fitted to this sample. It is a range, not a number: three of the 13 false alarms are arguable (a `ValidationError` for a `ValueError` with a message after a migration to pydantic, an exact count into a lower bound with new checks on the contents beside it,
+a count of a phrase into the order of two phrases) and six of the 27 blocks for a reviewer might be called false (three `expect(true).toBe(true)` or `assert True` that only say that a call did not throw, two `toEqual` into `toMatchObject`, one check of the source of the defaults into "not empty"), which makes the share between 25% and 48%.
+
+| What was blocked on sample 10 (0.21.0 as shipped) | Commits |
+| --- | --- |
+| An exact value or count turned into a lower bound, a lower bound lowered (`== 6` into `>= 6`, `> 1` into `>= 1`, 0.1 s into `> 0` with a comment about a flaky real model), a count check replaced by a loop that passes on an empty list | 4 |
+| `toEqual` into `toMatchObject` (a field added to the result, a test moved to another folder) | 3 |
+| The expected source of the defaults into "not empty" | 1 |
+| A test that was running is switched off: `it.skip` (three commits), three modules marked skip "for CI test pollution", an `xfail` on a test and on a module, `expectedFailure` on two tests | 7 |
+| An assertion that cannot fail, `or True` with a comment that says another call owns the placement (the block that 0.20.0 does not report) | 1 |
+| A trivial assertion in a new or rewritten test (`expect(true).toBe(true)`, `assert True`, a placeholder instead of three tests of an API that is now implemented); arguable | 4 |
+| A test workflow that gates less: a heavy parity workflow made manual-only, the static and test jobs removed because "the code reviewer runs them" | 2 |
+| A lint, scan or coverage gate loosened: a code scan and a docs lint allowed to fail, a ruff rule ignored for the project, coverage thresholds lowered (two commits) | 5 |
+| **False alarm:** a check rewritten in an equivalent or different-but-specific form after a refactor or a change of interface (a pydantic `ValidationError` for a `ValueError` with a message, an error string for an error object, a class name for a button, a count for an order and for contents, a hand-written line scan for a regular expression, a README test rewritten after its videos moved) | 7 |
+| **False alarm:** tests that run through another command after a migration: `poetry run pytest` into `make unit-test`, a behavioral workflow replaced by an evals workflow that runs `python eval/run_evals.py` | 2 |
+| **False alarm:** a workflow that is no gate: one made reusable (`workflow_call`) and called by two others that did not change, a pages deploy workflow whose `yarn coverage` builds the report for the site | 2 |
+| **False alarm:** a library function that is called `test_prompt` and marked skip so that pytest does not collect it | 1 |
+| **False alarm:** a new test next to an old one, paired as an edit in a merge (`toHaveBeenCalledWith('destroy')` and `toHaveBeenCalled()`) | 1 |
+
+**What reading it showed, and what is not fixed.** The stop rule held: no source file was changed after the first block was read, so these are for a later version and would be reported as fitted.
+
+- Tests that run through another command after a migration are the one kind of false alarm that has come back in three samples in a row (`nx run-many` in sample 8, `moon ci` in sample 9, `make unit-test` and an evals workflow here). A target of `make` with `test` in its name is the one of them that a rule could read; the others name nothing that says "tests".
+- A workflow that another workflow calls has no trigger of its own, so the file looks like a workflow that stopped running its tests, while the workflows that call it did not change and are not read for it.
+- A skip marker on a library function that is called `test_*` is read as a skipped test: the rule does not ask whether the file is a test file.
+- Checks rewritten in an equivalent form are 7 of the 13 false alarms, three of them arguable, and still the largest kind; no rule that reads the changed lines has been found that tells them from a weaker check.
+
+**Limits.**
+
+- One reader sorted every block, an AI assistant. Neither build was fitted to this sample, so the 33% is a figure that was not used to improve the build, but the way of sorting was settled on the nine samples before it.
+- One sample of 40 repositories is a range, not a number: two repositories (`rpamis/comet`, 8 blocks, and `TransformerLensOrg/TransformerLens`, 6) hold 14 of the 40 blocks, and the arguable commits move the share between 25% and 48%.
+- The same price as in sections 9 to 14 holds.
+
 ## Reproduce
 
 ```bash
@@ -1009,7 +1057,7 @@ node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/
 node scripts/probe-gaps.mjs gaps.json 300 ./clones-a ./clones-b                    # section 13: what no rule sees, in the added lines of real commits
 node scripts/benchmark-zoo.mjs ./reward-hack-zoo dist/cli.js                       # section 13: the specimens of a third party's catalog of agent cheats
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
-#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv; summary.json has the blocked commits per repository for both
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 

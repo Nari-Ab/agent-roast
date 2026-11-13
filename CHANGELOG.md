@@ -15,6 +15,10 @@ The hook is the same review of everything that is not committed yet, and the sam
 - `hook uninstall` and `hook status` know the three agents, installing again refreshes the pinned version, other settings and other hooks are kept, a settings file with comments (Gemini CLI's may have them) is left alone with a message as an unreadable one is for the other agents, and `hook install` with no names also picks a repository that has a `.gemini`, `.github/hooks` or `.factory` folder.
 - **What is not covered.** Like the other three integrations these follow the documented protocol and are tested with simulated hook input; there was no live session of any of the three. Whether the hook fires in a non-interactive run (`gemini -p`, `copilot -p`, `droid exec`) is not documented. Google's Antigravity CLI, which the Gemini CLI documentation says replaced it for unpaid-tier
   users on 18 June 2026, has hooks of its own that are not covered, and neither is Copilot's cloud agent, whose sandbox has a restricted network that `npx` may not get through. `docs/integrations.md` has a section for each.
+- **A tenth sample measures the build that ships (documentation only).** 40 public repositories that no earlier measurement used (`benchmarks/tenth-corpus.tsv`, 11,191 commits): the published 0.20.0 blocked 39, 26 for a reviewer and 13 false alarms (33%);
+  0.21.0 as it ships, with the fixes of samples 8 and 9 and the three of reading the code once more, blocked the same 39 and one more, a real one (`assert ... or True` in a new test): 27 and 13. None of the ten false alarms that 0.21.0 fixed showed here,
+  and the 13 that did are other kinds: checks rewritten in an equivalent form (7), tests that run through `make unit-test` or through another workflow after a migration (2), workflows that are no gate (2), a library function called `test_prompt` that is marked skip (1),
+  a new test paired with an old one in a merge (1). They are listed in `docs/benchmarks.md` section 15 and are not fixed in this version. The label table has 514 rows (ten samples), 300 blocks of the shipped build: 238 for a reviewer and 62 false alarms.
 
 ## 0.21.0 — 2026-11-13
 
