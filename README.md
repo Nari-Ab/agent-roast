@@ -167,6 +167,8 @@ It is a review aid. It cannot prove who wrote a change or that code is correct, 
 configuration, exceptions, baselines, limits) · [Comparison](docs/comparison.md) · [Measurements](docs/benchmarks.md) ·
 [Real blocks](docs/examples.md) · [Try it on your repository](docs/pilot.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
+[MCP server setup](docs/integrations.md#mcp-server) · [![MCPRush scan grade for the Agent Roast MCP server](https://mcprush.com/badge/agent-roast-mcp/score.svg)](https://mcprush.com/nari-ab/agent-roast-mcp)
+
 Found a finding that was wrong, or a shortcut it missed? That is the most useful report there is:
 [open an issue](https://github.com/Nari-Ab/agent-roast/issues/new/choose).
 
