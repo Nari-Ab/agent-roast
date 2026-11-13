@@ -405,6 +405,10 @@ export function isTestFile(filePath: string): boolean {
   return TEST_PATH_REGEX.test(filePath);
 }
 
+/** A Python file that pytest or unittest can collect, or that holds what they collect: a skip marker anywhere else (`@pytest.mark.skip` on a library function that is called `test_prompt` so that pytest does not collect it)
+ * switches no test off. The word has to stand as a word of the path: `tests/`, `test_x.py`, `x_test.py`, `tests.py`, `testing/`, `conftest.py`, `spec/`, not `latest.py` or `contest/`. */
+const PYTHON_TEST_PATH = /(?:^|[/._-])(?:tests?|testing|specs?|conftest)(?:[/._-]|$)/i;
+
 /**
  * Audits a collection of file diffs (e.g. for PR mode) against detector rules.
  */
@@ -453,7 +457,7 @@ export function auditFileDiffs(
       const isComment = !cleanedLine.trim();
 
       // A. Test Skips
-      if (python && !isComment) {
+      if (python && !isComment && PYTHON_TEST_PATH.test(file.path)) {
         for (const rule of PYTHON_TEST_SKIP_PATTERNS) {
           if (rule.regex.test(cleanedLine)) {
             if (rule.imperative && isGuardedSkip(maskedLines)) break;
@@ -576,7 +580,7 @@ export function auditFileDiffs(
     if (python) {
       // Markers on decorators, `pytestmark = ...` and `marks=...` can span lines, so they are read from the joined source.
       const reportedSkips = new Set(infractions.slice(firstFinding).filter(f => f.type === "test-skip").map(f => f.lineNumber));
-      for (const match of source.matchAll(PYTHON_MARKER)) {
+      for (const match of PYTHON_TEST_PATH.test(file.path) ? source.matchAll(PYTHON_MARKER) : []) {
         const xfail = match[2] === "xfail";
         let open = match.index + match[0].length;
         while (source[open] === " " || source[open] === "\t") open++;
