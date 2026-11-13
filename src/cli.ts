@@ -97,7 +97,7 @@ function isDefaultInvocation(options: any): boolean {
 const NEXT_STEPS = [
   "",
   pc.bold("Next steps"),
-  `  ${pc.cyan("npx agent-roast hook install")}   stop your coding agent from weakening checks (Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid)`,
+  `  ${pc.cyan("npx agent-roast hook install")}   stop your coding agent from weakening checks (Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid, Kiro, Antigravity CLI)`,
   `  ${pc.cyan("npx agent-roast init --ci")}      add the pull-request check (GitHub Actions)`,
   `  ${pc.cyan("npx agent-roast demo")}           see a scripted example`,
   "",
@@ -600,7 +600,7 @@ program
 
 const hook = program
   .command("hook")
-  .description("Guard a coding agent: send it back to fix the code when it weakens a check (Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid)");
+  .description("Guard a coding agent: send it back to fix the code when it weakens a check (Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid, Kiro, Antigravity CLI)");
 
 hook
   .command("run")
@@ -627,7 +627,7 @@ hook
 
 hook
   .command("install")
-  .description("Add the hook to Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot or Factory Droid in this repository")
+  .description("Add the hook to Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid, Kiro or Antigravity CLI in this repository")
   .argument("[agents...]", `${HOOK_AGENTS.join(", ")} (default: the agents that already have a folder in this repository)`)
   .option("--global", "install for every repository of this user instead", false)
   .option("--local", "Claude Code only: use .claude/settings.local.json, which stays out of Git", false)
@@ -640,8 +640,9 @@ hook
       if (opts.global && opts.local) throw new ConfigError("Choose --global or --local, not both.");
       let agents = parseAgents(names);
       const root = repositoryRoot(process.cwd());
-      if (!agents.length) agents = HOOK_AGENTS.filter(agent => fs.existsSync(path.join(root, { claude: ".claude", codex: ".codex", cursor: ".cursor", gemini: ".gemini", copilot: ".github/hooks", droid: ".factory" }[agent])));
-      if (!agents.length) throw new ConfigError("Name the agent to guard: agent-roast hook install claude (or codex, cursor, gemini, copilot, droid).");
+      if (!agents.length) agents = HOOK_AGENTS.filter(agent => fs.existsSync(path.join(root,
+        { claude: ".claude", codex: ".codex", cursor: ".cursor", gemini: ".gemini", copilot: ".github/hooks", droid: ".factory", kiro: ".kiro", antigravity: ".agents" }[agent])));
+      if (!agents.length) throw new ConfigError("Name the agent to guard: agent-roast hook install claude (or codex, cursor, gemini, copilot, droid, kiro, antigravity).");
       const scope = opts.global ? "global" : opts.local ? "local" : "project";
       const advisory = opts.advisory || program.opts().advisory === true;
       const changes = installHooks({ cwd: process.cwd(), agents, scope, command: opts.command, advisory, dryRun: opts.dryRun });
@@ -654,6 +655,8 @@ hook
       if (agents.includes("gemini")) console.log("\nGemini CLI warns the first time it sees a project hook, and again when its command changes; /hooks panel shows it.");
       if (agents.includes("copilot")) console.log("\nGitHub Copilot reads hook files when it starts: restart it. The cloud agent loads them from the default branch only.");
       if (agents.includes("droid")) console.log("\nFactory Droid takes a snapshot of its hooks at startup: restart it, and review the hook with /hooks.");
+      if (agents.includes("kiro")) console.log("\nKiro reads hooks when a session starts: restart it. Its Stop hook sends the agent back on any error; there is no documented way to tell a first try from a retry, so every run until the agent fixes it sends the agent back again.");
+      if (agents.includes("antigravity")) console.log("\nAntigravity CLI reads hooks when a session starts: restart it, or run /hooks to see what is loaded. --advisory is a one-line warning in its log, not a message to you inside the session: Antigravity CLI documents no channel for that.");
       if (!opts.dryRun && advisory) console.log("\nAdvisory mode: when the agent finishes with weakened checks you get a one-line warning and the agent is never sent back.\nStart sending it back: agent-roast hook install (without --advisory)   ·   remove it: agent-roast hook uninstall");
       else if (!opts.dryRun) console.log("\nWhen the agent is about to finish with weakened checks it is sent back once to fix the code.\nTurn it off for a while: agent-roast hook pause   ·   only warn instead: agent-roast hook install --advisory   ·   remove it: agent-roast hook uninstall");
     } catch (error) {
@@ -664,7 +667,7 @@ hook
 
 hook
   .command("uninstall")
-  .description("Remove the hook from Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot or Factory Droid")
+  .description("Remove the hook from Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, Factory Droid, Kiro or Antigravity CLI")
   .argument("[agents...]", `${HOOK_AGENTS.join(", ")} (default: all)`)
   .option("--global", "remove it from the user-level files", false)
   .option("--local", "Claude Code only: remove it from .claude/settings.local.json", false)
@@ -692,7 +695,7 @@ hook
       for (const row of rows) console.log(`  ${row.installed ? pc.green("installed") : pc.dim("not set  ")}  ${AGENT_LABELS[row.agent].padEnd(16)} ${row.scope.padEnd(8)} ${displayPath(row.file)}${row.advisory ? pc.yellow("  (advisory: warns, never sends the agent back)") : ""}`);
       const paused = await hookPausedUntil(process.cwd());
       if (paused) console.log(`\n  Paused in this repository until ${paused.toLocaleString()} (agent-roast hook resume).`);
-      if (!rows.some(row => row.installed)) console.log("\n  Install it with: agent-roast hook install claude   (or codex, cursor, gemini, copilot, droid)");
+      if (!rows.some(row => row.installed)) console.log("\n  Install it with: agent-roast hook install claude   (or codex, cursor, gemini, copilot, droid, kiro, antigravity)");
     } catch (error) {
       console.error(`agent-roast hook status error: ${errorMessage(error)}`);
       process.exitCode = 2;

@@ -88,7 +88,7 @@ Or without the plugin system: `npx agent-roast hook install claude`, which write
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.24.0 hook run --agent claude", "timeout": 60 } ] }
+      { "hooks": [ { "type": "command", "command": "npx --yes agent-roast@0.25.0 hook run --agent claude", "timeout": 60 } ] }
     ]
   }
 }
@@ -129,7 +129,7 @@ under `hooks.AfterAgent` (Gemini CLI counts the timeout in milliseconds).
 
 Gemini CLI warns the first time it sees a project hook, and again when the command of one changes; `/hooks panel` lists them. A `.gemini/settings.json` that has comments is
 not valid JSON for the installer, which leaves it alone and says so: add the entry by hand. Not covered: whether `AfterAgent` fires for a non-interactive `gemini -p` run (its
-documentation does not say), and Google's Antigravity CLI: the Gemini CLI documentation says that it replaced Gemini CLI for unpaid-tier and Google One users on 18 June 2026, and its hooks are not covered here.
+documentation does not say). Gemini CLI's own documentation says that Antigravity CLI replaced it for unpaid-tier and Google One users on 18 June 2026; its hooks are covered separately, below.
 
 ### GitHub Copilot
 
@@ -152,6 +152,34 @@ npx agent-roast hook install droid      # writes .factory/hooks.json (--global: 
 Droid's `Stop` hook takes Claude Code's input and its `{"decision": "block", "reason": "..."}` answer. `hooks.json` is keyed by event name at the top of the file (no `hooks` wrapper and no version) and the entry is
 `{"Stop": [{"hooks": [{"type": "command", "command": "npx --yes agent-roast@<version> hook run --agent droid", "timeout": 60}]}]}`. Droid takes a snapshot of its hooks at startup, so restart it after installing; `/hooks` shows them. Droid's documentation does not
 say what `droid exec` does with hooks.
+
+### Kiro
+
+```bash
+npx agent-roast hook install kiro       # writes .kiro/hooks/agent-roast.json (--global, CLI V3 only: ~/.kiro/hooks/agent-roast.json)
+```
+
+Kiro's `Stop` trigger ("Agent Stop" in its own documentation) fires when the agent has finished responding; its hook files are a standalone `.kiro/hooks/*.json`, one flat array of hooks each naming its own trigger (introduced in IDE 1.0 and CLI V3). The entry this
+writes is `{"name": "agent-roast", "trigger": "Stop", "action": {"type": "command", "command": "npx --yes agent-roast@<version> hook run --agent kiro"}, "timeout": 60}` inside `{"version": "v1", "hooks": [...]}`.
+
+Kiro's command hooks read no JSON: an exit of `0` adds the command's stdout to the agent's context, and any other exit sends its stderr to the agent, "notified that the hook returned an error" — the mechanism this hook uses to send the agent back, with the same
+account of what to undo as every other agent's `reason` field gets. Kiro reads hooks when a session starts, so restart it after installing. Not covered, because Kiro's own documentation does not say: whether a failing `Stop` hook is confirmed to retry the turn at
+all (its page spells that out for `Pre Tool Use` and `Prompt Submit`, but not for `Stop`, whose stated use is "report any failures to the agent"), and any field like Claude Code's `stop_hook_active` that would say a hook already sent the agent back once this turn —
+there is none, so without `--advisory` this hook sends the agent back on every run until the agent fixes it, not only the first.
+
+### Antigravity CLI
+
+```bash
+npx agent-roast hook install antigravity   # writes .agents/hooks.json (--global: ~/.gemini/config/hooks.json)
+```
+
+Antigravity CLI, Google's successor to Gemini CLI for unpaid-tier and Google One users since 18 June 2026, documents a `Stop` event ("fires when the execution loop terminates") read from `hooks.json`, keyed by a hook name of the installer's own choosing rather
+than by event. The entry this writes is `{"agent-roast": {"Stop": [{"type": "command", "command": "npx --yes agent-roast@<version> hook run --agent antigravity", "timeout": 60}]}}`.
+
+The answer is JSON on stdout, named the other way round from every other agent here: `{"decision": "continue", "reason": "..."}` is the one that blocks the stop and re-enters the loop, with the reason injected as a system message, and any other value for
+`decision` (this hook answers `"stop"`) lets the turn end. Antigravity CLI reads hooks when a session starts; `/hooks` shows what is loaded. Not covered, because Antigravity CLI's own documentation does not say: a canonical "let it stop" value (`decision` is
+marked required, but the one worked example the documentation gives is the `"continue"` case), a field for a message meant for the person alone (`reason` is read only when `decision` is `"continue"`, so an advisory warning goes to the hook's log instead, the
+way it does for Cursor), and whether a repeated `Stop` call is ever told apart from the first — there is no field like `stop_hook_active`, so without `--advisory` this hook sends the agent back on every run until it is fixed, not only the first.
 
 ### AGENTS.md and CLAUDE.md
 
@@ -179,15 +207,15 @@ earlier and the per-request metadata of 2026-07-28, and Claude Code's own connec
 | `stop_hook` | The Stop hook's check and answer, for plugin hooks of type `mcp_tool`. Meant to be called by a hook, not by hand. |
 
 ```bash
-claude mcp add agent-roast -- npx --yes agent-roast@0.24.0 mcp      # Claude Code
-codex mcp add agent-roast -- npx --yes agent-roast@0.24.0 mcp       # Codex
+claude mcp add agent-roast -- npx --yes agent-roast@0.25.0 mcp      # Claude Code
+codex mcp add agent-roast -- npx --yes agent-roast@0.25.0 mcp       # Codex
 ```
 
 Cursor reads `.cursor/mcp.json` in the project, or `~/.cursor/mcp.json` for every project, and other clients take the same
 command and arguments:
 
 ```json
-{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.24.0", "mcp"] } } }
+{ "mcpServers": { "agent-roast": { "command": "npx", "args": ["--yes", "agent-roast@0.25.0", "mcp"] } } }
 ```
 
 The tools read only the project the server was started in and other worktrees of the same repository; a path outside it is
@@ -222,7 +250,7 @@ repos:
         name: agent-roast
         entry: agent-roast review --staged
         language: node
-        additional_dependencies: ["agent-roast@0.24.0"]
+        additional_dependencies: ["agent-roast@0.25.0"]
         pass_filenames: false
         always_run: true
 ```
@@ -285,10 +313,10 @@ with `github/codeql-action/upload-sarif`. Source snippets are left out of SARIF.
 
 ```bash
 # GitLab merge request pipeline (full history: GIT_DEPTH: 0)
-npx agent-roast@0.24.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
+npx agent-roast@0.25.0 review --base "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --format markdown
 
 # Anything else
-npx agent-roast@0.24.0 review --base origin/main --format github   # or json, markdown, sarif
+npx agent-roast@0.25.0 review --base origin/main --format github   # or json, markdown, sarif
 ```
 
 Before putting it in CI, see what it would have said about your recent history: `npx agent-roast replay`.
