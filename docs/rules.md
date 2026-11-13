@@ -316,6 +316,7 @@ These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) r
 - tests that stop running because a runner option excludes them (`testPathIgnorePatterns`, vitest `exclude`, pytest `--ignore`
   or `-k "not ..."` in `addopts` or in a CI command, a longer coverage `omit` list): the CI check sees a removed test step, but
   not a narrowed one;
+- a workflow that calls a reusable workflow which holds the tests (`uses: ./.github/workflows/sdk.yml`, the callee runs only on `workflow_call`) is deleted or stops calling it: only the changed files are judged, and the caller has no test step of its own, so the tests stop running unseen;
 - a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await` (a probe found `if False:` in tests to be
   an idiom, and a line-by-line search for a promise assertion without `await` to be mostly assertions that are awaited on another line);
   `assert x or True` is reported since 0.21.0, but not `assert any(x or True for ...)`, where the constant is inside a call;
