@@ -831,7 +831,12 @@ export function newTestMarkers(before: Infraction[], after: Infraction[], oldTex
     if (nth <= had || (had === 0 && ((nth > 1 && !test.key.startsWith("js:")) || !existed(test)))) continue;
     found.push(finding);
   }
-  return [...found, ...unnamed.slice(unnamedBefore)];
+  // A registration with a table (`it.skip.each([`) has no title to look up. Its first lines, without the word of the marker, say whether the table was already there:
+  // `it.each([` that became `it.skip.each([` is a test that was running; a table that is not in the old file is new (a reproduction written as `it.fails.each`, tests regrouped from single skips).
+  const plain = (lines: string[]) => lines.map(line => line.trim().replace(/\.(?:skip|fails|failing|todo|fixme|only)\b/g, ""));
+  const oldPlain = plain(oldLines).join("\n"), newPlain = plain(newLines);
+  const newTable = (finding: Infraction) => /\.each\b/.test(finding.lineSnippet ?? "") && !oldPlain.includes(newPlain.slice((finding.lineNumber ?? 1) - 1, (finding.lineNumber ?? 1) + 3).join("\n"));
+  return [...found, ...unnamed.slice(unnamedBefore).filter(finding => !newTable(finding))];
 }
 
 // ---- Guards: configuration that decides whether bad code can pass ----
@@ -891,8 +896,14 @@ const CI_RUNNER = new RegExp(
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
 // The shell builtin `test -f summary.md && cat summary.md` checks a file: it has the word on the line and runs no tests.
 const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|until)\s+|!\s+)test\s+!?\s*(?:-[bcdefghkLnOGprsStuwxzN](?=\s)|["$'])/g;
+// A command that installs or syncs dependencies may name a group or an extra called `test` (`uv sync --group test`, `pip install .[test]`) and runs no tests, and `tox -e lint` or `nox -s docs` runs a tool that is
+// not the tests. Only the command itself is taken out, up to the next `&&`, `;` or `|`: what follows it (`pip install -e . && pytest`) is still read.
+const NOT_TESTS = new RegExp(
+  String.raw`(?<![\w./-])(?:uv\s+(?:sync|pip\s+install)|(?:python[\d.]*\s+-m\s+)?pip[\d.]*\s+install|pipx\s+install|poetry\s+install|pdm\s+(?:install|sync)|npm\s+(?:ci|i|install)|pnpm\s+(?:i|install)|yarn\s+(?:install|add)|bundle\s+install|gem\s+install|cargo\s+install|go\s+(?:install|get)|brew\s+install|apt(?:-get)?\s+install|conda\s+(?:install|create))\b[^&;|\n]*` +
+  String.raw`|(?<![\w./-])(?:tox|nox)\b[^&;|\n]*?\s(?:-e|-s|--env|--session)[= ]\s*(?:lint|linting|format|fmt|docs?|types?|typing|mypy|pyright|ruff|black|flake8|pylint|style|isort|bandit|build|package|clean)(?![,\w-])[^&;|\n]*`, "g");
 /** Whether a line of a CI file runs a test command. A trailing comment is not part of the command: `run: exit 0 # Skip unnecessary test runs for bots`. */
-const ciRuns = (line: string): boolean => CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(/\s#.*$/, ""));
+// The name of a step or of an artifact (`- name: Test with tox`, `name: pytest-results`) is not a command.
+const ciRuns = (line: string): boolean => !/^\s*(?:-\s+)?name\s*:/.test(line) && CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(NOT_TESTS, " ").replace(/\s#.*$/, ""));
 // A key whose value is a block of commands: `run: |`, a folded `run: >-`, or a GitLab `script:` list. Groups: the indent (and `- `) before the key, its name, its block indicator.
 const COMMAND_BLOCK = /^(\s*(?:-\s+)?)(run|script|before_script|after_script)\s*:\s*([|>])?[+-]?\d*\s*(?:#.*)?$/;
 const indentOf = (line: string): number => line.length - line.trimStart().length;
@@ -1029,7 +1040,9 @@ function matchingLines(text: string, pattern: RegExp | ((line: string) => boolea
 export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
-  const commandsBefore = gatingTestCommands(file, was), commandsAfter = gatingTestCommands(file, now);
+  // A test step that was already allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing, so it is no check that is lost when it goes.
+  const tolerated = new Set([...lenientSteps(was).values()].flatMap(step => step.runsChecks ? step.commands : []));
+  const commandsBefore = gatingTestCommands(file, was).filter(command => !tolerated.has(command.replace(/ @\S*$/, ""))), commandsAfter = gatingTestCommands(file, now);
   const after = commandsAfter.length;
   return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter };
 }

@@ -9,11 +9,11 @@ than other commits. Everything here is reproducible, and none of it is an accura
 block), usually deliberate and explained, and not more frequent in AI-signed commits. On repositories that the rules
 were not written from, between a quarter and two thirds of the blocked commits were false alarms, depending on the sample (sections 9 and 10: 69%
 for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read, 66% for this version as it was frozen on a sixth, where 52 of the
-100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, 38% for the build with its fixes on an eighth, sections 11 and 12); the rest are decisions a reviewer should see.
+100 blocks were one repository and 51 of them one defect, which is fixed; 48% for the published 0.19.0 on a seventh, 38% for the build with its fixes on an eighth, 39% for 0.21.0 as frozen on a ninth, sections 11 to 14); the rest are decisions a reviewer should see.
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 158/158 cheats caught, 144/144 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 161/161 cheats caught, 149/149 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -27,6 +27,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | A seventh sample nobody had read (section 11): 40 repositories, 12,000 commits | the published 0.19.0 blocked 31: 16 for a reviewer and 15 false alarms (48%; 39% without one repository); 0.18.0 blocked 32; the build frozen before the sample was read blocked 32, one more and a real one; the shipped build, after the fixes from reading it, blocks 22 of those commits (17 and 5) |
 | An eighth sample nobody had read (section 12): 39 repositories, 11,081 commits | 0.20.0 as frozen, with the fixes from sample 7: 26 blocked, 16 for a reviewer and 10 false alarms (38%); the published 0.19.0: 29, 13 false (45%); the shipped build, after the fixes from reading the sample, blocks 21 of those commits (16 and 5) |
 | What the rules miss (section 13): the added lines of 126,486 commits in 505 repositories, and a catalog of cheats that someone else wrote | 18 shapes of the documented gaps searched, two built (`assert … or True`, `skipif(True)`: nine new findings in seven commits, all read as real); reward-hack-zoo: 4 of the 9 hacks reported, none of the 6 honest solutions, and the five that are not live in the code (special-casing, swallowed errors, overfitting) |
+| A ninth sample nobody had read (section 14): 39 repositories, 11,286 commits | 0.20.0 as published and 0.21.0 as frozen blocked the same 46: 28 for a reviewer and 18 false alarms (39%); the shipped build, after the fixes from reading the sample, blocks 41 of those commits (28 and 13) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -40,7 +41,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **158/158 cheats caught, 144/144 harmless changes left alone, 1/1 documented gap still
+Result: **161/161 cheats caught, 149/149 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -855,15 +856,7 @@ reached, which is what a sample is for.
 On the 26 blocked commits of 0.20.0 the shipped build blocks 21: the 16 that a reviewer should see and 5 false alarms, with no finding that is new. The last row of the table is therefore fitted. The five that are left were not fixed: two checks rewritten in an equivalent form, a helper with a skip option that no entry uses,
 a migration to another runner, and a publish job that is switched off.
 
-**The regressions of this version, against 0.20.0 as frozen.**
-
-- **The commits that touch a CI file or a Python lint or type configuration** (the newest 300 of every repository, the eight samples, the agent corpus and the 24 repositories of section 6), the analysis of both sources on every changed file and a full review with both builds where it differs: 12,985 commits in 455 repositories and 23,177 changed files were analysed with both sources; they differ on 294, and the full review with both builds of those 294 differs on 2: 2 findings are gone (the two false alarms of the table above, a test command that moved into a folded block and ruff ignores after a dropped `target-version`), 0 is new.
-  The runs found these defects of the fixes themselves, all fixed before the numbers were taken: a job that is called `run` (a workflow of `panva/node-oidc-provider`) was read as a list of commands, and every step name with the word `test` counted as a test command (33 versions of workflow files);
-  a test command that moved from a folded block into a literal one was a removal, because only one of the two was read (one commit of `didi/dimina`); the first reading of literal blocks counted `FAILED_TESTS="... test ..."`, `for test in tests:` and `assert test[...]` as test commands (in a few repositories);
-  and the first version of the Python rule took any assertion with a `not` in it for an expectation of nothing, so that `assert data is not None and not data.refresh_pending` turned into `assert data is not None` was no longer reported (one commit of `daaain/claude-code-log`, sorted for a reviewer on sample 4: the label table found it),
-  and the first fix for that reported `assert not (cap > 0 and used >= cap)` again (a false alarm of sample 8).
-- **The blocked commits of all eight samples** (428 rows of `benchmarks/section9-labels.tsv`), reviewed again with the shipped build: 219 are blocked (183 for a reviewer, 36 false alarms); 24 of the 237 that 0.19.0 blocks are not (22 false alarms and 2 older blocks whose tests run in another workflow); 6 are not blocked by 0.19.0, all for a reviewer (one from the rule of 0.20.0 for an exact value turned into "not another value", 5 from the two rules of section 13).
-- **The labeled cases:** 158 of 158 cheats are caught and 144 of 144 harmless changes are left alone (six and eight more than before this section and the next), and one gap is still open. The defects of this sample have tests (`tests/eighth-sample.test.ts`).
+**The regressions of this version** were measured once, with the final build, which has the fixes of this sample and of sample 9: section 14 has them, and the defects of the fixes themselves that these runs found.
 
 **What this version still gets wrong, as found on sample 8** (listed so that they can be fixed, not as a promise):
 
@@ -934,6 +927,68 @@ code in the last two rows of the table above (950 and 1,180 hits in 126,486 comm
 
 **Limits.** One reader sorted all of it, an AI assistant; the probe reads a random sample of most shapes, not all of them; the shapes are the ones that `docs/rules.md` lists, so a gap nobody has written down is not in it; the catalog is nine hacks that its author wrote to be caught by his own detectors, and the share of them that this tool reports says nothing about what agents do in real repositories; and the two built rules rest on 13 and 12 commits of 126,486.
 
+## 14. A ninth sample: the shipped build on repositories it had not seen
+
+0.21.0 as frozen is the source of the pull request as it stood when sections 12 and 13 were written; sample 9 was drawn after that, with the search, the replay, the reader and the definitions of sections 9 to 13, and the frozen build was replayed on it together with the
+published 0.20.0. Neither of the two was changed after the first block was read; the fixes that reading showed came after, and the last row of the table is fitted.
+
+**Method.** Sample 9 holds 39 repositories (24 JavaScript or TypeScript, 15 Python; a sixteenth Python repository of the draw was left out by hand, a tool that fakes step counts), `benchmarks/ninth-corpus.tsv` with the revision measured, none in an earlier corpus; 11,286 of the newest commits of their first-parent
+histories were reviewed against their parents (64 could not be compared in full and 6 failed to review, and are in no count).
+
+| Build | Blocked commits (repositories) | False alarms | A reviewer should see |
+| --- | --- | --- | --- |
+| **0.20.0, as published** | **46 (21)** | **18 (39%)** | **28** |
+| **0.21.0, as frozen** | **46 (21)** | **18 (39%)** | **28** |
+| this version, after the fixes from reading the sample (fitted) | 41 (19) | 13 | 28 |
+
+The two builds block the same 46 commits: the fixes of sections 12 and 13 changed no block on a sample that they were not made from. The share of false alarms by sample is now 69%, 58%, 27%, 69%, 51%, 27%, 66%, 48%, 38% and **39%**: inside the range, at the low end of it. It was 38% on sample 8 for the build that had the fixes from sample 7 and had not seen it, and it is 39% here for the build that had the fixes from sample 8 and had not seen this one. One sample is a range, not a number: three of the 18 are arguable (a flag turned into an object after an interface changed, a boolean attribute that replaced a comparison, a count turned into "some and as many removed") and
+would be for a reviewer, which makes the share 33%.
+
+| What was blocked on sample 9 (0.21.0 as frozen) | Commits |
+| --- | --- |
+| A lint rule ignored: ruff `CPY001`, `EXE002`, `S603` and `S607` for scripts, `FIX002` and `FIX004` ("Allow TODO and HACK comments"), two rules for one script, flake8 `E701` | 6 |
+| A coverage threshold lowered (`fail_under` of five packages of one repository, the thresholds of a daemon) or a type check replaced by an echo | 7 |
+| A test workflow that gates less: failures retried with a quarantine list, the test workflows of a web application deleted with only lint left, pull requests no longer trigger the tests, a whole CI made manual | 4 |
+| A check that got weaker: an exact value into "not another" (`'default'` into `not 'grab'`), an exact count into a lower bound (`== 4` into `>= 4`), `toEqual` into `toMatchObject` (two), a bound lowered from 2 to 1, an exact text into the presence of an element | 6 |
+| A test that was running is switched off: `it.skip` in a tooling migration, `test.skip` under a CI condition, six `pytest.mark.skip` with a TODO, one "only run manually" | 4 |
+| Tests that patch the function they check and assert on what the patch returns (six tests of one merge) | 1 |
+| **False alarm:** a check rewritten in an equivalent or different-but-specific form after a refactor or a change of interface (a pid check moved into a wait, a Quart view into a Litestar one, a count into "some and as many removed", presence checks through a new helper or map, `toEqual` into `toMatchObject` with the new field asserted next to it, ten commits) | 10 |
+| **False alarm:** tests that moved with the code: a component and its workflow moved out of the repository, tests run through a task runner after a migration (`moon ci`) | 2 |
+| **False alarm:** a command that is not a test read as one: `uv sync --group test`, an install step that names a dependency group, and `tox run -e lint` | 2 |
+| **False alarm:** a test step that was already allowed to fail ("remove once the tests are working") removed from a code-quality workflow | 1 |
+| **False alarm:** a skip marker that cannot be told from a new one: tests that were already skipped, regrouped into `it.skip.each`, and a new reproduction test written as `it.fails.each` | 2 |
+| **False alarm:** a finding that was already there, reported again because the alias of an import in its line was renamed (`timeutils` into `oslo_timeutils`) | 1 |
+
+**What reading it showed to be defects, and what was fixed afterwards.** Five of the 18 false alarms are fixed in this version, after the sample was read:
+
+- A command that installs dependencies names a group or an extra that is called `test` (`uv sync --group test`, `pip install .[test]`) and runs no tests; neither does `tox -e lint` or `nox -s docs`, and the name of a step or of an artifact (`- name: Test with tox`, `name: pytest-results`) is not a command either, though it has the word of a runner. Only the command itself is taken out, up to the next `&&`, `;` or `|`, so `pip install -e .[test] && pytest` is still a test run
+  and `tox -e lint,py312` is too. Two of the 18.
+- A test step that was already allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing, so it is no check that is lost when it goes (the second time that a job that is not a check was read as one: section 12 had a publish job). One of the 18.
+- A registration with a table, `it.skip.each([`, has no title to look up, so a marker on it could not be told from a new test. Its first lines, without the word of the marker, say whether the table was already there: `it.each([` that became `it.skip.each([` is still reported, a table that is not in the old file is not. Two of the 18.
+
+**The regressions of this version, against 0.20.0 as frozen** (the fixes of samples 8 and 9 and the two rules of section 13 together, the final build):
+
+- **The commits that touch a CI file or a Python lint or type configuration** (the newest 300 of every repository, the nine samples, the agent corpus and the 24 repositories of section 6): 14,176 commits in 493 repositories and 25,548 changed files were analysed with both sources; they differ on 1,589 (reading installers, `tox` environments and step names changes how many test commands a workflow has without changing a finding), and the full review with both builds of those differs on 5 (6 could not be reviewed and are in no count): the 5 findings that are gone are five of the ten false alarms fixed in this release, the ones in CI and lint configuration (the other five are in test files, which the label table below covers), and none is new. Two are from sample 8 (a test command that moved into a folded block, and ruff ignores after a dropped `target-version`) and three from sample 9 (an install step that names a group called `test`, a lint step that was named after tox, and a test step that was already allowed to fail).
+  The runs found these defects of the fixes themselves, all fixed before the numbers were taken: a job that is called `run` (a workflow of `panva/node-oidc-provider`) was read as a list of commands, and every step name with the word `test` counted as a test command (33 versions of workflow files);
+  a test command that moved from a folded block into a literal one was a removal, because only one of the two was read (one commit of `didi/dimina`); the first reading of literal blocks counted `FAILED_TESTS="... test ..."`, `for test in tests:` and `assert test[...]` as test commands (in a few repositories);
+  the first version of the Python rule took any assertion with a `not` in it for an expectation of nothing, so that `assert data is not None and not data.refresh_pending` turned into `assert data is not None` was no longer reported (one commit of `daaain/claude-code-log`, sorted for a reviewer on sample 4: the label table found it),
+  and the first fix for that reported `assert not (cap > 0 and used >= cap)` again (a false alarm of sample 8). The fix for the lint workflow of sample 9 needed two changes, not one: `tox run -e lint` was no test, and neither was the step that was named after tox.
+- **The blocked commits of all nine samples** (474 rows of `benchmarks/section9-labels.tsv`), reviewed again with the shipped build: 260 are blocked (211 for a reviewer, 49 false alarms); on samples 1 to 8, 24 of the 237 that 0.19.0 blocks are not (22 false alarms and 2 older blocks whose tests run in another workflow), and 6 are blocked that 0.19.0 does not block, all for a reviewer (one from the rule of 0.20.0 for an exact value turned into "not another value", 5 from the two rules of section 13).
+- **The labeled cases:** 161 of 161 cheats are caught and 149 of 149 harmless changes are left alone (nine and thirteen more than before sections 12 to 14), and one gap is still open. The defects of this sample have tests (`tests/ninth-sample.test.ts`).
+
+**What this version still gets wrong, as found on sample 9** (listed so that they can be fixed, not as a promise):
+
+- A check that was rewritten in an equivalent form after a refactor or a change of interface, which no pairing by expression sees: ten of the 18, three of them arguable, and the largest kind that is left in every sample since 7.
+- Tests that moved to another runner (`moon ci`, as `nx run-many` in sample 8) or went out of the repository with the component they test.
+- A finding that was already there, reported again when the alias of an import in its line is renamed: the comparison is by the text of the line.
+
+**Limits.**
+
+- One reader sorted every block, an AI assistant, and the fixes were made from the same sorting. The last row of the table says nothing about other repositories. Out of sample are the published 0.20.0 and 0.21.0 as frozen.
+- One sample of 39 repositories is a range, not a number: the 39% here is 33% with the three arguable commits counted the other way, and one repository (`oracle/mcp`: eight blocks, five of them a lowered `fail_under`) moves the count of commits by itself.
+- The build that ships is not the build that was measured: it has five more fixes from reading the sample, covered by tests and by the reviews above, not by a new sample.
+- The same price as in sections 9 to 13 holds.
+
 ## Reproduce
 
 ```bash
@@ -954,7 +1009,7 @@ node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/
 node scripts/probe-gaps.mjs gaps.json 300 ./clones-a ./clones-b                    # section 13: what no rule sees, in the added lines of real commits
 node scripts/benchmark-zoo.mjs ./reward-hack-zoo dist/cli.js                       # section 13: the specimens of a third party's catalog of agent cheats
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
-#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv; summary.json has the blocked commits per repository for both
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 
