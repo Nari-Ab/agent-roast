@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 161/161 cheats caught, 149/149 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 162/162 cheats caught, 150/150 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -41,7 +41,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **161/161 cheats caught, 149/149 harmless changes left alone, 1/1 documented gap still
+Result: **162/162 cheats caught, 150/150 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -974,7 +974,7 @@ would be for a reviewer, which makes the share 33%.
   the first version of the Python rule took any assertion with a `not` in it for an expectation of nothing, so that `assert data is not None and not data.refresh_pending` turned into `assert data is not None` was no longer reported (one commit of `daaain/claude-code-log`, sorted for a reviewer on sample 4: the label table found it),
   and the first fix for that reported `assert not (cap > 0 and used >= cap)` again (a false alarm of sample 8). The fix for the lint workflow of sample 9 needed two changes, not one: `tox run -e lint` was no test, and neither was the step that was named after tox.
 - **The blocked commits of all nine samples** (474 rows of `benchmarks/section9-labels.tsv`), reviewed again with the shipped build: 260 are blocked (211 for a reviewer, 49 false alarms); on samples 1 to 8, 24 of the 237 that 0.19.0 blocks are not (22 false alarms and 2 older blocks whose tests run in another workflow), and 6 are blocked that 0.19.0 does not block, all for a reviewer (one from the rule of 0.20.0 for an exact value turned into "not another value", 5 from the two rules of section 13).
-- **The labeled cases:** 161 of 161 cheats are caught and 149 of 149 harmless changes are left alone (nine and thirteen more than before sections 12 to 14), and one gap is still open. The defects of this sample have tests (`tests/ninth-sample.test.ts`).
+- **The labeled cases:** 162 of 162 cheats are caught and 150 of 150 harmless changes are left alone (ten and fourteen more than before sections 12 to 14), and one gap is still open. The defects of this sample have tests (`tests/ninth-sample.test.ts`).
 
 **What this version still gets wrong, as found on sample 9** (listed so that they can be fixed, not as a promise):
 
@@ -986,7 +986,7 @@ would be for a reviewer, which makes the share 33%.
 
 - One reader sorted every block, an AI assistant, and the fixes were made from the same sorting. The last row of the table says nothing about other repositories. Out of sample are the published 0.20.0 and 0.21.0 as frozen.
 - One sample of 39 repositories is a range, not a number: the 39% here is 33% with the three arguable commits counted the other way, and one repository (`oracle/mcp`: eight blocks, five of them a lowered `fail_under`) moves the count of commits by itself.
-- The build that ships is not the build that was measured: it has five more fixes from reading the sample, covered by tests and by the reviews above, not by a new sample.
+- The build that ships is not the build that was measured: it has five more fixes from reading the sample and three from reading the code of those fixes once more (installers of tools, a test step that may fail left out by its line, a bounded regular expression; `CHANGELOG.md`), covered by tests and by the reviews above, not by a new sample.
 - The same price as in sections 9 to 13 holds.
 
 ## Reproduce

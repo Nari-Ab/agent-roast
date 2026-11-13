@@ -899,11 +899,12 @@ const SHELL_TEST = /(?:^|run:\s*|[;&|({]\s*|\b(?:if|then|do|else|elif|while|unti
 // A command that installs or syncs dependencies may name a group or an extra called `test` (`uv sync --group test`, `pip install .[test]`) and runs no tests, and `tox -e lint` or `nox -s docs` runs a tool that is
 // not the tests. Only the command itself is taken out, up to the next `&&`, `;` or `|`: what follows it (`pip install -e . && pytest`) is still read.
 const NOT_TESTS = new RegExp(
-  String.raw`(?<![\w./-])(?:uv\s+(?:sync|pip\s+install)|(?:python[\d.]*\s+-m\s+)?pip[\d.]*\s+install|pipx\s+install|poetry\s+install|pdm\s+(?:install|sync)|npm\s+(?:ci|i|install)|pnpm\s+(?:i|install)|yarn\s+(?:install|add)|bundle\s+install|gem\s+install|cargo\s+install|go\s+(?:install|get)|brew\s+install|apt(?:-get)?\s+install|conda\s+(?:install|create))\b[^&;|\n]*` +
-  String.raw`|(?<![\w./-])(?:tox|nox)\b[^&;|\n]*?\s(?:-e|-s|--env|--session)[= ]\s*(?:lint|linting|format|fmt|docs?|types?|typing|mypy|pyright|ruff|black|flake8|pylint|style|isort|bandit|build|package|clean)(?![,\w-])[^&;|\n]*`, "g");
-/** Whether a line of a CI file runs a test command. A trailing comment is not part of the command: `run: exit 0 # Skip unnecessary test runs for bots`. */
-// The name of a step or of an artifact (`- name: Test with tox`, `name: pytest-results`) is not a command.
-const ciRuns = (line: string): boolean => !/^\s*(?:-\s+)?name\s*:/.test(line) && CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(NOT_TESTS, " ").replace(/\s#.*$/, ""));
+  String.raw`(?<![\w./-])(?:uv\s+(?:sync|add|tool\s+install|pip\s+install)|(?:python[\d.]*\s+-m\s+)?pip[\d.]*\s+install|pipx\s+install|poetry\s+(?:install|add)|pdm\s+(?:install|sync|add)|npm\s+(?:ci|i|install|add)|pnpm\s+(?:i|install|add)|bun\s+(?:i|install|add)|yarn\s+(?:install|add)|bundle\s+install|gem\s+install|cargo\s+install|go\s+(?:install|get)|brew\s+install|apt(?:-get)?\s+install|conda\s+(?:install|create))\b[^&;|\n]*` +
+  // The gap before the environment is bounded, so that a line of a hundred thousand characters with `tox` in it again and again is read in linear time.
+  String.raw`|(?<![\w./-])(?:tox|nox)\b[^&;|\n]{0,300}?\s(?:-e|-s|--env|--session)[= ]\s*(?:lint|linting|format|fmt|docs?|types?|typing|mypy|pyright|ruff|black|flake8|pylint|style|isort|bandit|build|package|clean)(?![,\w-])[^&;|\n]*`, "g");
+/** Whether a line of a CI file runs a test command. A trailing comment is not part of the command: `run: exit 0 # Skip unnecessary test runs for bots`. The name of a step or of an artifact
+ * (`- name: Test with tox`, `name: pytest-results`) is not a command either. */
+const ciRuns =(line: string): boolean => !/^\s*(?:-\s+)?name\s*:/.test(line) && CI_RUNNER.test(line.replace(SHELL_TEST, " ").replace(NOT_TESTS, " ").replace(/\s#.*$/, ""));
 // A key whose value is a block of commands: `run: |`, a folded `run: >-`, or a GitLab `script:` list. Groups: the indent (and `- `) before the key, its name, its block indicator.
 const COMMAND_BLOCK = /^(\s*(?:-\s+)?)(run|script|before_script|after_script)\s*:\s*([|>])?[+-]?\d*\s*(?:#.*)?$/;
 const indentOf = (line: string): number => line.length - line.trimStart().length;
@@ -956,19 +957,20 @@ function blockCommands(lines: string[], at: number, key: RegExpExecArray): strin
 /** The lines of a CI file that run a test command, comments left out. The lines of a folded block (`run: >-`) are one command, and an item of a GitLab `script:` list is one: both are read
  * as if they stood after `run:` (`xvfb-run ... hvigorw test -p module=dimina` is a test run, as it is on one line). The lines of a literal block (`run: |`) are shell, where a word
  * `test` is as often a directory or a message (`mkdir test`, `echo "ZIP test PASS"`), so only a runner that is known by name, or a tool with `test` as its first argument, counts there:
- * the same step is then one test step whether it is written in a folded block or a literal one. */
-function ciTestLines(text: string): string[] {
-  const lines = text.split(/\r?\n/), found: string[] = [];
+ * the same step is then one test step whether it is written in a folded block or a literal one. Each command comes with the index of the line it stands on (the line of the key, for a command of a block). */
+function ciTestEntries(text: string): Array<{ index: number; command: string }> {
+  const lines = text.split(/\r?\n/), found: Array<{ index: number; command: string }> = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim() || line.trim().startsWith("#")) continue;
-    if (ciRuns(line)) found.push(line);
+    if (ciRuns(line)) found.push({ index: i, command: line });
     const key = COMMAND_BLOCK.exec(line);
     if (!key) continue;
-    for (const command of blockCommands(lines, i, key)) if (command && !PRINTS.test(command) && !ciRuns(command) && ciRuns(`run: ${command}`)) found.push(command);
+    for (const command of blockCommands(lines, i, key)) if (command && !PRINTS.test(command) && !ciRuns(command) && ciRuns(`run: ${command}`)) found.push({ index: i, command });
   }
   return found;
 }
+const ciTestLines = (text: string): string[] => ciTestEntries(text).map(entry => entry.command);
 const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
@@ -1023,12 +1025,20 @@ function triggerSection(text: string): string | null {
 
 /** The test commands a workflow runs when changes are pushed or reviewed, one per line that runs one, as `npm test` rather than `- run: npm  test # x`,
  * each followed by the directories the workflow says it works in (`working-directory: web`): the same command in two services of a monorepo is
- * two checks. Empty for a workflow that gates nothing. */
-export function gatingTestCommands(file: string, text: string): string[] {
+ * two checks. Empty for a workflow that gates nothing. `skip` leaves out the commands that stand on the lines (counted from 0) it says yes to. */
+export function gatingTestCommands(file: string, text: string, skip?: (line: number) => boolean): string[] {
   if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
   const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
-  return ciTestLines(text)
-    .map(line => `${line.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
+  return ciTestEntries(text).filter(entry => !skip?.(entry.index))
+    .map(entry => `${entry.command.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
+}
+
+/** The test commands of a workflow that check something: the ones that stand in a step or a job that is allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing,
+ * so they are no check that is lost when they go, and no check that is still run when another workflow loses its tests. They are left out by the line they stand on, not by their text: the same command in
+ * a step that gates (a stable job next to a nightly one that may fail) is still counted. */
+export function enforcedTestCommands(file: string, text: string): string[] {
+  const tolerated = [...lenientSteps(text).values()].filter(step => step.runsChecks).flatMap(step => step.ranges);
+  return gatingTestCommands(file, text, line => tolerated.some(([from, to]) => line >= from && line < to));
 }
 
 function matchingLines(text: string, pattern: RegExp | ((line: string) => boolean)): number {
@@ -1040,9 +1050,8 @@ function matchingLines(text: string, pattern: RegExp | ((line: string) => boolea
 export function ciTestSteps(file: string, oldText: string | null, newText: string | null): CiTestCount | null {
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
-  // A test step that was already allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing, so it is no check that is lost when it goes.
-  const tolerated = new Set([...lenientSteps(was).values()].flatMap(step => step.runsChecks ? step.commands : []));
-  const commandsBefore = gatingTestCommands(file, was).filter(command => !tolerated.has(command.replace(/ @\S*$/, ""))), commandsAfter = gatingTestCommands(file, now);
+  // A test step that was already allowed to fail or switched off checked nothing, so it is no check that is lost when it goes. One that is made so by this change is the other rule's finding, not this one's.
+  const commandsBefore = enforcedTestCommands(file, was), commandsAfter = gatingTestCommands(file, now);
   const after = commandsAfter.length;
   return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter };
 }
@@ -1078,7 +1087,8 @@ const NON_CHECK_ACTION = new RegExp(String.raw`^\s*(?:-\s+)?uses:\s*["']?(?:` + 
   String.raw`codecov/codecov-action`, String.raw`coverallsapp/github-action`,
 ].join("|") + String.raw`)(?:/[\w./-]+)?@`, "i");
 
-interface LenientStep { count: number; line: number; runsChecks: boolean; nonCheck: boolean; commands: string[] }
+/** `ranges` are the lines (from 0, the end not included) of each step or job that carries the marker. */
+interface LenientStep { count: number; line: number; runsChecks: boolean; nonCheck: boolean; commands: string[]; ranges: Array<[number, number]> }
 
 /** The commands of a step or job as written, one per `run:` or `uses:` and one per line of a `run: |` block, with the spaces collapsed. */
 function scopeCommands(scope: string[]): string[] {
@@ -1125,7 +1135,7 @@ function lenientSteps(text: string): Map<string, LenientStep> {
     const nonCheck = !runsChecks && uses.length === 1 && NON_CHECK_ACTION.test(uses[0]) && !scope.some(item => /^\s*(?:-\s+)?run:/.test(item));
     const commands = scopeCommands(scope);
     const entry = found.get(identity);
-    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; entry.nonCheck &&= nonCheck; entry.commands.push(...commands); } else found.set(identity, { count: 1, line: i + 1, runsChecks, nonCheck, commands });
+    if (entry) { entry.count++; entry.runsChecks ||= runsChecks; entry.nonCheck &&= nonCheck; entry.commands.push(...commands); entry.ranges.push([start, end]); } else found.set(identity, { count: 1, line: i + 1, runsChecks, nonCheck, commands, ranges: [[start, end]] });
   });
   return found;
 }
