@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 164/164 cheats caught, 153/153 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 165/165 cheats caught, 154/154 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -30,6 +30,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | A ninth sample nobody had read (section 14): 39 repositories, 11,286 commits | 0.20.0 as published and 0.21.0 as frozen blocked the same 46: 28 for a reviewer and 18 false alarms (39%); the shipped build, after the fixes from reading the sample, blocks 41 of those commits (28 and 13) |
 | A tenth sample nobody had read (section 15): 40 repositories, 11,191 commits | the published 0.20.0 blocked 39: 26 for a reviewer and 13 false alarms (33%); 0.21.0 as shipped, with the fixes of samples 8 and 9, blocked the same 39 and one more, a real one (27 and 13); not fitted to this sample, so the 33% is out of sample |
 | What reading sample 10 led to (section 16): three fixes, fitted, and a guard that was measured | 3 of the 13 false alarms fixed (`make unit-test`, a reusable workflow that a workflow calls, a skip marker on a library function); the 300 blocks of the shipped build: 297 still blocked, the 3 that are not are the false alarms, none of the 238 for a reviewer lost; 2 new real findings in 15,295 commits (a test step moved to a weekly run, a canary test step allowed to fail); "the subject of the assertion changed" would unblock 22 false alarms and 12 real ones: not built |
+| A gap closed (section 17): the only caller of a reusable test workflow | 11,106 CI-touching commits of 516 repositories: 33 stop calling a workflow they called before; one is reported (an automated commit broke the caller's `uses:` path), one was already reported by an earlier rule, the rest keep a caller or gate on their own; two ideas from sections 13 and 16 tried again, still refused |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -43,7 +44,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **164/164 cheats caught, 153/153 harmless changes left alone, 1/1 documented gap still
+Result: **165/165 cheats caught, 154/154 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -1066,6 +1067,27 @@ Section 15 measured 0.20.0 as published and 0.21.0 as shipped on a tenth sample,
 - One reader sorted every block, an AI assistant, and sorted the two new ones as well.
 - The same price as in sections 9 to 15 holds.
 
+## 17. A gap closed: the only caller of a reusable test workflow, and two ideas tried again that still do not pay
+
+Section 16 left a gap in `docs/rules.md`: deleting (or editing) the workflow that calls a reusable workflow which holds the tests is not seen, because only the changed files are judged and the caller itself has no test step of its own. This version closes it, and two refinements of open questions from sections 13 and 16 were tried again with a second method each; neither earns its keep.
+
+**What was fixed.** A reusable workflow (`workflow_call`) that a diff stops calling — the caller is deleted, or edited to call something else — is read from the tree it still sits in, and a finding is reported only when both hold: the workflow does not gate on a trigger of its own (`push`, `pull_request`, `pull_request_target`, `merge_group`), and nothing else, in the diff or not in it, still calls it.
+A workflow that already gates on its own trigger, or that keeps another caller, loses nothing when one caller goes.
+
+**Measured, on real history.** @@REPOS@@ repositories and @@COMMITS@@ commits of the ten samples, the agent corpus and the 24 repositories of section 6 touch a CI file; @@HITS@@ commits, across @@HITREPOS@@ repositories, stop calling a workflow they called before (`scripts/scan-reusable-callers.mjs`). Of those, this version reports one: `python-poetry/poetry`'s own pre-commit automation rewrote `uses: ./.github/workflows/.tests-matrix.yaml` to `uses: $/.github/workflows/.tests-matrix.yaml` in a dependency-bump commit, a reference GitHub Actions cannot resolve, so the test matrix this workflow ran stopped running on every pull request from that commit on, unnoticed in this clone's history. A second commit, `TheRealSavi/iOpenPod`'s, was already reported before this version: the called workflow itself dropped its own `push` and `pull_request` triggers in the same diff, which sections 12-16's rule already catches; this version does not report it twice. The other @@OTHERHITS@@ commits are not reported: the workflow they stop calling either keeps another caller (`boxlite-ai/boxlite`'s shared `config.yml`, called from eight other workflows) or gates on a trigger of its own regardless of callers (`dbos-inc/dbos-transact-ts`'s `test.yml` runs on `push` directly).
+Labeled cases: @@CHEATS@@ of @@CHEATS@@ cheats caught and @@CONTROLS@@ of @@CONTROLS@@ harmless changes left alone (one more of each than before this section, for a deleted caller and for one deleted together with the workflow it called); @@FILES@@ files, @@TESTS@@ tests. The regressions of sections 9 to 16 were repeated and are unchanged by this fix (it adds a finding only where none of the existing rules already produced one for the same file).
+
+**Two ideas tried again, by a different method, and still refused.**
+
+- **Section 16 measured that demoting a finding whose assertion changed its subject would trade about two false alarms for one real weakening.** A second method was tried: splitting those commits by whether the new subject's root identifier is the same as the old one (`result` narrowed into `result.error`, a drill-down) or a different one entirely (`card.className` replaced by `document.querySelector(...)`, a different expression). Almost none of the 34 commits are a drill-down by that measure (2 of 34, one false alarm and one real), so the split sorts almost nothing: the false alarms and the real weakenings both replace one expression with an unrelated one just as often. No rule that reads the changed lines has been found that tells the two apart.
+- **Section 13 and section 16 each left "a test that runs through a command that does not say so" open** (`nx run-many`, `moon ci`, a script that does not mention tests by name). A search of the ten samples, the agent corpus and the 24 repositories of section 6 for a bare call to a monorepo task runner (`moon ci`, `moon run`, `nx run-many`, `nx affected`, `turbo run`, `pants`, `buck2`, `bazel`) with no word "test" anywhere on the line found @@RUNNERLINES@@ such lines in @@RUNNERREPOS@@ repositories: @@RUNNERTEST@@ have the word test somewhere else on the line (`nx run-many -t build,test`) and would already be read, and @@RUNNERNOTEST@@ do not — mostly `turbo run build`, `nx run <project>:build` and comments about one. Reading any of these as a test step unconditionally would trade one real recall gain for many false alarms; it was not built.
+
+**Limits.**
+
+- One reader (an AI assistant) read every commit that the scan surfaced, and the two it measured again.
+- The scan for lost callers is a text match on `uses: ./.github/workflows/...`: a workflow called by its name from another repository, or included through GitLab's `include:`, is not covered (section 13's catalogue of what agent-roast does not read still applies).
+- The same price as in sections 9 to 16 holds.
+
 ## Reproduce
 
 ```bash
@@ -1085,6 +1107,7 @@ node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/
   --out diff.json --added '<the regular expression in the header of the script>'   # section 8: both builds on the commits that can differ
 node scripts/probe-gaps.mjs gaps.json 300 ./clones-a ./clones-b                    # section 13: what no rule sees, in the added lines of real commits
 node scripts/benchmark-zoo.mjs ./reward-hack-zoo dist/cli.js                       # section 13: the specimens of a third party's catalog of agent cheats
+node scripts/scan-reusable-callers.mjs ./clones-a ./clones-b ...                   # section 17: commits that stop calling a reusable workflow they called before
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
 #   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
