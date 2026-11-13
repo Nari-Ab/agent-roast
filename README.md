@@ -112,7 +112,7 @@ Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/ben
 deliberate, and not specific to AI. agent-roast is a tripwire that asks about them. On repositories it had not seen, between a quarter and
 two thirds of its blocks were questions with a harmless answer, depending on the sample.**
 
-- **164 of 164** hand-labeled cheating edits are caught and **153 of 153** harmless look-alikes (reformats, moves, raised
+- **165 of 165** hand-labeled cheating edits are caught and **154 of 154** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. One gap is documented and still open.
 - **A catalog of cheats that someone else wrote.** Of the nine hacks in [reward-hack-zoo](https://github.com/MatthewWaller/reward-hack-zoo) (hand-written specimens; none from a model) four are reported (a skip, a patched target, a `conftest.py` that rewrites reports,

@@ -104,7 +104,8 @@ Raising a threshold, restructuring CI and moving the test step are not reported,
 running a test command is not reported while a workflow that gates changes still runs that very command, whether the same change touches that
 workflow or not (a deleted `production.yml` next to a `test.yml` that runs `npm test` too). The same command in another `working-directory`,
 another runner, or a workflow that runs only on a schedule does not count as the same tests. A workflow that lost its own `push` and `pull_request` triggers by becoming reusable (`workflow_call`) is not reported while a workflow that gates
-calls it (`uses: ./.github/workflows/sdk.yml`), in the change or not in it. A test step is a known runner (`pytest`, `vitest`, `jest`,
+calls it (`uses: ./.github/workflows/sdk.yml`), in the change or not in it; nor is a reusable workflow whose only caller is deleted, or edited to call something else, while it keeps another caller or gates on a trigger of its own
+regardless — but when neither holds, that caller going is reported on the called workflow's own file, as a test step lost. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
 `bazel test`), a target of `make`, `just`, `task` or a package manager that has the word among its own words (`make unit-test`, `just test-asyncio`, `pnpm run docs:test`; not one that sets up, installs, builds or type-checks, `make setup-tests`, `pnpm run typecheck:tests`),
 Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`), a package script that runs
@@ -316,7 +317,6 @@ These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) r
 - tests that stop running because a runner option excludes them (`testPathIgnorePatterns`, vitest `exclude`, pytest `--ignore`
   or `-k "not ..."` in `addopts` or in a CI command, a longer coverage `omit` list): the CI check sees a removed test step, but
   not a narrowed one;
-- a workflow that calls a reusable workflow which holds the tests (`uses: ./.github/workflows/sdk.yml`, the callee runs only on `workflow_call`) is deleted or stops calling it: only the changed files are judged, and the caller has no test step of its own, so the tests stop running unseen;
 - a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await` (a probe found `if False:` in tests to be
   an idiom, and a line-by-line search for a promise assertion without `await` to be mostly assertions that are awaited on another line);
   `assert x or True` is reported since 0.21.0, but not `assert any(x or True for ...)`, where the constant is inside a call;

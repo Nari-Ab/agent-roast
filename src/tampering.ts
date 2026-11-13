@@ -1065,6 +1065,36 @@ export function gatingCalls(file: string, text: string): string[] {
   return [...text.matchAll(/^\s*-?\s*uses:\s*["']?\.\/(\.github\/workflows\/[^\s"'#@]+\.ya?ml)/gm)].map(match => match[1]);
 }
 
+/** The reusable workflows (local paths) that this one change stops calling: present in `gatingCalls` of the old text and not of the new (empty when the file
+ * is deleted). A caller that was never gating lost nothing that mattered: `gatingCalls` is already empty for it on both sides. */
+export function lostCalls(file: string, oldText: string | null, newText: string | null): string[] {
+  if (!CI_FILE.test(file)) return [];
+  const before = gatingCalls(file, oldText ?? "");
+  if (!before.length) return [];
+  const after = new Set(gatingCalls(file, newText ?? ""));
+  return before.filter(workflow => !after.has(workflow));
+}
+
+/** The test commands a workflow runs, read without regard to its own trigger: a workflow called only by `uses:` from one that gates (`workflow_call`,
+ * or one with no trigger section of its own) gates through its caller, not through an `on:` section of CI_GATE's own kinds. */
+export function calledTestCommands(text: string): string[] {
+  const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
+  return ciTestEntries(text).map(entry => `${entry.command.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
+}
+
+/** A reusable workflow whose only caller disappeared: `content` is its text (from the diff if the workflow itself was touched, or read from the tree
+ * otherwise) and `stillCalled` says whether some workflow that gates still calls it, in this diff or not. Skipped when the workflow already gates on its
+ * own trigger (`gatingTestCommands` is then non-empty on its own, callers aside) or has no test command to lose. */
+export function resolveLostCallers(lost: ReadonlyMap<string, { content: string; stillCalled: boolean }>, commit: string): Infraction[] {
+  const out: Infraction[] = [];
+  for (const [file, { content, stillCalled }] of lost) {
+    if (stillCalled || gatingTestCommands(file, content).length > 0 || calledTestCommands(content).length === 0) continue;
+    out.push(finding("guard-weakened", file, 1, "nothing calls this workflow on a push or pull request any more",
+      "Workflow keeps its tests, but the workflow that called it is gone", commit));
+  }
+  return out;
+}
+
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
  * moving them to another workflow, or to a shared one, is not removal, and neither is dropping a duplicate: every test command it ran is still run
  * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch. A workflow that lost its own triggers

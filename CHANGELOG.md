@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.24.0 — 2026-11-13
+
+**A gap closed: the only caller of a reusable test workflow, and two ideas from earlier sections tried again by a different method.**
+
+Section 16 (0.23.0) left a documented gap: deleting, or editing, the workflow that calls a reusable workflow which holds the tests stopped those tests from running, unseen, because the review judges only the changed files and the caller itself has no test step of its own. This version closes it, and tries two open questions again with a second method each; neither earns its keep. `docs/benchmarks.md` section 17 has the numbers and the limits.
+
+- **A reusable workflow (`workflow_call`) that a diff stops calling is read from the tree it still sits in**, and reported only when it does not gate on a trigger of its own (`push`, `pull_request`, `pull_request_target`, `merge_group`) and nothing else, in the diff or not in it, still calls it. A workflow that already gates on its own trigger, or keeps another caller, loses nothing when one caller goes.
+- **Measured on real history.** 11,106 commits of 516 repositories touch a CI file; 33 commits, across 26 repositories, stop calling a workflow they called before (`scripts/scan-reusable-callers.mjs`). This version reports one: `python-poetry/poetry`'s own pre-commit automation rewrote `uses: ./.github/workflows/.tests-matrix.yaml` into `uses: $/.github/workflows/.tests-matrix.yaml` in a dependency-bump commit, a path GitHub Actions cannot resolve, so that workflow's test matrix stopped running on every pull request, unnoticed in this clone's history. One more, `TheRealSavi/iOpenPod`'s, was already reported by the rule of section 16 (the called workflow dropped its own triggers in the same diff); this version does not report it twice. The rest keep another caller or gate on a trigger of their own regardless of callers.
+- **Two ideas tried again, and still refused.** Demoting an `assertion-weakened` finding whose subject changed (section 16) was tried a second way: splitting the 34 commits where every finding does this by whether the new subject is a drill-down of the old one (`result` narrowed into `result.error`) or a wholly different expression (`card.className` replaced by a query). Almost none of the 34 are a drill-down by that measure (2 of 34, one false alarm and one real), so it sorts almost nothing.
+  "A test that runs through a command that does not say so" (sections 13 and 16: `nx run-many`, `moon ci`) was searched for directly: of 93 lines across the corpora that call a bare monorepo task runner with no word "test" on the line, 77 do not run tests at all (mostly `turbo run build`, `nx run <project>:build`); reading any of them as a test step unconditionally would trade one recall gain for many false alarms.
+- Labeled cases: 165 of 165 cheats caught, 154 of 154 look-alikes left alone, 1 gap open (one more of each than before this version, for a deleted caller and one deleted together with the workflow it called); 52 files, 1,555 tests. The 299 recorded blocks of the label table, reviewed again, are unchanged.
+
 ## 0.23.0 — 2026-11-13
 
 **Three false alarms of a tenth sample fixed, tests that run through a task-runner target read as tests, and a guard that was measured and not built.**
