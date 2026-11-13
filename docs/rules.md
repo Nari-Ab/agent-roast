@@ -48,7 +48,8 @@ Recognized weaker forms: in JavaScript/TypeScript `toBeDefined`, `toBeTruthy`, `
 `assert value`, `is not None`, `assert True`, `assert len(x) > 0` where `== 3` stood, `pytest.raises(ValueError)` broadened to
 `Exception`, a `match=` dropped from `pytest.raises`, and `assertRaisesRegex` relaxed to `assertRaises`. An exact check turned
 into a bound is not reported when the old check expected nothing (`toHaveLength(0)` to `toBeGreaterThan(0)` is a flipped
-expectation, not a looser one). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
+expectation, not a looser one), and neither is a Python expectation of nothing (`is None`, `not x`, `== 0`, `== []`) turned into its opposite
+(`is not None`, a bare name). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
 several checks into one snapshot are not reported. Nor is a check that the element is there, written another way:
 `expect(wrapper.find(".menu").exists()).toBe(true)` turned into `expect(document.querySelector(".menu")).not.toBeNull()`,
 `toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it).
@@ -106,7 +107,11 @@ another runner, or a workflow that runs only on a schedule does not count as the
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
 `bazel test`), Python's own and the browser runners (`python -m unittest`, `nosetests`, `playwright test`, `cypress run`, `karma start`), a package script that runs
 the tests with coverage (`yarn coverage`, `npm run coverage`), task runners (`deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`, `./gradlew test`, `node --test`) and a project's own
-test script run through an interpreter or by path (`python scripts/run_tests.py`, `./scripts/test.sh`, `python tests/test_cli.py`); a command that only mentions such a script (`chmod +x scripts/test.sh`) is not one. The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
+test script run through an interpreter or by path (`python scripts/run_tests.py`, `./scripts/test.sh`, `python tests/test_cli.py`); a command that only mentions such a script (`chmod +x scripts/test.sh`) is not one. Nor is a command that installs dependencies (`uv sync --group test`, `uv tool install tox`, `pip install .[test]`, `pip install pytest`, `pnpm add -D vitest`: the word names a group, an extra, a tool or a package) or a `tox` or `nox` run on an environment that lints, builds or documents (`tox -e lint`, `nox -s docs`);
+only the command itself is left out, up to the next `&&`, `;` or `|`, so `pip install -e .[test] && pytest` and `tox -e lint,py312` are still test steps. The name of a step or of an artifact (`- name: Test with tox`, `name: pytest-results`) is not a command. A test step that was already allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing, so it is no check that is lost when it is removed, and none that is still run when another workflow loses its tests. It is left out by the line it stands on, not by its text: the same command in a job that gates is still counted.
+The lines of a folded block (`run: >-`) are one command, and an item of a GitLab `script:` list is one (that only prints, `echo "Running tests"`, is not a test run), so `xvfb-run ... hvigorw test -p module=app` there is a test run as it is on one line; in a literal block (`run: |`), shell
+where `test` is as often a directory or a message (`mkdir test`, `echo "ZIP test PASS"`), only a runner that is known by name or a line that runs a tool with `test` as its first argument (`hvigorw test \`, `terraform test`) counts, so that the same step is one test step in either kind of block,
+and the shell builtin with a string or a variable (`test "$x" = y`) is never a test run. The shell builtin `test -f summary.md` checks a file and is not a test run, and a comment at the end of a
 line is not part of the command (`run: exit 0 # Skip unnecessary test runs`). A workflow gates changes when it runs on a push or a pull request (or is a
 reusable workflow, `workflow_call`, that one of those may call); the triggers are read from its `on:` section, not from the whole file, where a
 Docker step's `push: true` is not a trigger, and a `push:` that lists only `tags:` (no `branches:`) is a release pipeline that runs when a version is
@@ -143,7 +148,8 @@ More shortcuts of the same kind:
   `tests.*` next to `true` for another module is two settings, not one that was turned off (until 0.19.0 it was read as one, and a repository whose overrides
   were written that way blocked on every commit that touched `pyproject.toml`). A ruff ignore added in the same change that raises `requires-python`, `target-version`, mypy's `python_version` or the pinned ruff version is not reported: the bump is what brings
   the rules (`UP006` once Python 3.9 is the minimum, `RUF022` with ruff 0.8). The setting has to be in both versions of the file and higher in the new one; a version that goes down, or one that is only written for the first time, hides nothing, and
-  neither does a pin kept in another file (a pre-commit `rev` is not read). The words of a comment in a TOML list are not codes: `"EM",  # allow Exception("text")` ignores `EM` and nothing else, and a commented-out `# "ANN"` is not selected.
+  neither does a pin kept in another file (a pre-commit `rev` is not read). A `target-version` that is dropped hands the choice to `requires-python`: the effective target is the one that is written, or else
+  the one the project requires, so ignores for the rules that a higher one brings are not reported. The words of a comment in a TOML list are not codes: `"EM",  # allow Exception("text")` ignores `EM` and nothing else, and a commented-out `# "ANN"` is not selected.
   `ignore_missing_imports` and numeric limits such as `max-line-length` are not read.
 
 The same rule covers a test harness that rewrites what the runner reports. In `conftest.py`, `sitecustomize.py` and test files,
@@ -159,7 +165,7 @@ A test was switched off. The runner reports success without executing the behavi
 | Language | Reported |
 | --- | --- |
 | JavaScript/TypeScript | `it.skip`, `describe.skip`, `xit`, `xdescribe`, `test.todo`, Playwright `test.skip(true)` or with only a title; tests expected to fail: `it.fails` (Vitest), `test.failing` (Jest, AVA), Playwright `test.fixme` and `test.fail` |
-| Python | `@pytest.mark.skip`, `@unittest.skip`, a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure` (and the same decorator under another module's name, `@test.expectedFailure`); `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
+| Python | `@pytest.mark.skip`, `@unittest.skip`, `@pytest.mark.skipif(True, ...)` and `@unittest.skipIf(True, ...)` (a condition that is the constant `True` is a skip), a bare `pytest.skip()` or `self.skipTest()` in a test; tests expected to fail: `@pytest.mark.xfail`, `pytest.xfail()`, `@unittest.expectedFailure` (and the same decorator under another module's name, `@test.expectedFailure`); `pytestmark = pytest.mark.skip` for a whole module and `marks=pytest.mark.xfail` on one parametrized case |
 | Go | `t.Skip`, `t.Skipf`, `t.SkipNow` as a statement of a test or sub-test |
 | Rust | `#[ignore]`, `#[ignore = "reason"]` |
 | Java, Kotlin | `@Ignore`, `@Disabled`, `@Test(enabled = false)` |
@@ -181,7 +187,8 @@ commits wrote a new test with `xfail`), it needs a server, a device or a databas
 Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned on, 32 were such a skip on a test the commit adds
 ([benchmarks, section 9](benchmarks.md#9-repositories-nobody-had-tuned-on)). The test behind a marker is found by its name or title
 (Python, JavaScript and TypeScript), by the `fn` below the attribute (Rust) and by the `func Test...` around `t.Skip()` (Go); a file that is
-new has only new tests. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
+new has only new tests. A registration with a table (`it.skip.each([`, `it.fails.each([`) has no title: its first lines, without the word of the marker, say whether the table was already there, so that
+`it.each([` that became `it.skip.each([` is reported and a table that is not in the old file (a reproduction written as an expected failure, single skipped tests regrouped into one) is not. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
 file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
 cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. A registration that a formatter
 wrapped after its opening bracket (`test.fixme(` or `it.todo(` with the title on the next line) is read like one on a single line (a `todo` that
@@ -189,7 +196,7 @@ carries the title of a test the change adds is a new placeholder, not a test swi
 `test.skip(true, "needs admin")` that sits under an `if`, `else`, `case`, `catch` or after `cond &&` is a run-time condition, like
 `test.skip(isAdmin, ...)`; the condition counts only when it is in the lines the review can see, and one that mentions CI, or is plainly
 true (`if (true)`), still hides the test and is reported.
-A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates:
+A skip that depends on the environment is **not** reported, because those are overwhelmingly platform or service gates (`skipif(True)` does not depend on anything, and is reported):
 `if testing.Short() { t.Skip() }`, `if not has_gpu(): pytest.skip(...)`, `test.skip(browserName === "webkit", ...)`,
 `@DisabledOnOs`, `skip "no redis" unless redis_available?`, a skip inside a fixture or helper. The same goes for Swift
 `#if os(Windows)` around a `throw XCTSkip(...)` and `@Test(.disabled(if: condition))`, a Ruby `it "...", :skip => !feature?`, and
@@ -221,6 +228,12 @@ assert.True(t, true)
 Reported in JavaScript/TypeScript, Python, Go, Rust (`assert!(true)`), Java and Kotlin (`assertTrue(true)`,
 `assertEquals(1, 1)`), C#, Ruby, PHP and Swift. **Fix:** call the real behavior and assert its output or side effect.
 
+**An assertion that ends in `or True`** (Python) cannot fail either: `assert len(new_snapshots) > initial_count or True  # TDD placeholder` checks nothing, and so does
+`self.assertTrue(run() == run() or True)`. Only an `or` outside every bracket is read, so a callback that says it handled the call
+(`assert registry.register(lambda item: seen.append(item) or True)`) and `identity(x or True)` are left alone. A search of the added lines of 126,486 commits in 505 public repositories found the shape in 13 commits of 8 repositories;
+the rule reports seven assertions in six commits of four of them, each one a check that had been neutered ("message content not asserted verbatim", "TDD placeholder"), and leaves the rest alone: a callback, a call, the fixtures of a testing tool's own tests
+and the first commit of a clone ([benchmarks, section 13](benchmarks.md#13-a-probe-of-what-no-rule-sees-and-a-catalog-of-cheats-that-someone-else-wrote)).
+
 **A test that checks its own mock.** The same rule reports a test that replaces the function it checks with a mock and then
 asserts on what the mock returns. That cannot fail whatever the real code does:
 
@@ -239,7 +252,7 @@ and `expect(...)`, also through `const total = price(cart); expect(total)`) and 
 `mocker.patch` and `monkeypatch.setattr`, against the `assert`s of the same test or `with` block). It is reported only when the
 change introduces it. Left alone: mocking a *dependency* of the code under test and asserting the code under test, a mock that
 keeps the real module (`requireActual`, `importActual`, `wraps=`, or a factory that is handed the real module's loader and calls it,
-under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides),
+under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides; for `import * as fs` it is the member that has to be configured: `vi.mocked(fs.open).mockImplementation(...)` says nothing about `fs.stat()`),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
 called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
 `mock` or `monkeypatch` (the tests of the mocking tools themselves). In JavaScript an assertion on a mock's output in a test (or hook) that
@@ -301,8 +314,9 @@ These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) r
 - tests that stop running because a runner option excludes them (`testPathIgnorePatterns`, vitest `exclude`, pytest `--ignore`
   or `-k "not ..."` in `addopts` or in a CI command, a longer coverage `omit` list): the CI check sees a removed test step, but
   not a narrowed one;
-- a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await`, and
-  `assert x or True`;
+- a failing assertion that is moved after an early `return`, wrapped in `if (false)`, or left without `await` (a probe found `if False:` in tests to be
+  an idiom, and a line-by-line search for a promise assertion without `await` to be mostly assertions that are awaited on another line);
+  `assert x or True` is reported since 0.21.0, but not `assert any(x or True for ...)`, where the constant is inside a call;
 - a check relaxed to a range when the test was also renamed or the expected value changed in the same commit (`toBe(200)` to
   `toBeLessThan(500)` on the same expression is reported; a renamed test is read as a new scenario and not compared), and a range
   that is wider than the exact value but written in a form this rule does not read (`expect(res.status >= 400).toBe(true)`);

@@ -1,7 +1,7 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
-import { analyzeGuardFile, analyzeTestFile, ciTestSteps, gatingTestCommands, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
+import { analyzeGuardFile, analyzeTestFile, ciTestSteps, enforcedTestCommands, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
 import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
@@ -190,7 +190,7 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
     const tree = /^[a-f0-9]{40,64}$/.test(refs.headSha) ? refs.headSha : refs.baseSha;
     try {
       for (const file of (await ciFilesAt(cwd, tree, options.signal)).filter(candidate => !touched.has(candidate.path)).slice(0, 100)) {
-        try { for (const command of gatingTestCommands(file.path, new TextDecoder().decode(await readBlob(cwd, file.oid, options.signal, 512 * 1024)))) elsewhere.add(command); }
+        try { for (const command of enforcedTestCommands(file.path, new TextDecoder().decode(await readBlob(cwd, file.oid, options.signal, 512 * 1024)))) elsewhere.add(command); }
         catch (error) { assertNotAborted(options.signal); }
       }
     } catch (error) { assertNotAborted(options.signal); }

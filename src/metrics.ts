@@ -12,6 +12,8 @@ const PYTHON_TEST_SKIP_PATTERNS = [
   { regex: /(?<![\w.])pytest\s*\.\s*xfail\s*\(/, name: "imperative pytest xfail (pytest.xfail)", imperative: true },
   // `@unittest.expectedFailure`, and the same decorator under another module's name (`@test.expectedFailure` of a test framework that re-exports it).
   { regex: /@(?:[A-Za-z_]\w*\s*\.\s*)*expectedFailure\b/, name: "test expected to fail (@unittest.expectedFailure)", imperative: false },
+  // `skipif(True)` is a skip whose condition is always true: it switches the test off wherever it runs, which `skipif` with a condition on the environment does not.
+  { regex: /(?:@\s*|(?<![\w.])marks\s*=\s*\[?\s*|^[ \t]*pytestmark\s*=\s*\[?\s*)(?:pytest\s*\.\s*mark\s*\.\s*skipif|(?:unittest\s*\.\s*)?skipIf)\s*\(\s*True\s*[,)]/, name: "unconditionally skipped test (skipif(True))", imperative: false },
 ];
 
 /** `pytest.mark.skip` or `.xfail` as a decorator, as `pytestmark = ...` for a whole module, or as `marks=` of one parametrized
@@ -351,6 +353,21 @@ const PYTHON_TRIVIAL_ASSERT_PATTERNS = [
   { regex: /\bself\s*\.\s*assertTrue\s*\(\s*(?:True|1)\s*\)/, name: "trivial assert (self.assertTrue(True))" },
   { regex: /\bself\s*\.\s*assertEqual\s*\(\s*(?:1\s*,\s*1|True\s*,\s*True)\s*\)/, name: "trivial assert (self.assertEqual(1, 1))" },
 ];
+/** `assert check or True` and `self.assertTrue(check or True)` cannot fail: an operand of the `or` is the constant, and the check beside it decides nothing. Only the operands outside every
+ * bracket are read: `lambda paths: seen.append(paths) or True` inside a call is a callback that says it handled the call, and `identity(x or True)` is a value. `code` has its strings and
+ * comments blanked. */
+export function assertsAlwaysTrue(code: string): boolean {
+  const body = /^\s*assert\b\s*(.*)$/.exec(code)?.[1] ?? /\bself\s*\.\s*assertTrue\s*\((.*)$/.exec(code)?.[1];
+  if (body === undefined) return false;
+  let depth = 0, outside = "";
+  for (const character of body) {
+    if ("([{".includes(character)) { outside += depth === 0 ? character : " "; depth++; continue; }
+    if (")]}".includes(character)) { if (depth === 0) break; depth--; outside += depth === 0 ? character : " "; continue; }
+    if (depth === 0 && character === ",") break;
+    outside += depth === 0 ? character : " ";
+  }
+  return outside.split(/\bor\b/).some(operand => /^\s*(?:True|1)\s*$/.test(operand));
+}
 const JS_STUB_PATTERNS = [
   { regex: /\bthrow\s+new\s+Error\s*\(\s*["'`](?:TODO(?=\s*(?:["'`:]|implement\b))|Not implemented\b|to be implemented\b|stub\b|implement me\b)/i, name: "unimplemented stub (throw new Error('Not implemented'))" },
 ];
@@ -492,19 +509,18 @@ export function auditFileDiffs(
 
       // D. Trivial Assertions (only in test files)
       if (python && !isComment && isTestFile(file.path)) {
-        for (const rule of PYTHON_TRIVIAL_ASSERT_PATTERNS) {
-          if (rule.regex.test(cleanedLine)) {
-            infractions.push({
-              type: "trivial-assert",
-              file: file.path,
-              lineNumber: added.lineNumber,
-              lineSnippet: rawLine.trim(),
-              commitHash,
-              commitDate,
-              reason: rule.name,
-            });
-            break;
-          }
+        const trivial = PYTHON_TRIVIAL_ASSERT_PATTERNS.find(rule => rule.regex.test(cleanedLine))?.name
+          ?? (assertsAlwaysTrue(cleanedLine) ? "assertion that cannot fail (assert ... or True)" : undefined);
+        if (trivial) {
+          infractions.push({
+            type: "trivial-assert",
+            file: file.path,
+            lineNumber: added.lineNumber,
+            lineSnippet: rawLine.trim(),
+            commitHash,
+            commitDate,
+            reason: trivial,
+          });
         }
       }
 
