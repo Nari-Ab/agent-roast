@@ -880,8 +880,8 @@ const GATE_SCRIPT = /^(?:pre|post)?(?:test|lint|typecheck|type-check|check|ci|ve
 const CI_RUNNER = new RegExp(
   String.raw`(?<![\w./-])(?:pytest|vitest|jest|mocha|tox|nox)(?![\w/-])` +
   String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun|go|cargo|mvn|gradle|make|dotnet|flutter)\s+(?:run\s+)?(?:-\S+\s+)*test(?![\w/])` +
-  // A package script that runs the tests with coverage: `yarn coverage`, `npm run coverage`.
-  String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?coverage(?![\w/-])` +
+  // A package script that runs the tests with coverage: `yarn coverage`, `npm run coverage`, `npm run cover`.
+  String.raw`|(?<![\w./-])(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?cover(?:age)?(?![\w/-])` +
   // Monorepo runners: `nx affected --target=test`, `turbo run test`, `lerna run test`, `bazel test //...`.
   String.raw`|(?<![\w./-])(?:nx|turbo|lerna|rush)\s+(?:run-many|affected|run|test)\b[^\n]*(?<![\w-])(?:test|tests)(?![\w-])` +
   String.raw`|(?<![\w./-])(?:bazel\s+test|ctest|phpunit|rspec|deno\s+test)(?![\w/-])` +
@@ -891,6 +891,9 @@ const CI_RUNNER = new RegExp(
   // Task runners: `deno task test`, `just test`, `rake test`, `composer test`, `mix test`, `sbt test`, `./gradlew test`, and Node's own `node --test`.
   String.raw`|(?<![\w./-])(?:deno\s+(?:task|run)|just|task|poe|rake|composer(?:\s+run)?|mix|sbt|lein|stack|cabal|(?:\./)?(?:gradlew|mvnw)(?:\.bat|\.cmd)?)\s+(?:-\S+\s+)*test(?![\w/-])` +
   String.raw`|(?<![\w./-])(?:node|tsx)(?:\s+-\S+)*\s+--test(?![\w-])` +
+  // A target of a task runner that has the word as one of its own words and not as the first: `make unit-test`, `just test-asyncio py314`, `pnpm run docs:test`. A target that sets up, installs, builds or type-checks
+  // (`make setup-tests`, `pnpm run typecheck:tests`, `pnpm run build:native:test`) runs no tests.
+  String.raw`|(?<![\w./-])(?:make|just|task|(?:npm|pnpm|bun)\s+run|yarn(?:\s+run)?|pnpm)\s+(?:-\S+\s+)*(?![\w.:-]*(?:setup|teardown|install|deps|typecheck|lint|build|docker|clean|prepare|publish|deploy|release|format|image|download|data))[\w.:-]*(?<![A-Za-z0-9])tests?(?![A-Za-z0-9])` +
   // A project's own test script, run through its interpreter or by path: `python scripts/run_tests.py`, `./scripts/test.sh`, `python tests/test_cli.py`.
   String.raw`|(?<![\w./-])(?:(?:python[\d.]*|node|bash|sh|zsh|ruby|pwsh|tsx|ts-node)(?:\s+-\S+)*\s+|\./)(?:[\w.-]+/)*(?:(?:run[_-]?)?tests?(?:[_-](?:all|suite|runner|unit|ci))?|test_[\w-]+|[\w-]+_test)\.(?:py|sh|bash|js|mjs|cjs|ts|rb|ps1)(?![\w-])` +
   String.raw`|\brun:.*(?<=\s)(?:tests?|unit|e2e)(?![\w/.-])`);
@@ -1056,15 +1059,23 @@ export function ciTestSteps(file: string, oldText: string | null, newText: strin
   return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter };
 }
 
+/** The workflows that a workflow which gates calls (`uses: ./.github/workflows/sdk.yml`), as repository paths: their jobs run on every change that the caller runs on, whatever their own triggers are. */
+export function gatingCalls(file: string, text: string): string[] {
+  if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
+  return [...text.matchAll(/^\s*-?\s*uses:\s*["']?\.\/(\.github\/workflows\/[^\s"'#@]+\.ya?ml)/gm)].map(match => match[1]);
+}
+
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
  * moving them to another workflow, or to a shared one, is not removal, and neither is dropping a duplicate: every test command it ran is still run
- * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch. */
-export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set()): Infraction[] {
+ * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch. A workflow that lost its own triggers
+ * because another workflow that this change did not touch calls it (`called`) still runs on every change. */
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set(), called: ReadonlySet<string> = new Set()): Infraction[] {
   const before = counts.reduce((sum, item) => sum + item.before, 0);
   const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
   if (after >= before) return [];
   const running = new Set([...counts.flatMap(item => item.commandsAfter ?? []), ...elsewhere]);
   return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
+    .filter(item => !(item.ungatedAfter > 0 && called.has(item.file)))
     .filter(item => item.commandsBefore === undefined || item.commandsBefore.some(command => !running.has(command)))
     .map(item => item.ungatedAfter > 0
       ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.23.0 — 2026-11-13
+
+**Three false alarms of a tenth sample fixed, tests that run through a task-runner target read as tests, and a guard that was measured and not built.**
+
+A tenth sample (`docs/benchmarks.md` section 15) of 40 repositories that no earlier measurement used blocked 40 commits with 0.21.0 as shipped, 27 for a reviewer and 13 false alarms (33%), the same 39 and one more than the published 0.20.0. Reading the 13 showed three that a rule can fix, and the regression of the fixes found two more real findings.
+Section 16 has the tables; the figures about the sample are fitted to it, the regressions are not.
+
+- **A target of a task runner that has the word test among its words is a test run.** `make unit-test`, `make acceptance-test`, `just test-asyncio py314 1`, `pnpm run docs:test` count; a target that sets up, installs, builds or type-checks (`make setup-tests`, `pnpm run typecheck:tests`, `pnpm run build:native:test`) does not, and `npm run cover` is read like `npm run coverage`.
+  The tests of TransformerLens that moved from `poetry run pytest` into `make unit-test` are no removal any more (one false alarm). The first version of the rule reported `npm run unit-tests` turned into `npm run cover` in `apache/cordova-ios`; the regression found it and the `cover` script fixed it.
+- **A workflow that another workflow calls runs on every change that its caller runs on.** A workflow that lost its own `push` and `pull_request` triggers by becoming reusable (`workflow_call`) is not "no longer running on pull requests" while a workflow that gates calls it (`uses: ./.github/workflows/sdk.yml`), in the change or not in it (one false alarm, `bunqueue`).
+- **A skip marker only counts in a file that holds tests.** The word test, tests, testing, spec or conftest has to stand as a word of the path: `@pytest.mark.skip` on a library function that is called `test_prompt` was reported, and it was the only Python skip finding of the label table outside such a path (one false alarm).
+- **Measured (fitted to the sample).** On the 300 blocks of the shipped build in the label table: 297 still blocked, 3 not, the three false alarms above, and none of the 238 that a reviewer should see lost. 15,295 commits in 527 repositories touch a CI file or a Python lint or type configuration: the analyses of both sources differ on 320 and the full review of both builds on 3 (1 not reviewable): one finding gone, two new and real
+  (`open-telemetry/opentelemetry-js` took `npm run docs:test` out of the job that runs on pull requests and runs it weekly; `extension-js/extension.js` allowed the test step of its dependency canary to fail, a commit that sample 4 had sorted for a reviewer). The label table has 515 rows and a column for this version: 299 blocks, 240 for a reviewer and 59 false alarms.
+  Labeled cases: 164 of 164 cheats caught, 153 of 153 look-alikes left alone, 1 gap open; 51 files, 1,542 tests. The price: a command that is learned makes a step that moves to a command that is not known a removal, as `npm run cover` showed; tests that run behind a command that names no test (`nx run-many`, `moon ci`, `python eval/run_evals.py`) are still reported when they move.
+- **A guard that was measured and not built.** "The subject of the assertion changed" (the old and the new assertion share no identifier) would have unblocked 22 false alarms and 12 blocks for a reviewer of the 300: about two false alarms for one weakened check that goes unreported (samples 1 to 9: 18 against 10; sample 10: 4 against 2), and the 12 look like the 22 line by line. Checks rewritten in an equivalent form are 43 of the 62 false alarms of the table and stay.
+
 ## 0.22.0 — 2026-11-13
 
 **Three more agents can be sent back to fix the code: Gemini CLI, GitHub Copilot and Factory Droid.**

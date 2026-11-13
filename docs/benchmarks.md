@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 162/162 cheats caught, 150/150 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 164/164 cheats caught, 153/153 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -29,6 +29,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | What the rules miss (section 13): the added lines of 126,486 commits in 505 repositories, and a catalog of cheats that someone else wrote | 18 shapes of the documented gaps searched, two built (`assert … or True`, `skipif(True)`: nine new findings in seven commits, all read as real); reward-hack-zoo: 4 of the 9 hacks reported, none of the 6 honest solutions, and the five that are not live in the code (special-casing, swallowed errors, overfitting) |
 | A ninth sample nobody had read (section 14): 39 repositories, 11,286 commits | 0.20.0 as published and 0.21.0 as frozen blocked the same 46: 28 for a reviewer and 18 false alarms (39%); the shipped build, after the fixes from reading the sample, blocks 41 of those commits (28 and 13) |
 | A tenth sample nobody had read (section 15): 40 repositories, 11,191 commits | the published 0.20.0 blocked 39: 26 for a reviewer and 13 false alarms (33%); 0.21.0 as shipped, with the fixes of samples 8 and 9, blocked the same 39 and one more, a real one (27 and 13); not fitted to this sample, so the 33% is out of sample |
+| What reading sample 10 led to (section 16): three fixes, fitted, and a guard that was measured | 3 of the 13 false alarms fixed (`make unit-test`, a reusable workflow that a workflow calls, a skip marker on a library function); the 300 blocks of the shipped build: 297 still blocked, the 3 that are not are the false alarms, none of the 238 for a reviewer lost; 2 new real findings in 15,295 commits (a test step moved to a weekly run, a canary test step allowed to fail); "the subject of the assertion changed" would unblock 22 false alarms and 12 real ones: not built |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -42,7 +43,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **162/162 cheats caught, 150/150 harmless changes left alone, 1/1 documented gap still
+Result: **164/164 cheats caught, 153/153 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -1036,6 +1037,34 @@ a count of a phrase into the order of two phrases) and six of the 27 blocks for 
 - One reader sorted every block, an AI assistant. Neither build was fitted to this sample, so the 33% is a figure that was not used to improve the build, but the way of sorting was settled on the nine samples before it.
 - One sample of 40 repositories is a range, not a number: two repositories (`rpamis/comet`, 8 blocks, and `TransformerLensOrg/TransformerLens`, 6) hold 14 of the 40 blocks, and the arguable commits move the share between 25% and 48%.
 - The same price as in sections 9 to 14 holds.
+
+## 16. What sample 10 led to: three fixes, fitted, and a guard that did not pay
+
+Section 15 measured 0.20.0 as published and 0.21.0 as shipped on a tenth sample, and neither build is touched by this section. 0.23.0 fixes three of the 13 false alarms of that sample, and one defect of its own first fix, after reading them: every number about the sample below is fitted, and the regressions are the part that says something about other repositories.
+
+**What was fixed.**
+
+- A target of a task runner that has the word *test* among its words is a test run: `make unit-test`, `make acceptance-test`, `just test-asyncio py314 1`, `pnpm run docs:test`. A target that sets up, installs, builds or type-checks (`make setup-tests`, `pnpm run typecheck:tests`, `pnpm run build:native:test`) is not one, and `npm run cover` is read like `npm run coverage`. The tests of `TransformerLensOrg/TransformerLens` that moved from `poetry run pytest` into `make unit-test` are no removal any more (one false alarm). It is the third time that tests moved behind a command that names them only inside a target (`nx run-many` in sample 8, `moon ci` in sample 9): this rule reads the targets that say it in their name, the others stay.
+- A workflow that another workflow calls (`uses: ./.github/workflows/sdk.yml`) runs on every change that its caller runs on, so a workflow that lost its own `push` and `pull_request` triggers by becoming reusable is not "no longer running on pull requests" when a workflow that gates calls it, whether that workflow is in the change or not (`egeominotti/bunqueue`, one false alarm).
+- A skip marker only counts in a file that holds tests: the word test, tests, testing, spec or conftest has to stand as a word of the path (`tests/`, `test_x.py`, `x_test.py`, `tests.py`, `conftest.py`, not `latest.py`). `@pytest.mark.skip` on a library function that is called `test_prompt` was the false alarm; of the 56 Python skip findings of the label table it is the only one outside such a path (one false alarm).
+
+**The regressions of this version, against the rules of 0.22.0 as shipped.**
+
+- **The commits that touch a CI file or a Python lint or type configuration** (the newest 300 of every repository, the ten samples, the agent corpus and the 24 repositories of section 6): 15,295 commits in 527 repositories and 27,251 changed files were analysed with both sources; they differ on 320, and the full review with both builds of those differs on 3 (1 could not be reviewed and is in no count): one finding is gone, the false alarm of `make unit-test`, and two are new and real. `open-telemetry/opentelemetry-js` took `npm run docs:test` out of the job that runs on pull requests and gave it a weekly workflow of its own ("run documentation tests weekly"): a test step that stopped gating, which the older build did not see because it did not know the command. `extension-js/extension.js` allowed the test step `pnpm run ci:test:rspack` of its dependency canary to fail, with a step after it that names known upstream breaks and fails on any other: a commit that sample 4 had sorted for a reviewer and that 0.19.0 had stopped reporting, because a step of a workflow that runs on no pull request is reported only when it runs tests (`docs/rules.md`) and this one was not known to.
+- **The commits where a workflow stops running its tests** (11,129 commits that touch a CI file in 516 repositories, 82 of them): both builds differ on 2, one finding gone (`egeominotti/bunqueue`) and the new one of `opentelemetry-js`.
+- **The 300 blocks of the shipped build in the label table**, reviewed again with this version: 297 are blocked and 3 are not, the three false alarms above; none of the 238 that a reviewer should see is lost. With the two new findings the table has 515 rows (`benchmarks/section9-labels.tsv`, a column for this version) and this version blocks 299 of them: 240 for a reviewer and 59 false alarms.
+- **The labeled cases:** 164 of 164 cheats are caught and 153 of 153 harmless changes are left alone (two and three more than before this section), and one gap is still open.
+- The first version of the rule for task-runner targets reported one false alarm that the regression found and that is fixed before the numbers above were taken: `apache/cordova-ios` changed a step from `npm run unit-tests` to `npm run cover`, a script that runs the same tests with coverage, and the new rule knew the first and not the second. Every command that a rule learns to read makes a step that moves to a command that it does not know a removal.
+
+**A guard that was measured and not built: "the subject of the assertion changed".** The largest kind of false alarm, a check rewritten in an equivalent or different-but-specific form, is 43 of the 62 false alarms of the label table. One cheap feature had not been tried on it: the subject of the assertion. If the expression that the old assertion looks at and the one that the new assertion looks at share no identifier (`card.className` and `card.querySelector('button')`), the check was replaced and not loosened, and the finding could be a warning. Over the 300 blocks of the shipped build, 22 false alarms and 12 blocks for a reviewer are commits whose every blocking finding is an assertion with another subject: demoting them trades one weakened check that goes unreported for about two false alarms that are not (samples 1 to 9, where the feature was looked at: 18 against 10; sample 10, which it was not chosen on: 4 against 2). The 12 are what the rule is for (an exact count into the result of another function, a lookup of a file into the report of a different one, a loop that passes on an empty list), and they look like the 22 line by line. It was not built.
+
+**What this version still gets wrong, as found on sample 10** (listed so that they can be fixed, not as a promise): a check rewritten in an equivalent form (7 of the 13 false alarms of the sample, 43 of the 62 of the table); tests that run through a workflow that names no test (`python eval/run_evals.py`); a pages deploy workflow whose `yarn coverage` builds a report; a new test next to an old one that a merge pairs as an edit.
+
+**Limits.**
+
+- The fixes were made from the sample whose false alarms they remove, so that the 33% of section 15 is the figure for the build that was not fitted to it, and the regressions above are the only evidence about other repositories: 320 commits that differ in analysis, 3 in the full review, and two new real findings.
+- One reader sorted every block, an AI assistant, and sorted the two new ones as well.
+- The same price as in sections 9 to 15 holds.
 
 ## Reproduce
 
