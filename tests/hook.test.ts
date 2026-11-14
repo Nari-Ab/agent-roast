@@ -22,6 +22,10 @@ const copilotStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ ho
 const copilotAgentStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ sessionId: "s", timestamp: 1790000000000, cwd: dir, transcriptPath: "/tmp/t.json", stopReason: "end_turn", stop_hook_active: false, ...extra });
 const droidStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ session_id: "s", transcript_path: "/tmp/session.jsonl", cwd: dir, permission_mode: "auto-low", hook_event_name: "Stop", stop_hook_active: false, tool_execution_count: 3, elapsed_time: 12, ...extra });
 const cursorStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ hook_event_name: "stop", status: "completed", loop_count: 0, conversation_id: "c", workspace_roots: [dir], ...extra });
+// Kiro's Stop input (kiro.dev/docs/hooks/types/) is documented only generically, as the fields every trigger's input shares; its command answers by exit code and stderr, not JSON.
+const kiroStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ hook_event_name: "Stop", cwd: dir, session_id: "s", ...extra });
+// Antigravity CLI's Stop input (antigravity.google/docs/hooks): the event-specific fields plus the common ones every event carries.
+const antigravityStop = (extra: Record<string, unknown> = {}) => JSON.stringify({ executionNum: 1, terminationReason: "model_stop", error: "", fullyIdle: true, conversationId: "c", workspacePaths: [dir], transcriptPath: "/tmp/transcript.jsonl", modelName: "gemini-3.6-flash-medium", lastUserInput: "make the tests pass", ...extra });
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(tmpdir(), "roast-hook-"));
@@ -116,6 +120,43 @@ describe("the Stop hook", () => {
     expect(await runHook(droidStop(), { agent: "droid", env: {} })).toMatchObject({ action: "pass", stdout: "" });
   });
 
+  it("answers Kiro by exit code and stderr, never JSON, and sends it back every time since its Stop input has no retry signal", async () => {
+    weaken();
+    const first = await runHook(kiroStop(), { agent: "kiro", env: {} });
+    expect(first).toMatchObject({ action: "block", exitCode: 1, stdout: "" });
+    expect(first.stderr).toContain("calc.test.ts:2 [assertion-weakened]");
+    expect(first.stderr).toMatch(/Do not skip, delete, loosen or silence/);
+    // Nothing in Kiro's documented Stop input says "this is a retry", so unlike every other agent, normal mode blocks again rather than only warning once.
+    expect((await runHook(kiroStop(), { agent: "kiro", env: {} })).action).toBe("block");
+    const advised = await runHook(kiroStop(), { agent: "kiro", env: {}, advisory: true });
+    expect(advised).toMatchObject({ action: "warn", exitCode: 0, stdout: "" });
+    expect(advised.stderr).toContain("weakens checks");
+    git("checkout", "--", "calc.test.ts");
+    expect(await runHook(kiroStop(), { agent: "kiro", env: {} })).toMatchObject({ action: "pass", stdout: "", stderr: "", exitCode: 0 });
+  });
+
+  it("answers Antigravity CLI's Stop event, whose decision is named the other way round: \"continue\" blocks, anything else lets it stop", async () => {
+    weaken();
+    const first = await runHook(antigravityStop(), { env: {} }); // detected from conversationId/fullyIdle, with no --agent given
+    expect(first).toMatchObject({ action: "block", exitCode: 0, stderr: "" });
+    expect(JSON.parse(first.stdout)).toEqual({ decision: "continue", reason: expect.stringContaining("calc.test.ts:2 [assertion-weakened]") });
+    // No retry signal is documented for Antigravity CLI either: normal mode blocks again rather than only warning once.
+    expect((await runHook(antigravityStop(), { env: {} })).action).toBe("block");
+    const advised = await runHook(antigravityStop(), { env: {}, advisory: true });
+    expect(advised.action).toBe("warn");
+    // `reason` is only read when `decision` is "continue": there is no field for a message to the person alone, so it goes to the hook's log instead.
+    expect(JSON.parse(advised.stdout)).toEqual({ decision: "stop" });
+    expect(advised.stderr).toContain("weakens checks");
+    git("checkout", "--", "calc.test.ts");
+    expect(await runHook(antigravityStop(), { env: {} })).toMatchObject({ action: "pass", stdout: '{"decision":"stop"}\n', exitCode: 0 });
+  });
+
+  it("finds Antigravity CLI's working directory from workspacePaths, which it carries instead of a single cwd", async () => {
+    weaken();
+    expect((await runHook(antigravityStop({ workspacePaths: [dir] }), { env: {} })).action).toBe("block");
+    expect((await runHook(antigravityStop({ workspacePaths: undefined }), { env: { ANTIGRAVITY_PROJECT_DIR: dir } })).action).toBe("block");
+  });
+
   it("answers Codex like Claude Code, whose Stop dialect it shares", async () => {
     weaken();
     const outcome = await runHook(JSON.stringify({ hook_event_name: "Stop", turn_id: "t", model: "m", session_id: "s", cwd: dir, stop_hook_active: false, permission_mode: "default", transcript_path: null, last_assistant_message: "done" }), { env: {} });
@@ -208,7 +249,7 @@ describe("the Stop hook", () => {
     expect(message.length).toBeLessThan(2500);
   });
 
-  it("works as a command: JSON in, JSON out, always exit 0", () => {
+  it("works as a command: JSON in, JSON out, exit 0 for every dialect but Kiro's, which reads exit code and stderr instead", () => {
     weaken();
     const run = (input: string, ...args: string[]) => spawnSync(node, [cli, "hook", "run", ...args], { input, encoding: "utf8", env, cwd: dir });
     const blocked = run(stop(), "--agent", "claude");
@@ -222,10 +263,17 @@ describe("the Stop hook", () => {
     expect(run(afterAgent(), "--agent", "gemini", "--advisory").stdout).toContain("systemMessage");
     expect(JSON.parse(run(copilotStop(), "--agent", "copilot").stdout).decision).toBe("block");
     expect(JSON.parse(run(droidStop(), "--agent", "droid").stdout).decision).toBe("block");
+    const antigravity = run(antigravityStop(), "--agent", "antigravity");
+    expect(antigravity.status).toBe(0);
+    expect(JSON.parse(antigravity.stdout).decision).toBe("continue");
+    const kiro = run(kiroStop(), "--agent", "kiro");
+    expect(kiro).toMatchObject({ status: 1, stdout: "" });
+    expect(kiro.stderr).toContain("[assertion-weakened]");
     // Exit status 2 would tell an agent to block, so a setup mistake must not use it.
     expect(run("{}", "--agent", "nobody").status).toBe(1);
     git("checkout", "--", "calc.test.ts");
     expect(run(stop(), "--agent", "claude")).toMatchObject({ status: 0, stdout: "" });
+    expect(run(kiroStop(), "--agent", "kiro")).toMatchObject({ status: 0, stdout: "", stderr: "" });
   });
 
   it("works as a command in advisory mode: a warning for the person and exit 0", () => {

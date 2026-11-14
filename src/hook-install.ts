@@ -34,11 +34,13 @@ export interface HookInstallChange {
   command?: string;
 }
 
-export const AGENT_LABELS: Record<HookAgent, string> = { claude: "Claude Code", codex: "Codex", cursor: "Cursor", gemini: "Gemini CLI", copilot: "GitHub Copilot", droid: "Factory Droid" };
+export const AGENT_LABELS: Record<HookAgent, string> = {
+  claude: "Claude Code", codex: "Codex", cursor: "Cursor", gemini: "Gemini CLI", copilot: "GitHub Copilot", droid: "Factory Droid", kiro: "Kiro", antigravity: "Antigravity CLI",
+};
 const TIMEOUT_SECONDS = 60;
 /** The event that fires when an agent is about to finish, as its hook file names it. */
 // GitHub Copilot takes `Stop` as the PascalCase alias of `agentStop`, and then writes the VS Code-compatible input that Claude Code's dialect shares.
-const FINISH_EVENT: Record<HookAgent, string> = { claude: "Stop", codex: "Stop", cursor: "stop", gemini: "AfterAgent", copilot: "Stop", droid: "Stop" };
+const FINISH_EVENT: Record<HookAgent, string> = { claude: "Stop", codex: "Stop", cursor: "stop", gemini: "AfterAgent", copilot: "Stop", droid: "Stop", kiro: "Stop", antigravity: "Stop" };
 
 /** Version of this package, which the hook pins so an agent never runs unreviewed newer code. */
 export function packageVersion(): string {
@@ -74,6 +76,10 @@ export function hookConfigPath(agent: HookAgent, scope: HookScope, root: string,
   // GitHub Copilot loads every `*.json` of a hooks folder (CLI, VS Code agent mode and the cloud agent from the default branch), so the file is this package's own.
   if (agent === "copilot") return path.join(scope === "global" ? env.COPILOT_HOME || path.join(home, ".copilot") : path.join(root, ".github"), "hooks", "agent-roast.json");
   if (agent === "droid") return path.join(scope === "global" ? home : root, ".factory", "hooks.json");
+  if (agent === "kiro") return path.join(scope === "global" ? home : root, ".kiro", "hooks", "agent-roast.json");
+  // The workspace file sits in `.agents/`, the one GitHub/VS Code folder this package does not already write to; the global file is under Gemini CLI's own
+  // config directory, since Antigravity CLI is built on it (its own `~/.gemini/antigravity-cli/settings.json` is documented as not read for hooks).
+  if (agent === "antigravity") return path.join(scope === "global" ? path.join(home, ".gemini", "config") : path.join(root, ".agents"), "hooks.json");
   return path.join(scope === "global" ? env.CODEX_HOME || path.join(home, ".codex") : path.join(root, ".codex"), "hooks.json");
 }
 
@@ -113,26 +119,45 @@ const asArray = (value: unknown): any[] => Array.isArray(value) ? value : [];
 
 const isObject = (value: unknown): value is Record<string, any> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
-/** The object that holds an agent's events: `hooks` of the file, except for Factory Droid, whose hooks.json is keyed by event name at the top. */
+/** The key, under the file's top level, that holds an agent's events: `hooks` for most, except Factory Droid (keyed by event name at the top, no container at all)
+ * and Antigravity CLI (one more level down, under a hook name this package chooses for itself, since its file holds a named hook per entry rather than one per event). */
+const containerKey = (agent: HookAgent): string => agent === "antigravity" ? "agent-roast" : "hooks";
+
+/** The object that holds an agent's events. */
 function eventMap(agent: HookAgent, data: Record<string, any>, create: boolean): Record<string, any> | undefined {
   if (agent === "droid") return data;
-  if (create && !isObject(data.hooks)) data.hooks = {};
-  return isObject(data.hooks) ? data.hooks : undefined;
+  const key = containerKey(agent);
+  if (create && !isObject(data[key])) data[key] = {};
+  return isObject(data[key]) ? data[key] : undefined;
 }
 
-/** Cursor and GitHub Copilot keep a flat list of handlers under the event; the others keep groups, each with a `hooks` list of handlers. */
-const isFlat = (agent: HookAgent): boolean => agent === "cursor" || agent === "copilot";
+/** Cursor, GitHub Copilot and Antigravity CLI keep a flat list of handlers under the event; the others keep groups, each with a `hooks` list of handlers. */
+const isFlat = (agent: HookAgent): boolean => agent === "cursor" || agent === "copilot" || agent === "antigravity";
 
 /** Adds or refreshes this package's hook for the agent's finish event. Returns whether the data changed. */
 function addStopHook(agent: HookAgent, data: Record<string, any>, command: string): boolean {
   const before = JSON.stringify(data);
+  // Kiro keeps one flat array of hooks for every trigger, each entry naming its own trigger, rather than a container keyed by event.
+  if (agent === "kiro") {
+    data.version ??= "v1";
+    const hooks = asArray(data.hooks);
+    const ours = hooks.find(hook => isOurs(hook?.action?.command));
+    if (ours) ours.action.command = command;
+    else hooks.push({ name: "agent-roast", trigger: FINISH_EVENT.kiro, action: { type: "command", command }, timeout: TIMEOUT_SECONDS });
+    data.hooks = hooks;
+    return JSON.stringify(data) !== before;
+  }
   const events = eventMap(agent, data, true)!, event = FINISH_EVENT[agent];
   if (isFlat(agent)) {
-    data.version ??= 1;
+    // Cursor and GitHub Copilot's files carry a top-level `version`; Antigravity CLI's does not.
+    if (agent !== "antigravity") data.version ??= 1;
     const handlers = asArray(events[event]);
     const ours = handlers.find(handler => isOurs(handler?.command));
     if (ours) ours.command = command;
-    else handlers.push(agent === "cursor" ? { command, timeout: TIMEOUT_SECONDS, loop_limit: 2 } : { type: "command", command, timeoutSec: TIMEOUT_SECONDS });
+    else handlers.push(
+      agent === "cursor" ? { command, timeout: TIMEOUT_SECONDS, loop_limit: 2 }
+        : agent === "antigravity" ? { type: "command", command, timeout: TIMEOUT_SECONDS }
+          : { type: "command", command, timeoutSec: TIMEOUT_SECONDS });
     events[event] = handlers;
   } else {
     const groups = asArray(events[event]);
@@ -150,6 +175,11 @@ function addStopHook(agent: HookAgent, data: Record<string, any>, command: strin
 /** Removes this package's hook, and the containers it leaves empty. Returns whether anything was removed. */
 function removeStopHook(agent: HookAgent, data: Record<string, any>): boolean {
   const before = JSON.stringify(data);
+  if (agent === "kiro") {
+    const kept = asArray(data.hooks).filter(hook => !isOurs(hook?.action?.command));
+    if (kept.length) data.hooks = kept; else delete data.hooks;
+    return JSON.stringify(data) !== before;
+  }
   const events = eventMap(agent, data, false), event = FINISH_EVENT[agent];
   if (!events) return false;
   if (isFlat(agent)) {
@@ -160,7 +190,7 @@ function removeStopHook(agent: HookAgent, data: Record<string, any>): boolean {
     const kept = groups.filter(group => group.hooks.length);
     if (kept.length) events[event] = kept; else delete events[event];
   }
-  if (events !== data && !Object.keys(events).length) delete data.hooks;
+  if (events !== data && !Object.keys(events).length) delete data[containerKey(agent)];
   return JSON.stringify(data) !== before;
 }
 
@@ -195,16 +225,19 @@ export function uninstallHooks(options: Omit<HookInstallOptions, "command">): Ho
 export function hookStatus(options: Pick<HookInstallOptions, "cwd" | "home" | "env">): (HookInstallChange & { installed: boolean; advisory: boolean })[] {
   const { root, home, env } = context({ ...options, scope: "project" });
   const rows: (HookInstallChange & { installed: boolean; advisory: boolean })[] = [];
-  for (const agent of ["claude", "codex", "cursor", "gemini", "copilot", "droid"] as const) {
+  for (const agent of ["claude", "codex", "cursor", "gemini", "copilot", "droid", "kiro", "antigravity"] as const) {
     for (const scope of ["project", "local", "global"] as const) {
       if (scope === "local" && agent !== "claude") continue;
       const file = hookConfigPath(agent, scope, root, home, env);
       let command: string | undefined;
       try {
         const data = readJsonFile(file).data;
-        const listed = asArray(eventMap(agent, data, false)?.[FINISH_EVENT[agent]]);
-        const handlers = isFlat(agent) ? listed : listed.flatMap(group => asArray(group?.hooks));
-        command = handlers.map(handler => handler?.command).find(isOurs);
+        if (agent === "kiro") command = asArray(data.hooks).map(hook => hook?.action?.command).find(isOurs);
+        else {
+          const listed = asArray(eventMap(agent, data, false)?.[FINISH_EVENT[agent]]);
+          const handlers = isFlat(agent) ? listed : listed.flatMap(group => asArray(group?.hooks));
+          command = handlers.map(handler => handler?.command).find(isOurs);
+        }
       } catch { /* an unreadable file is reported as not installed */ }
       rows.push({ agent, scope, file, command, installed: Boolean(command), advisory: isAdvisory(command), action: command ? "unchanged" : "absent" });
     }

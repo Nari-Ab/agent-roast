@@ -118,6 +118,36 @@ describe("installing the agent hook", () => {
     expect(read(".factory/hooks.json")).toEqual({ PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./guard.sh" }] }] });
   });
 
+  it("writes Kiro's own file: one flat array of hooks, each naming its own trigger, with a string version", () => {
+    const [change] = installHooks({ cwd: dir, agents: ["kiro"], home });
+    expect(change).toMatchObject({ agent: "kiro", scope: "project", action: "created", file: path.join(dir, ".kiro/hooks/agent-roast.json") });
+    expect(read(".kiro/hooks/agent-roast.json")).toEqual({
+      version: "v1", hooks: [{ name: "agent-roast", trigger: "Stop", action: { type: "command", command: hookCommand("kiro") }, timeout: 60 }],
+    });
+    write(".kiro/hooks/other.json", JSON.stringify({ version: "v1", hooks: [{ name: "lint", trigger: "PostFileSave", matcher: "\\.ts$", action: { type: "command", command: "./lint.sh" } }] }));
+    expect(installHooks({ cwd: dir, agents: ["kiro"], home })[0].action).toBe("unchanged");
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "kiro" && row.scope === "project")).toMatchObject({ installed: true, advisory: false });
+    expect(hookConfigPath("kiro", "global", dir, home)).toBe(path.join(home, ".kiro", "hooks", "agent-roast.json"));
+    expect(uninstallHooks({ cwd: dir, agents: ["kiro"], home })[0].action).toBe("removed");
+    expect(read(".kiro/hooks/agent-roast.json")).toEqual({ version: "v1" });
+    expect(read(".kiro/hooks/other.json").hooks).toHaveLength(1);
+  });
+
+  it("writes Antigravity CLI's own file: a hook named for this package, with a flat list under Stop and no top-level version", () => {
+    write(".agents/hooks.json", JSON.stringify({ "lint-on-save": { enabled: true, PostToolUse: [{ matcher: "write_file", hooks: [{ type: "command", command: "./lint.sh" }] }] } }));
+    const [change] = installHooks({ cwd: dir, agents: ["antigravity"], home });
+    expect(change).toMatchObject({ agent: "antigravity", scope: "project", action: "updated", file: path.join(dir, ".agents/hooks.json") });
+    const hooks = read(".agents/hooks.json");
+    expect(hooks.version).toBeUndefined();
+    expect(hooks["lint-on-save"].PostToolUse).toHaveLength(1);
+    expect(hooks["agent-roast"]).toEqual({ Stop: [{ type: "command", command: hookCommand("antigravity"), timeout: 60 }] });
+    expect(installHooks({ cwd: dir, agents: ["antigravity"], home })[0].action).toBe("unchanged");
+    expect(hookStatus({ cwd: dir, home }).find(row => row.agent === "antigravity" && row.scope === "project")).toMatchObject({ installed: true });
+    expect(hookConfigPath("antigravity", "global", dir, home)).toBe(path.join(home, ".gemini", "config", "hooks.json"));
+    expect(uninstallHooks({ cwd: dir, agents: ["antigravity"], home })[0].action).toBe("removed");
+    expect(read(".agents/hooks.json")).toEqual({ "lint-on-save": { enabled: true, PostToolUse: [{ matcher: "write_file", hooks: [{ type: "command", command: "./lint.sh" }] }] } });
+  });
+
   it("refreshes a pinned Gemini CLI command in place and removes it again, leaving other hooks", () => {
     installHooks({ cwd: dir, agents: ["gemini"], home });
     const older = read(".gemini/settings.json");
@@ -182,7 +212,7 @@ describe("installing the agent hook", () => {
     installHooks({ cwd: dir, agents: ["codex", "gemini", "copilot", "droid"], home });
     const rows = hookStatus({ cwd: dir, home });
     expect(rows.filter(row => row.installed).map(row => [row.agent, row.scope])).toEqual([["codex", "project"], ["gemini", "project"], ["copilot", "project"], ["droid", "project"]]);
-    expect(rows).toHaveLength(13);
+    expect(rows).toHaveLength(17);
     expect(hookConfigPath("claude", "project", dir, home)).toBe(path.join(dir, ".claude/settings.json"));
   });
 });

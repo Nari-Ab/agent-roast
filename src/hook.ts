@@ -8,8 +8,8 @@ import { readGit } from "./snapshot.js";
 import type { Infraction, ReviewResult } from "./types.js";
 
 /** Coding agents that can run a command when they are about to finish and feed its answer back. */
-export type HookAgent = "claude" | "codex" | "cursor" | "gemini" | "copilot" | "droid";
-export const HOOK_AGENTS: readonly HookAgent[] = ["claude", "codex", "cursor", "gemini", "copilot", "droid"];
+export type HookAgent = "claude" | "codex" | "cursor" | "gemini" | "copilot" | "droid" | "kiro" | "antigravity";
+export const HOOK_AGENTS: readonly HookAgent[] = ["claude", "codex", "cursor", "gemini", "copilot", "droid", "kiro", "antigravity"];
 
 export interface HookOptions {
   /** Which agent is calling. Detected from its input when omitted. */
@@ -38,11 +38,14 @@ const PAUSE_FILE = "agent-roast-hook-paused";
 const LISTED = 6;
 const LISTED_WARNINGS = 3;
 
-/** Cursor identifies its workspace, Gemini CLI's AfterAgent input carries the final text of the model; Claude Code and Codex use the same JSON dialect for Stop hooks, and so do GitHub Copilot
- * (registered under `Stop`, its VS Code-compatible event) and Factory Droid: their hook files always say which agent is calling, because nothing in that input does. */
+/** Cursor identifies its workspace, Gemini CLI's AfterAgent input carries the final text of the model, Antigravity CLI's Stop input has `conversationId`/`fullyIdle`;
+ * Claude Code and Codex use the same JSON dialect for Stop hooks, and so do GitHub Copilot (registered under `Stop`, its VS Code-compatible event) and Factory Droid:
+ * their hook files always say which agent is calling, because nothing in that input does. Kiro's Stop input is undocumented beyond the fields it shares with Claude
+ * Code's own, so it is not sniffed either: `hook install` always writes `--agent kiro` into the command it installs. */
 function detectAgent(input: Record<string, unknown>): HookAgent {
   if ("workspace_roots" in input || "cursor_version" in input || "conversation_id" in input) return "cursor";
   if (input.hook_event_name === "AfterAgent" || "prompt_response" in input) return "gemini";
+  if ("conversationId" in input || "fullyIdle" in input) return "antigravity";
   if ("turn_id" in input) return "codex";
   return "claude";
 }
@@ -50,8 +53,10 @@ function detectAgent(input: Record<string, unknown>): HookAgent {
 function inputCwd(agent: HookAgent, input: Record<string, unknown>, env: NodeJS.ProcessEnv): string {
   const roots = input.workspace_roots;
   if (agent === "cursor" && Array.isArray(roots) && typeof roots[0] === "string") return roots[0];
+  // Antigravity CLI's Stop input has no single `cwd`, only the mounted workspace directories.
+  if (agent === "antigravity" && Array.isArray(input.workspacePaths) && typeof input.workspacePaths[0] === "string") return input.workspacePaths[0];
   if (typeof input.cwd === "string" && input.cwd) return input.cwd;
-  return env.CLAUDE_PROJECT_DIR || env.CURSOR_PROJECT_DIR || env.GEMINI_PROJECT_DIR || env.FACTORY_PROJECT_DIR || process.cwd();
+  return env.CLAUDE_PROJECT_DIR || env.CURSOR_PROJECT_DIR || env.GEMINI_PROJECT_DIR || env.FACTORY_PROJECT_DIR || env.KIRO_PROJECT_DIR || env.ANTIGRAVITY_PROJECT_DIR || process.cwd();
 }
 
 function clip(text: string, limit: number): string {
@@ -130,7 +135,9 @@ export function parseDuration(text: string): number {
   return Number(match[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2].toLowerCase() as "m" | "h" | "d"];
 }
 
-const outcome = (action: HookOutcome["action"], stdout = "", stderr = "", result?: ReviewResult): HookOutcome => ({ action, stdout, stderr, exitCode: 0, result });
+// Every dialect but Kiro's reads a JSON decision on stdout, whatever the exit code; exit 0 only ever means "this tool itself did not crash". Kiro reads no JSON at all:
+// an exit of 0 adds its stdout to the agent's context, and any other exit sends its stderr to the agent as an error notice, so Kiro alone needs a real exit code.
+const outcome = (action: HookOutcome["action"], stdout = "", stderr = "", result?: ReviewResult, exitCode = 0): HookOutcome => ({ action, stdout, stderr, exitCode, result });
 
 /**
  * The command an agent runs when it is about to finish. It reviews everything uncommitted against HEAD and, when that
@@ -170,19 +177,33 @@ export async function runHook(rawInput: string, options: HookOptions = {}): Prom
   } finally {
     clearTimeout(timer);
   }
-  if (!result.failedRules.length) return outcome("pass", agent === "cursor" || agent === "gemini" ? "{}\n" : "", "", result);
+  if (!result.failedRules.length) {
+    const fine = agent === "cursor" || agent === "gemini" ? "{}\n" : agent === "antigravity" ? '{"decision":"stop"}\n' : "";
+    return outcome("pass", fine, "", result);
+  }
 
   // Claude Code, Codex, Gemini CLI, GitHub Copilot and Factory Droid set stop_hook_active when the agent is already continuing because of a hook of this kind; Cursor counts follow-ups.
+  // Kiro's and Antigravity CLI's documented Stop input has no such field, so on their own neither ever looks "already asked": without --advisory every blocking run sends them back again.
   const alreadyAsked = input.stop_hook_active === true || (typeof input.loop_count === "number" && input.loop_count > 0);
   if (alreadyAsked || advisory) {
     const warning = formatUserWarning(result);
+    // Kiro reads stderr as an error notice for the agent only on a non-zero exit, so an exit of 0 with the warning on stderr reaches no one it is documented to reach;
+    // like Cursor, it is kept there anyway as a best effort, only when the person asked for advisory mode.
+    if (agent === "kiro") return outcome("warn", "", advisory ? `${warning}\n` : "", result);
+    // Antigravity CLI's `reason` is only read when `decision` is `"continue"` (which sends the agent back); there is no field for a message meant for the person alone.
+    if (agent === "antigravity") return outcome("warn", '{"decision":"stop"}\n', advisory ? `${warning}\n` : "", result);
     // Cursor has no channel for a message to the person, so an advisory warning goes to the hook's log.
     // GitHub Copilot documents no field for a message to the person, only a display-only progress line.
     const notice = agent === "copilot" ? { type: "progress", message: warning } : { systemMessage: warning };
     return outcome("warn", agent === "cursor" ? "{}\n" : JSON.stringify(notice) + "\n", agent === "cursor" && advisory ? `${warning}\n` : "", result);
   }
   const message = formatAgentFeedback(result);
+  // Kiro's Stop hook reads no JSON: a non-zero exit sends its stderr to the agent as the reason the hook failed.
+  if (agent === "kiro") return outcome("block", "", `${message}\n`, result, 1);
   // Gemini CLI documents `deny` (and accepts `block` as an alias): the reason goes back to the model as a new prompt and the turn is retried.
-  const answer = agent === "cursor" ? { followup_message: message } : { decision: agent === "gemini" ? "deny" : "block", reason: message };
+  // Antigravity CLI inverts the usual naming: `"continue"` is the decision that blocks the stop and re-enters the loop, with `reason` injected as a system message.
+  const answer = agent === "cursor" ? { followup_message: message }
+    : agent === "antigravity" ? { decision: "continue", reason: message }
+    : { decision: agent === "gemini" ? "deny" : "block", reason: message };
   return outcome("block", JSON.stringify(answer) + "\n", "", result);
 }

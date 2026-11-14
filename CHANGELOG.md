@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.25.0 — 2026-11-13
+
+**Two more agents can be sent back to fix the code: Kiro and Antigravity CLI.**
+
+`agent-roast hook install kiro` and `antigravity` guard two more agents, following the protocols their own documentation states (read on 2026-11-13) and tested with simulated hook input; there was no live session of either agent here.
+
+- **Kiro** (`hook install kiro`, `.kiro/hooks/agent-roast.json`, or `~/.kiro/hooks/agent-roast.json` with `--global`, CLI V3 only). Kiro's `Stop` trigger fires when the agent has finished responding, in a standalone `.kiro/hooks/*.json` file that holds one flat array of hooks, each naming its own trigger (`{"version": "v1", "hooks": [{"name", "trigger": "Stop", "action": {"type": "command", "command"}, "timeout"}]}`). Kiro's command hooks read no JSON at all: an exit of `0` adds stdout to the agent's context, and any other exit sends stderr to the agent as an error notice — the mechanism this hook uses to send the agent back.
+  Kiro's documentation has no field like `stop_hook_active` to tell a first call from a retry, and does not say outright that a failing `Stop` hook retries the turn (only that its stated use is to "report any failures to the agent"): without `--advisory`, this hook sends the agent back on every run until it is fixed, not only the first.
+- **Antigravity CLI** (`hook install antigravity`, `.agents/hooks.json`, or `~/.gemini/config/hooks.json` with `--global`). Google's successor to Gemini CLI for unpaid-tier and Google One users documents a `Stop` event read from a `hooks.json` keyed by a hook name of the installer's own choosing (`{"agent-roast": {"Stop": [{"type": "command", "command", "timeout"}]}}`). Its stdout answer is named the other way round from every other agent here: `{"decision": "continue", "reason": "..."}` is the one that blocks the stop and re-enters the loop, and any other value (this hook answers `"stop"`) lets the turn end.
+  `reason` is documented as read only when `decision` is `"continue"`, so there is no field for a message meant for the person alone (an advisory warning goes to the hook's log instead, as it already does for Cursor), and, like Kiro, there is no field that tells a retry from a first call.
+- `hook uninstall` and `hook status` know both, installing again refreshes the pinned version, other hooks and settings are kept, and `hook install` with no names also picks a repository that has a `.kiro` or `.agents` folder. `docs/integrations.md` has a section for each.
+- 52 files, 1,560 tests.
+
 ## 0.24.0 — 2026-11-13
 
 **A gap closed: the only caller of a reusable test workflow, and two ideas from earlier sections tried again by a different method.**
