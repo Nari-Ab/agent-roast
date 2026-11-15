@@ -9,6 +9,11 @@ if (!outFile || !N || !dirs.length) { console.error("Usage: node scripts/probe-g
 const TEST = /(?:^|\/)(?:tests?|__tests__|specs?|e2e|integration)\/|\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)test_[^/]*\.py$|_test\.(?:py|go)$|(?:^|\/)conftest\.py$/i;
 const CONFIG = /(?:^|\/)(?:package\.json|jest\.config\.[cm]?[jt]s|vitest\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|playwright\.config\.[cm]?[jt]s|\.mocharc[^/]*|karma\.conf\.[cm]?[jt]s|pytest\.ini|pyproject\.toml|setup\.cfg|tox\.ini|noxfile\.py|Makefile|justfile|\.gitlab-ci\.ya?ml|[^/]+\.ya?ml|[^/]+\.sh|\.pre-commit-config\.ya?ml)$/;
 const SKIP_PATH = /(?:^|\/)(?:node_modules|vendor|dist|build)\/|(?:package-lock|pnpm-lock|yarn\.lock|poetry\.lock|uv\.lock|Cargo\.lock)|\.snap$/i;
+// A monorepo task-runner name only counts where a command starts (line start, a dash, a shell separator, a quoted script value,
+// after an optional `./`); the three with no subcommand of their own (pants/buck2/bazel) also need a word right after, so a bare
+// mention (a release download URL for the `bazel` binary) does not count as a call.
+const RUNNER_PREFIX = String.raw`(?:^|[:$]\s*|&&\s*|;\s*|\|\|?\s*|["'\`]|-\s+)(?:\./)?`;
+const RUNNER_PHRASE = String.raw`(?:(?:moon\s+(?:ci|run)|nx\s+(?:run-many|affected)|turbo\s+run)\b|(?:pants|buck2|bazel)\b\s+\S)`;
 const probes = [
   { id: "py-or-true", kinds: ["test"], re: /^\s*assert\b.*\bor\s+True\b|^\s*self\.assert(?:True|Equal)\(.*\bor\s+True\b/, desc: "assert x or True" },
   { id: "py-assert-true", kinds: ["test"], re: /^\s*assert\s+(?:True|1)\s*(?:#.*)?$|^\s*self\.assertTrue\(\s*(?:True|1)\s*\)/, desc: "assert True / assertTrue(True)" },
@@ -21,6 +26,10 @@ const probes = [
   { id: "snapshot-update", kinds: ["config"], re: /(?:\s-u\b|--update-snapshots?\b|--updateSnapshot\b|UPDATE_SNAPSHOTS?=|--snapshot-update\b|-- -u\b)/, desc: "a snapshot update flag in a command" },
   { id: "or-true", kinds: ["config"], re: /\|\|\s*true\b|;\s*true\s*$|\bexit\s+0\b|\bset\s+\+e\b/, desc: "|| true / exit 0 / set +e" },
   { id: "no-verify", kinds: ["config"], re: /--no-verify\b|SKIP=\S+|HUSKY=0|--no-gpg-sign/, desc: "--no-verify and friends" },
+  // docs/benchmarks.md section 17: a bare call to a monorepo task runner that a rule does not know as a runner. The "no test anywhere
+  // on the line" probe is the one no rule reads (`nx run-many -t build,test` has the word elsewhere and is read already).
+  { id: "runner-call", kinds: ["config"], re: new RegExp(RUNNER_PREFIX + RUNNER_PHRASE, "i"), desc: "a bare call to a monorepo task runner (moon/nx/turbo/pants/buck2/bazel)" },
+  { id: "runner-call-no-test", kinds: ["config"], re: new RegExp(String.raw`^(?!.*\btest\b)(?=.*${RUNNER_PREFIX}${RUNNER_PHRASE})`, "i"), desc: "...with no word \"test\" anywhere on the line" },
   { id: "exit-zero-in-test", kinds: ["test"], re: /^\s*(?:sys\.exit\(\s*0\s*\)|os\._exit\(\s*0\s*\)|process\.exit\(\s*0\s*\)|exit\(\s*0\s*\))/, desc: "exit(0) in a test file" },
   { id: "always-equal", kinds: ["test", "source"], re: /def\s+__eq__\(self,\s*\w+\)\s*:\s*return\s+True|class\s+Always(?:Equal|True)|__ne__.*return\s+False/, desc: "an object that equals everything" },
   { id: "skipif-true", kinds: ["test"], re: /skip[Ii]f\(\s*(?:True|true|1)\s*[,)]|pytest\.mark\.skipif\(\s*(?:True|1)\s*[,)]/, desc: "skipif(True)" },
