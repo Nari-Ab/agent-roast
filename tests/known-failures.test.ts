@@ -193,6 +193,33 @@ describe("suppression directives that exclude code from checks or coverage", () 
     expect(scan("x = load()  # type: ignore  # pragma: no cover", "src/price.py")).toHaveLength(1);
     expect(scan("/* istanbul ignore next */ /* eslint-disable */", "src/price.ts")).toHaveLength(1);
   });
+
+  it("reports Go's //nolint, trailing on the suppressed line or alone above it", () => {
+    expect(types("x, _ := f() //nolint:errcheck", "src/price.go")).toEqual([["type-escape", 1]]);
+    expect(types("//nolint:errcheck\nx, _ := f()", "src/price.go")).toEqual([["type-escape", 1]]);
+    expect(types('msg := "see //nolint for details"', "src/price.go")).toEqual([]);
+  });
+
+  it("does not take a comment that only mentions //nolint for a directive", () => {
+    // The real directive is the first thing the comment says; a comment about the convention is not one.
+    expect(types("// the linter honors the same //nolint:canonicalheader directives.\nx := 1", "src/price.go")).toEqual([]);
+  });
+
+  it("reports Rust's #![allow(...)], on the line it is written and not one a blank comment above it is read as", () => {
+    expect(types("#![allow(dead_code)]", "src/lib.rs")).toEqual([["type-escape", 1]]);
+    expect(types("// why this crate allows it\n#![allow(dead_code)]", "src/lib.rs")).toEqual([["type-escape", 2]]);
+    expect(types('let s = "#![allow(dead_code)]";', "src/lib.rs")).toEqual([]);
+    // A long doc comment above the real attribute must not pull the match's line (and its snippet) up to its own.
+    const farAbove = `${"//! filler\n".repeat(50)}#![allow(unused_imports)]`;
+    expect(types(farAbove, "src/lib.rs")).toEqual([["type-escape", 51]]);
+  });
+
+  it("reports Java's @SuppressWarnings", () => {
+    expect(types('@SuppressWarnings("unchecked")\nclass Foo {}', "src/Foo.java")).toEqual([["type-escape", 1]]);
+    expect(types('@SuppressWarnings({"unchecked", "rawtypes"})\nvoid f() {}', "src/Foo.java")).toEqual([["type-escape", 1]]);
+    expect(types('String s = "@SuppressWarnings(\\"unchecked\\")";', "src/Foo.java")).toEqual([]);
+    expect(types('// @SuppressWarnings("unchecked") was removed here\nvoid f() {}', "src/Foo.java")).toEqual([]);
+  });
 });
 
 describe("xfail_strict", () => {

@@ -330,6 +330,18 @@ const PYTHON_COMMENT_DIRECTIVE_PATTERNS: Directive[] = [
   { regex: /#\s*mypy:\s*ignore-errors\b/, name: "python type check disabled for the file (# mypy: ignore-errors)" },
   { regex: /#\s*(?:flake8|ruff):\s*noqa\b/i, name: "python linter suppression for the file (# flake8: noqa)" },
 ];
+const GO_COMMENT_DIRECTIVE_PATTERNS: Directive[] = [
+  { regex: /^\s*\/\/\s*nolint\b/, name: "go linter suppression (//nolint)" },
+];
+// Rust's and Java's suppressions are attributes/annotations, not comments: matched against the masked code, not `masked.comments`.
+// [ \t]*, not \s*: this is matched with "m" against the whole joined file, and \s* crosses the newline into a blank (fully
+// masked) comment line above, reporting the match many lines early with a snippet that never reaches the real attribute.
+const RUST_ATTRIBUTE_PATTERNS = [
+  { regex: /^[ \t]*#!\[[ \t]*allow[ \t]*\(/, name: "rust lint suppression for the file (#![allow(...)])" },
+];
+const JAVA_ANNOTATION_PATTERNS = [
+  { regex: /@SuppressWarnings\s*\(/, name: "java linter suppression (@SuppressWarnings)" },
+];
 // Test-harness code that rewrites what the runner reports. Read only in files that are part of the harness (conftest.py,
 // sitecustomize.py, test files); a pytest plugin has its own reasons to touch report objects.
 const PYTHON_HARNESS_FILE = /(?:^|\/)(?:conftest|sitecustomize|usercustomize)\.py$/i;
@@ -440,8 +452,10 @@ export function auditFileDiffs(
     const typescript = /\.(?:[cm]?tsx?|vue|svelte)$/i.test(file.path);
     const python = /\.py$/i.test(file.path);
     const rust = /\.rs$/i.test(file.path);
+    const go = /\.go$/i.test(file.path);
+    const java = /\.java$/i.test(file.path);
     const braceCatches = javascript || /\.(?:java|kt|php|cs|cpp)$/i.test(file.path);
-    const directives = javascript ? JS_COMMENT_DIRECTIVE_PATTERNS : python ? PYTHON_COMMENT_DIRECTIVE_PATTERNS : [];
+    const directives = javascript ? JS_COMMENT_DIRECTIVE_PATTERNS : python ? PYTHON_COMMENT_DIRECTIVE_PATTERNS : go ? GO_COMMENT_DIRECTIVE_PATTERNS : [];
     const stubs = javascript ? JS_STUB_PATTERNS : python ? PYTHON_STUB_PATTERNS : rust ? RUST_STUB_PATTERNS : [];
     const firstFinding = infractions.length;
     const languageRules = LANGUAGE_LINE_RULES.find(entry => entry.files.test(file.path))?.rules;
@@ -598,6 +612,22 @@ export function auditFileDiffs(
             if (code[match.index] !== raw[match.index]) continue;
             infractions.push({ type: "guard-weakened", file: file.path, ...evidence(match.index, match[0].length), commitHash, commitDate, reason: rule.name });
           }
+        }
+      }
+    }
+
+    if (rust) {
+      for (const rule of RUST_ATTRIBUTE_PATTERNS) {
+        for (const match of code.matchAll(new RegExp(rule.regex.source, "gm"))) {
+          infractions.push({ type: "type-escape", file: file.path, ...evidence(match.index, match[0].length), commitHash, commitDate, reason: rule.name });
+        }
+      }
+    }
+
+    if (java) {
+      for (const rule of JAVA_ANNOTATION_PATTERNS) {
+        for (const match of code.matchAll(new RegExp(rule.regex.source, "g"))) {
+          infractions.push({ type: "type-escape", file: file.path, ...evidence(match.index, match[0].length), commitHash, commitDate, reason: rule.name });
         }
       }
     }
