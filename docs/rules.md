@@ -73,6 +73,17 @@ assertion stood. Nothing is reported when the exact assertion is still somewhere
 place still checks the same expression exactly with another value (`assert.equal(calls, 3)` became `assert.equal(calls, after)`, next to a
 new `assert.ok(calls > before)`: a changed expectation, not a looser check). A test whose title was changed in the same commit is a new
 scenario and is not compared.
+
+**Which new check replaced which.** When a test has as many assertions as before, the ones an edit left over (the old ones that are no longer there, the new ones
+that were not) are paired by what they are about: the things the checked expression looks at (`scores.shape`, `cart.total`, `db.records[0].values[1]`; a call counts by its
+callee and not by its inputs, `app.run(...)`; `set(sizes)` and `len(sizes)` are about `sizes`; `cart.total` and `cart.items` only share an object, and `records[0]` and
+`records[1]` are two things), then by the new line that looks most like the old one. What shares nothing is paired in the order it stands in, as before. An exact check that
+became a check of the same thing in another form is therefore paired with that one, not with an unrelated line next to it, and a flipped expectation (`nak_delay_ms >= 9_000`
+that became `nak_delay_ms is None`) is read as flipped, as it always was, instead of as a weaker version of the check that stands next to it. A compound Python assertion
+(`assert result is not None and sizes == []`) that lost a clause is not reported when every clause it lost is about something that the new test still pins exactly
+(`assert sizes == [CHUNK, CHUNK, 1]`): the clause was rewritten, not given up. What this does not do: several old checks that share nothing with the new ones are still
+paired in order, so an exact check replaced by a weak check of another name (`isinstance(spans[0], Span)` next to `prompt.media.pixels is not None`) is reported, true weakening
+or not, because the text cannot tell a rewrite from a weakening there.
 **Fix:** restore the exact check, or assert the specific value the code should produce.
 
 ## guard-weakened
@@ -190,7 +201,9 @@ commits wrote a new test with `xfail`), it needs a server, a device or a databas
 Of the 74 commits that 0.17.0 blocked in 40 repositories that nobody had tuned on, 32 were such a skip on a test the commit adds
 ([benchmarks, section 9](benchmarks.md#9-repositories-nobody-had-tuned-on)). The test behind a marker is found by its name or title
 (Python, JavaScript and TypeScript), by the `fn` below the attribute (Rust) and by the `func Test...` around `t.Skip()` (Go); a file that is
-new has only new tests. A registration with a table (`it.skip.each([`, `it.fails.each([`) has no title: its first lines, without the word of the marker, say whether the table was already there, so that
+new has only new tests. A Python marker belongs to the `def` below it only when it is part of a decorator (`@pytest.mark.xfail`, or `marks=` inside
+`@pytest.mark.parametrize(...)`); a `marks = [...]` in a helper that builds parameters names no single test and counts by number, like `pytestmark`, so
+a reformatting that moves the next `def` past the 80 lines that are searched does not make an old marker look new. A registration with a table (`it.skip.each([`, `it.fails.each([`) has no title: its first lines, without the word of the marker, say whether the table was already there, so that
 `it.each([` that became `it.skip.each([` is reported and a table that is not in the old file (a reproduction written as an expected failure, single skipped tests regrouped into one) is not. In the other languages a marker counts when the file has more of them than before. The comparison is per test, so a
 file with many identical `@pytest.mark.xfail(` lines is read correctly. The price: an agent that writes a new test and skips it because it
 cannot make it pass is not stopped by this rule, while the same marker on a test that was running is. A registration that a formatter
@@ -254,8 +267,10 @@ Read in one test file, in JavaScript/TypeScript (`jest.mock` and `vi.mock` at th
 and `expect(...)`, also through `const total = price(cart); expect(total)`) and in Python (`patch`, `patch.object`,
 `mocker.patch` and `monkeypatch.setattr`, against the `assert`s of the same test or `with` block). It is reported only when the
 change introduces it. Left alone: mocking a *dependency* of the code under test and asserting the code under test, a mock that
-keeps the real module (`requireActual`, `importActual`, `wraps=`, or a factory that is handed the real module's loader and calls it,
-under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`), an automock nobody gave a return value (a manual mock decides; for `import * as fs` it is the member that has to be configured: `vi.mocked(fs.open).mockImplementation(...)` says nothing about `fs.stat()`),
+keeps the real module (`requireActual`, `importActual`, `wraps=`, a factory that is handed the real module's loader and calls it,
+under whatever name: `vi.mock("./client", async (original) => ({ ...(await original()), send: vi.fn() }))`, or a factory that only loads another
+module, `vi.mock("@scope/schema", () => import("../../schema/src/index.js"))`, which points a package name at its source; a path that names a fake,
+`__mocks__`, `mock`, `stub`, is still read as one), an automock nobody gave a return value (a manual mock decides; for `import * as fs` it is the member that has to be configured: `vi.mocked(fs.open).mockImplementation(...)` says nothing about `fs.stat()`),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
 called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
 `mock` or `monkeypatch` (the tests of the mocking tools themselves). In JavaScript an assertion on a mock's output in a test (or hook) that

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.27.0 — 2026-11-16
+
+**Fewer false alarms: a mock that only redirects, leftover assertions paired by what they are about, a marker that is not on a decorator.**
+
+Reading the blocks of sample 11 again (`docs/benchmarks.md` sections 18 and 19) showed that four of its seven false alarms came from guesses, not from judgment calls. They are fixed here, as fitted to that sample: the sample cannot measure them, a sample drawn after this release can.
+
+- **`trivial-assert`**: a `vi.mock` or `jest.mock` factory that only loads another module (`vi.mock("@scope/schema", () => import("../../schema/src/index.js"))`) points a package name at its source and is not a stub. A path that names a fake (`__mocks__`, `mock`, `stub`, `fake`, `double`, `fixture`, `spy`) still is. (`razzant/claudexor` `d68ff9d879`)
+- **`assertion-weakened`**: when a test has as many assertions as before, the ones an edit left over were paired in order, so an exact check could be paired with an unrelated line. They are paired by what they are about (the things the checked expression looks at: `scores.shape`, `db.records[0].values[1]`, `app.run()`, `set(sizes)` is about `sizes`), then by how alike they are, and in order only what nothing explains. A compound Python assertion that lost a clause is not reported when the test still pins the clause's subject exactly. (`ekzhang/resin` `d60e4b73f4`, and four commits of earlier samples)
+- **`test-skip`**: a Python marker that is not part of a decorator (`marks = [...]` in a helper that builds parameters) belongs to no `def` below it and counts by number. A reformatting that moved the next `def` from 76 lines below the marker to 91, past the 80 lines that were searched, made an old marker look new. (`gumyr/build123d` `aa05d578f0`)
+- **Measured on the 541 labeled commits** (540 re-reviewed, one clone is gone): 0.26.0 blocks 326, 0.27.0 blocks 316. Ten stop being blocked: seven labeled false alarms and three labeled for a reviewer, of which two were old findings that paired a check with an unrelated line and one is the check of a legacy file that went away with the file. No row that 0.26.0 did not block is blocked. On sample 11: 26 blocked, 23 now; false alarms 7, 4 now (17% as called, 13% to 83% with the 16 arguable calls made the same way).
+- **Measured on the newest 300 commits of 617 cloned repositories** (158,363 commits, 325,152 changes to test files compared): the findings differ in 97 files. In the block tier ten lose an `assertion-weakened` finding, four report another pair of the same commit, two gain one (a true `entered == 4` to `entered >= 4` that the in-order pairing had hidden, and a plausible one that newly blocks one commit), one loses a `trivial-assert`. In the warn tier `expectation-rewritten` changes in 80 files, 50 of them new, which the in-order pairing had hidden.
+- **Not fixed**: an exact check replaced by a weak check of another name in a test whose other lines all changed is still paired in order and reported, true weakening or not (`ekzhang/resin` `c49e4fa703`); a first version that left such pairs alone also unblocked 14 labeled commits and hid 271 `expectation-rewritten` findings, and was dropped.
+- Two scripts reproduce the measurements: `scripts/rereview-labels.mjs` (every labeled commit with two builds) and `scripts/compare-test-analysis.mjs` (what two builds of the test-file analysis report differently over cloned history).
+- Labeled cases: 169 of 169 cheats caught, 158 of 158 look-alikes left alone, 1 gap open (four more of each than before this version, and the old build fails exactly the four new look-alikes); 53 files, 1,597 tests.
+
 ## 0.26.0 — 2026-11-15
 
 **`type-escape` now reads Go, Rust and Java: `//nolint`, `#![allow(...)]`, `@SuppressWarnings(...)`.**

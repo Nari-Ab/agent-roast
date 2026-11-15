@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 165/165 cheats caught, 154/154 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 169/169 cheats caught, 158/158 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -44,7 +44,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **165/165 cheats caught, 154/154 harmless changes left alone, 1/1 documented gap still
+Result: **169/169 cheats caught, 158/158 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -1124,7 +1124,7 @@ The shipped build blocks two commits fewer than the published 0.20.0: a table of
 - A test whose title is edited in place, or renamed with a near-identical body, is reported as removed: only an identical body or an identical title in the same file excuses it. Of the 243 "test removed" findings in the 26 blocks, 43 have a title that is still in the new tree or a close one (a token overlap of at least one half) among the tests the commit adds. None of them decides a block alone. A net count says nothing about what was dropped either: `bghira/SimpleTuner` adds 27 tests and 121 assertion lines and deletes eight tests with nothing like them.
 - The rule for a test that checks its own mock found one that the first reading called a misread: `setDocumentLayoutValidation` in `yukiyokotani/office-open-xml-viewer` is now `vi.mocked(fn).mockReturnValue(x)` and the test asserts `expect(fn()).toBe(x)`. The same rule reads `vi.mock("@claudexor/schema", () => import("../../schema/src/index.js"))`, which redirects to the real module, as a stub.
 - Seventeen of the 26 blocks are in four repositories (`razzant/claudexor` 7, `ekzhang/resin` 4, `chenxin-yan/crust` 3, `yukiyokotani/office-open-xml-viewer` 3), and 11 of the 15 arguable blocks for a reviewer are in them, six in `razzant/claudexor`.
-- Why the review reported `gumyr/build123d` `aa05d578f0` is not found: the `xfail` mark is in both versions of the file (line 55, line 59 after the merge).
+- Why the review reported `gumyr/build123d` `aa05d578f0` is found, and fixed, in section 19: a marker that is not on a decorator was given to the nearest `def` within 80 lines, and the reformatting of the merge moved that `def` from 76 lines below the marker to 91, across the window.
 
 Labeled cases, regressions and the price are unchanged by this section: it adds no rule and fixes no code. `benchmarks/section9-labels.tsv` has 541 rows.
 
@@ -1134,6 +1134,61 @@ Labeled cases, regressions and the price are unchanged by this section: it adds 
 - One sample of 40 repositories is a range, and four repositories hold 17 of the 26 blocks.
 - Two of the 26 blocked commits carry an explicit AI co-author trailer and several more come from branches named for an agent; this was not counted systematically and says nothing about how common that is.
 - The same price as in sections 9 to 17 holds.
+
+## 19. What the second reading of sample 11 led to: three fixes, as fitted
+
+Section 18 listed what reading sample 11 showed and fixed nothing, as the stop rule says. Four of the seven false alarms that its correction left were not matters of
+judgment but of guessing: a mock factory that only redirects was read as a stub, the assertions an edit left over were paired in order, and a Python marker was given to the nearest
+`def`. 0.27.0 stops guessing in these three places. The fixes are fitted: sample 11 is the sample that showed them, so it cannot measure them. A sample drawn after this release
+can, and this section claims no figure for it.
+
+| What the review guessed | What it does now | Commits that are no longer blocked |
+| --- | --- | --- |
+| A `vi.mock` factory that only loads another module, `() => import("../../schema/src/index.js")`, is a stub | It points a package name at its source and is not a stub, unless the path names a fake (`__mocks__`, `mock`, `stub`, `fake`, ...) | `razzant/claudexor` `d68ff9d879` |
+| The assertions an edit left over in a test with as many assertions as before are paired in order | They are paired by what they are about (the things the checked expression looks at), then by how alike they are; in order only what nothing explains. A compound Python assertion that lost a clause is not reported when the test still pins the clause's subject exactly | `ekzhang/resin` `d60e4b73f4`, and from earlier samples `basicmachines-co/basic-memory` `3d433fd008`, `farming-labs/farm.js` `591f95f2ac`, `vllm-project/guidellm` `63790056e8`, `rpamis/comet` `de84a517ea` |
+| A Python marker that is not on a decorator belongs to the next `def` within 80 lines | It belongs to no `def` and counts by number | `gumyr/build123d` `aa05d578f0` |
+
+**On the labeled commits.** `scripts/rereview-labels.mjs` reviews every row of `benchmarks/section9-labels.tsv` with 0.26.0 and with 0.27.0 (540 of the 541 rows: one clone is gone). 0.26.0 blocks 326 of
+them, 68 of 275 labeled false alarms and 258 of 265 labeled for a reviewer; 0.27.0 blocks 316, 61 and 255. Ten commits stop being blocked and no other row changes: the seven above and three
+that were labeled for a reviewer. Read again, two of those three are old findings that paired a check with an unrelated line: `trustgraph-ai/trustgraph` `14e49d83c7` (the message check
+`"Text completion error" in response.error.message` is still in the new test, under another name) and `superlinked/sie` `22aa8250d4` (`nak_delay_ms >= 9_000` became `nak_delay_ms is None`, an expectation that
+was flipped, which the rule never reports). The third, `getkimchi/kimchi` `fd7fcd7541`, is a check of a legacy file's content that went away with the file, and nothing replaced it. The labels in the table
+are left as they were given, and the new column `blocked by 0.27.0` has the result of this run for every row. No row that 0.26.0 did not block is blocked by 0.27.0.
+
+| Sample 11, 0.27.0 | Blocked | A reviewer should see | False alarms |
+| --- | --- | --- | --- |
+| **0.25.0, as shipped** (section 18) | 26 | 19 (15 arguable) | 7 (27%) |
+| **0.27.0** | **23** | **19** (15 arguable) | **4** (17%) |
+
+The 17% is a figure as called: with the 16 arguable calls (15 counted for a reviewer, one as a false alarm) all made the same way, the share is between 13% (3 of 23) and 83% (19 of 23). The four that
+are left are `Soju06/codex-lb` `0a43bea21b` (a legacy mirror removed with its tests), `ekzhang/resin` `c49e4fa703` (an exact check replaced by a weak check of another name in a test whose other
+lines all changed: nothing in the text tells it from a weakening), `chenxin-yan/crust` `ba4ec516b6` (four workflows made one) and `chenxin-yan/crust` `324fb814c9` (arguable).
+
+**On the newest commits of the clones.** `scripts/compare-test-analysis.mjs` runs the comparison of a test file (the rule for assertions and the rule for a mock) of both builds over the newest 300 first-parent
+commits of the 617 repositories that the eleven corpora and section 17 cloned: 158,363 commits, 326,721 changes to test files, 325,152 of them compared (the others are larger than 400 kB or cannot be read). The findings
+differ in 97 files, and in no other; there is no error.
+
+- **Block tier, 17 files.** Ten lose an `assertion-weakened` finding: six labeled false alarms (`resin`, `basic-memory`, `farm.js`, `comet`, `guidellm` and `AgileRL` of sample 6), the three labeled for a reviewer above, and
+  `orq-ai/evaluatorq` `3bd18b39f2`, a test rewritten after the behavior changed (a row that passed now is an error). Four report one pair of the commit's findings in place of another (`Latand/delegatus`,
+  `Prism-Shadow/penguin-harness`, `openflowfm/visuals`, `wavyrai/tmux-ide`). Two gain a finding: `berylliumsec/nebula` `831d0d0c` (`assert entered == 4` became `assert entered >= 4`, a true weakening that the
+  in-order pairing had hidden; the commit was blocked already) and `keptinventory/kept` `f5abfcd60f` (`resolves.toBe(late)` became `not.toBeNull()` in a test that was rewritten around it; newly blocked, and a plausible block).
+  One loses a `trivial-assert` (`claudexor`).
+- **Warn tier, 80 files.** `expectation-rewritten`, which is shown only when production code changed and does not block, changes in 80 files: 50 new, 11 gone and 19 with another pair. The new ones are the rule working
+  better, not noise: they were hidden by the in-order pairing (`"Plotly.newPlot"` became `"Plotly.react"`, `b.status == "running"` became `"queued"`).
+
+The marker rule is not part of this comparison. The `build123d` commit and a unit test with the shape of its file are its evidence.
+
+**What was tried and left.** A first version did not pair leftovers that share nothing, and reported an old check as weakened only when every new check about the same thing was weaker. It removed the `resin` `c49e4fa703`
+false alarm too, but on the labeled commits it unblocked 14 that were labeled for a reviewer (an exact count turned into `len(...) > 0` under new names is a rewrite or a weakening, and the text cannot tell which), and on the clones 271 `expectation-rewritten`
+findings disappeared. The pairs of what nothing explains are taken in order, as before, and a false alarm of that kind stays.
+
+**Limits.**
+
+- One reader (an AI assistant) read every difference, and the labels it compares with are its own, from the samples above.
+- The fixes are fitted to sample 11 (and `comet` of sample 10); only the next sample measures them. The labeled commits were blocked by earlier builds, so they say nothing about commits that no build blocked: the clones are the only source for those, and
+  they found one newly blocked commit in 158,363.
+- The 617 clones are the repositories of the corpora themselves, so the comparison is not independent of the samples that shaped the rules.
+- The same price as in sections 9 to 18 holds.
 
 ## Reproduce
 
@@ -1155,6 +1210,8 @@ node scripts/compare-builds-on-diffs.mjs agents.json ./clones --base ./old/dist/
 node scripts/probe-gaps.mjs gaps.json 300 ./clones-a ./clones-b                    # section 13: what no rule sees, in the added lines of real commits
 node scripts/benchmark-zoo.mjs ./reward-hack-zoo dist/cli.js                       # section 13: the specimens of a third party's catalog of agent cheats
 node scripts/scan-reusable-callers.mjs ./clones-a ./clones-b ...                   # section 17: commits that stop calling a reusable workflow they called before
+node scripts/rereview-labels.mjs benchmarks/section9-labels.tsv ./v0.26.0/dist/cli.js dist/cli.js labels.json ./clones-a ./clones-b   # section 19: every labeled commit with two builds
+node scripts/compare-test-analysis.mjs ./v0.26.0-tampering.mjs ./tampering.mjs out.json ./clones-a ./clones-b                        # section 19: what two builds of the test-file analysis report differently
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
 #   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv, eleventh-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)

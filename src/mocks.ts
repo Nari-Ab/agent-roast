@@ -7,8 +7,8 @@ import { SourceMasker } from "./source.js";
  * where the assertion is: for JavaScript a `jest.mock` or `vi.mock` at the top level of the file, which is hoisted above the
  * imports (`doMock`, and a mock made inside a hook or a `describe`, come too late for an import that was already loaded); for
  * Python the same test or `with` block. The assertion has to call the replaced function itself. A mock that keeps the real
- * implementation (`requireActual`, `wraps=`), a manual mock without a configured value, and an assertion about how a mock was
- * called are not reported. */
+ * implementation (`requireActual`, `wraps=`), a factory that only loads another real module (`() => import("../src/index.js")`), a manual
+ * mock without a configured value, and an assertion about how a mock was called are not reported. */
 
 export interface MockedSubject {
   /** `specifier::name` for JavaScript, the dotted target for Python: what makes two reports the same one. */
@@ -48,6 +48,8 @@ function closing(code: string, open: number): number {
 }
 
 const STRING_AFTER = /^\s*(['"`])([^'"`\n]+)\1/;
+/** A module that is a fake by its path: `__mocks__/price`, `./mock-client.js`, `stubs/api`, `test-doubles/db`. */
+const FAKE_MODULE = /(?:^|[/._-])(?:__mocks__|mocks?|fakes?|stubs?|doubles?|fixtures?|spies|spy)(?:[/._-]|$)/i;
 const within = (range: Range | null, index: number) => !range || (index >= range[0] && index <= range[1]);
 const innermost = (ranges: Range[], index: number): Range | null =>
   ranges.filter(range => index >= range[0] && index <= range[1]).sort((a, b) => (a[1] - a[0]) - (b[1] - b[0]))[0] ?? null;
@@ -94,6 +96,10 @@ function javascript(text: string): MockedSubject[] {
     const args = end > 0 ? raw.slice(open, end) : "";
     // A factory that spreads the real module keeps the real function; the others are replaced wholesale.
     if (/requireActual|importActual|importOriginal/.test(args)) continue;
+    // A factory that only loads another module, `vi.mock("@scope/schema", () => import("../../schema/src/index.js"))`, points a package
+    // name at its source: the code under test is real. A redirect to a hand-written fake is named as one (`__mocks__`, `mock`, `stub`).
+    const redirect = /^\(\s*(['"`])[^'"`\n]+\1\s*,\s*(?:async\s*)?(?:function\s*)?\(\s*\)\s*(?:=>\s*)?\{?\s*(?:return\s+)?(?:\(\s*)?(?:await\s+)?(?:import|require)\s*\(\s*(['"`])([^'"`\n]+)\2\s*\)\s*\)?\s*;?\s*\}?\s*,?\s*$/.exec(args);
+    if (redirect && !FAKE_MODULE.test(redirect[3])) continue;
     // So does a factory that is handed the real module's loader and calls it, whatever the parameter is called:
     // `vi.mock("./client", async (original) => ({ ...(await original<typeof import("./client")>()), send: vi.fn() }))`.
     // The factory's one parameter may be written with or without brackets: `async (original) => ...` and `async original => ...`.

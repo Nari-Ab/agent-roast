@@ -20,6 +20,8 @@ describe("JavaScript: a test that asserts on what its own mock returns", () => {
     ["an automock given a return value", `${IMPORT}jest.mock("./price");\n${test("  (price as jest.Mock).mockReturnValue(42);\n  expect(price(cart)).toBe(42);")}`],
     ["jest.mocked", `${IMPORT}jest.mock("./price");\n${test("  jest.mocked(price).mockResolvedValue(42);\n  expect(await price(cart)).toBe(42);")}`],
     ["resolves", `${IMPORT}jest.mock("./price", () => ({ price: async () => 42 }));\n${test("  await expect(price(cart)).resolves.toBe(42);")}`],
+    ["a factory that loads a hand-written fake", `${IMPORT}vi.mock("./price", () => import("./__mocks__/price.js"));\n${test("  expect(price(cart)).toBe(42);")}`],
+    ["a factory that requires a stub module", `${IMPORT}jest.mock("./price", () => require("../test-doubles/price"));\n${test("  expect(price(cart)).toBe(42);")}`],
   ])("reports %s", (_name, text) => {
     expect(keys(text)).toEqual(["./price::price"].map(key => key === "./price::price" && /default/.test(_name) ? "./price::default" : key));
   });
@@ -37,6 +39,10 @@ describe("JavaScript: a test that asserts on what its own mock returns", () => {
     ["a variable that is not from the mock", `${IMPORT}jest.mock("./price", () => ({ price: () => 42 }));\n${test("  const total = compute(cart);\n  expect(total).toBe(42);")}`],
     ["a spy that calls through", `${IMPORT}import * as lib from "./price";\n${test("  jest.spyOn(lib, 'price');\n  expect(price(cart)).toBe(42);")}`],
     ["vitest's spying automock calls the real function", `${IMPORT}vi.mock("./price", { spy: true });\n${test("  expect(price(cart)).toBe(42);")}`],
+    ["a factory that only points the name at its source (a dynamic import)", `${IMPORT}vi.mock("./price", () => import("../src/price/index.js"));\n${test("  expect(price(cart)).toBe(42);")}`],
+    ["the same, async with await", `${IMPORT}vi.mock("./price", async () => await import("../src/price/index.js"));\n${test("  expect(price(cart)).toBe(42);")}`],
+    ["the same, with a block and require", `${IMPORT}jest.mock("./price", () => {\n  return require("../src/price/index.js");\n});\n${test("  expect(price(cart)).toBe(42);")}`],
+    ["the same, in brackets and with a function", `${IMPORT}jest.mock("./price", function () { return (import("../src/price")); });\n${test("  expect(price(cart)).toBe(42);")}`],
     ["a mock inside a string or comment", `${IMPORT}// jest.mock("./price", () => ({ price: () => 42 }));\nconst note = 'jest.mock("./price", () => 1)';\n${test("  expect(price(cart)).toBe(42);")}`],
   ])("leaves alone: %s", (_name, text) => {
     expect(keys(text)).toEqual([]);
