@@ -18,7 +18,7 @@ patterns** look at a single file and are compared with the previous version too,
 | [`test-removed`](#test-removed) | before/after | warns | JavaScript/TypeScript, Python, Go |
 | [`expectation-rewritten`](#expectation-rewritten) | before/after | warns | JavaScript/TypeScript, Python, Go |
 | [`swallowed-error`](#swallowed-error) | line pattern | warns | JS/TS, Java, Kotlin, C#, PHP, C/C++ (`catch {}`), Python (`except: pass`) |
-| [`type-escape`](#type-escape) | line pattern | warns | TypeScript, Python, ESLint directives |
+| [`type-escape`](#type-escape) | line pattern | warns | TypeScript, Python, Go, Rust, Java, ESLint directives |
 | [`stub-abandonment`](#stub-abandonment) | line pattern | warns | JS/TS, Python, Rust |
 
 "Blocks" means the check exits with status 1. Change that with `failOn` in `.agentroastrc.json`, `--fail-on <rules>`, or
@@ -287,7 +287,8 @@ An empty handler (`catch {}`, `except: pass`) makes a failed operation look succ
 
 A suppression hides a type, lint or coverage problem: `as any`, `as unknown as`, `// @ts-ignore`, `// @ts-nocheck`,
 `// @ts-expect-error`, `eslint-disable`, `biome-ignore`, `# type: ignore`, `# noqa`, `# pylint: disable`, `# pyright: ignore`,
-`# mypy: ignore-errors`, `# flake8: noqa` and `# ruff: noqa`. Coverage exclusions count too: `# pragma: no cover` and
+`# mypy: ignore-errors`, `# flake8: noqa`, `# ruff: noqa`, Go's `//nolint`, Rust's `#![allow(...)]` and Java's
+`@SuppressWarnings(...)`. Coverage exclusions count too: `# pragma: no cover` and
 `# pragma: no branch` in Python, `istanbul ignore`, `c8 ignore`, `v8 ignore` and `node:coverage ignore` in JavaScript and
 TypeScript, as line or block comments. A line a coverage threshold never sees is a way to pass the threshold without testing the
 code; the closing `c8 ignore stop` of a region is not counted again. Some are justified (a defensive branch, generated code),
@@ -325,8 +326,6 @@ These gaps are documented in [`benchmarks/cases.mjs`](../benchmarks/cases.mjs) r
   that is wider than the exact value but written in a form this rule does not read (`expect(res.status >= 400).toBe(true)`);
 - a lint rule switched off in an ESLint config that never mentioned it (it may come from a preset), a longer `omit` list, a test
   script whose runner was swapped for another command, a raised timeout or a retry count, an updated snapshot;
-- suppressions in the languages without a comment directive table: Go `//nolint`, Rust `#![allow(warnings)]`, Java
-  `@SuppressWarnings("all")`;
 - before/after rules for languages other than JavaScript/TypeScript, Python and Go, and `assertion-weakened` for Go (skips and
   placeholder assertions are covered for ten languages, but a weakened assertion in Java or Rust is not);
 - anything the agent does before it commits that the next review does not see, such as a weakened check that is fixed again.

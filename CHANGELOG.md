@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.26.0 — 2026-11-15
+
+**`type-escape` now reads Go, Rust and Java: `//nolint`, `#![allow(...)]`, `@SuppressWarnings(...)`.**
+
+`docs/rules.md` listed this as a gap since the comment-directive table only covered JavaScript/TypeScript and Python. Closed it the same way: Go's `//nolint` is matched as a comment directive like the existing ones; Rust's `#![allow(...)]` and Java's `@SuppressWarnings(...)` are attributes, not comments, so they are matched against the masked code instead, the same mechanism TypeScript's `as any` family already uses.
+
+- Two regex bugs were found and fixed before shipping, by running the rule against real history rather than trusting the pattern: an unanchored `//nolint` also matched a comment that only *mentions* the convention in prose (`caddyserver/caddy`, "the linter honors the same `//nolint:canonicalheader` directives"); and the Rust pattern's `\s*` crossed the newline into a masked (blank) doc comment above the real attribute, so a `#![allow(...)]` preceded by ~100 lines of `//!` doc comments (`clap-rs/clap`'s `_concepts.rs`) was reported on the wrong line with a snippet that never reached the real text. Both are anchored to a single line now.
+- **Measured on real history.** 20 already-pinned repositories from `benchmarks/language-corpus.tsv` (5 Go, 5 Rust, 5 Java, plus 5 C#, unaffected), 6,000 commits: 216 new findings in 82 commits (142/40 Java, 44/23 Go, 30/19 Rust). `type-escape` warns by default and none of these are a new check rule, so nothing new is blocked or warned at the commit level either: 12 commits would block before and after, 61 would warn before and after; of the 216 added findings, 210 land on a commit that was otherwise clean (now "noted", the tier below a warning) and 6 land on a commit already blocked or warned for an unrelated reason. 0 findings lost.
+- Labeled cases, 52 files, 1,564 tests (four more, one per language plus the prose-mention guard).
+
 ## 0.25.0 — 2026-11-13
 
 **Two more agents can be sent back to fix the code: Kiro and Antigravity CLI.**
