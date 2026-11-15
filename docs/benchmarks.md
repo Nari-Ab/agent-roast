@@ -1088,6 +1088,34 @@ Labeled cases: @@CHEATS@@ of @@CHEATS@@ cheats caught and @@CONTROLS@@ of @@CONT
 - The scan for lost callers is a text match on `uses: ./.github/workflows/...`: a workflow called by its name from another repository, or included through GitLab's `include:`, is not covered (section 13's catalogue of what agent-roast does not read still applies).
 - The same price as in sections 9 to 16 holds.
 
+## 18. An eleventh sample: the false-alarm share jumps, for a reason that says nothing new
+
+Sections 9 to 15 drew ten samples from the same search; this is the eleventh, drawn the same way (section 9's method, skipping the 625 repositories any earlier corpus used), on 0.25.0 as shipped, unchanged while it was read.
+
+**Method.** Sample 11 holds 40 repositories (24 JavaScript or TypeScript, 16 Python), `benchmarks/eleventh-corpus.tsv` with the revision measured, none in an earlier corpus; 10,633 of the newest commits of their first-parent histories were reviewed against their parents (141 could not be compared in full and 2 failed to review, and are in no count).
+
+| Build | Blocked commits | A reviewer should see | False alarms |
+| --- | --- | --- | --- |
+| **0.20.0, as published** | **28** | — | — |
+| **0.25.0, as shipped** | **26** | **3** | **23 (88%)** |
+
+The shipped build blocks 3 fewer than the published 0.20.0: the three commits 0.20.0 blocks and 0.25.0 does not are false alarms that earlier sections already fixed (a tolerated test step, a workflow another workflow calls, a test marker the comparison could now tell was not new), none of them new to this sample. No commit that 0.25.0 blocks is one the published 0.20.0 does not: nothing new slipped past 0.20.0 that this version catches either. The false-alarm share, 69%, 58%, 27%, 69%, 51%, 27%, 66%, 48%, 38%, 39% and 33% for the ten earlier samples (one figure each, two for sample 4), is **88%** here — well outside that range, and the highest of any sample so far.
+
+**Why the share jumped, and why it is not a new gap.** All three blocks a reviewer should see are kinds this project has reported since section 9: a test skip with an explicit "this is flaky" comment and no fix date (`ing-bank/lion`), a CI test file and its two workflow steps deleted with no reason given in the commit (`saltyorg/Saltbox`), and seven per-architecture coverage tests plus one numeric correctness test deleted with no replacement anywhere in a large feature commit (`bghira/SimpleTuner`, amid its own legitimate new segmented-checkpointing code). All three are already correctly caught by existing rules; none needed a new one.
+
+The 23 false alarms are almost all the largest and oldest-known kind — a check rewritten in an equivalent form after a refactor or an interface change — just at a scale this project has not measured on one sample before: seven of the 23 are one repository, `razzant/claudexor`, where every blocked commit is a large, well-described feature or refactor merge that deletes an old test file and adds new ones for the module it introduces (confirmed on two of the seven: a 1,291-line vendor-detection test file replaced by seven new ones totaling more, and four version-specific tests superseded by a schema migration in the same 113-file merge that added them). Three more are `chenxin-yan/crust`, where two commits follow `feat(core)!` breaking changes (every full-object `toEqual` into `toMatchObject` once the checked object gained new fields, confirmed on several call sites) and the third consolidates four CI workflows into one, deleting a smoke test explicitly described as unreachable. Four are `ekzhang/resin`, a week-long series moving recipe and CUDA-scoring code into Rust, one of them a Python module replaced outright by seven new Rust source files. The rest are smaller instances of the same thing, plus two arguable cases (an exact count into a lower bound, each with a comment naming a timing reason) and one case where the pairing matched an old exact check to the wrong one of several same-subject new lines, next to its real, still-exact replacement — a narrower case of the same "subject changed" question sections 16 and 17 already measured and declined to chase further.
+
+Read together with sections 16 and 17's refusals, this sample is more evidence for the same conclusion, not a new question: the dominant false alarm is a real rewrite, told from a weakening only by reading it, and no rule that reads the changed lines has been found that tells them apart at any scale measured so far.
+
+Labeled cases, regressions and the price are unchanged by this section: it adds no rule and fixes no code, so section 17's numbers for all three still hold. `benchmarks/section9-labels.tsv` has 541 rows.
+
+**Limits.**
+
+- One reader (an AI assistant) read all 26 blocks.
+- `razzant/claudexor`, `chenxin-yan/crust` and `yukiyokotani/office-open-xml-viewer` hold 13 of the 26 blocks between them (one repository, seven); a sample of 40 repositories is a range, and this one leans hard on a few very active ones.
+- Two of the 26 blocked commits carry an explicit AI co-author trailer and several more come from branches named for an agent or an agent-run workflow; this was not counted systematically and is not a claim about how common that is, only about what this sample happened to draw.
+- The same price as in sections 9 to 17 holds.
+
 ## Reproduce
 
 ```bash
