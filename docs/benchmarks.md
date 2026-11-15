@@ -1088,49 +1088,49 @@ Labeled cases: 165 of 165 cheats caught and 154 of 154 harmless changes left alo
 - The scan for lost callers is a text match on `uses: ./.github/workflows/...`: a workflow called by its name from another repository, or included through GitLab's `include:`, is not covered (section 13's catalogue of what agent-roast does not read still applies).
 - The same price as in sections 9 to 16 holds.
 
-## 18. An eleventh sample: 35% false alarms, and anywhere from 31% to 85%
+## 18. An eleventh sample, and a correction to its first write-up
 
 Sections 9 to 15 drew ten samples from the same search; this is the eleventh, drawn the same way (section 9's method, skipping the 625 repositories any earlier corpus used) and measured with 0.25.0 as shipped, unchanged while it was read.
 
-**Correction.** The first version of this section (pull request #34) counted 23 of the 26 blocks as false alarms (88%) and called that the highest share of any sample. It rested on labels given without opening the diff of at least nine of the 26 commits, and on a looser rule than sections 9 to 15 use: those count a check that got weaker as a block a reviewer should see whether or not the commit says why, and `toEqual` turned into `toMatchObject` after a field was added to the result as one too (section 15). Every block was read again in full for this version, and 14 of the 26 labels changed, all of them from false alarm to for a reviewer.
+**Correction.** The first version of this section (pull request #34) counted 23 of the 26 blocks as false alarms (88%) and called that the highest share of any sample. It rested on labels given without opening the diff of at least nine of the 26 commits, and on a looser rule than sections 9 to 15 use: those count a check that got weaker as a block a reviewer should see whether or not the commit says why, and `toEqual` turned into `toMatchObject` after a field was added to the result as one too (section 15). Every block was read again in full for this version, and 16 of the 26 labels changed, all of them from false alarm to for a reviewer.
 
 **Method.** Sample 11 holds 40 repositories (24 JavaScript or TypeScript, 16 Python), `benchmarks/eleventh-corpus.tsv` with the revision measured, none in an earlier corpus; 10,633 of the newest commits of their first-parent histories were reviewed against their parents (141 could not be compared in full and 2 failed to review, and are in no count).
 
 | Build | Blocked commits | A reviewer should see | False alarms |
 | --- | --- | --- | --- |
 | **0.20.0, as published** | **28** | — | — |
-| **0.25.0, as shipped** | **26** | **17** (13 of them arguable) | **9** (1 of them arguable) |
+| **0.25.0, as shipped** | **26** | **19** (15 of them arguable) | **7** (1 of them arguable) |
 
 The shipped build blocks two commits fewer than the published 0.20.0: a table of tests marked `it.fails.each` in `yukiyokotani/office-open-xml-viewer` (the rule of section 14) and a test step that `gentoo/portage` moved into a run in a container image ("ci: run the tests in the Gentoo container image"). A third, `Soju06/codex-lb` `0a43bea21b`, stays blocked and loses one of its findings. No commit that 0.25.0 blocks is one that 0.20.0 does not.
 
-**The share.** 9 of the 26 are false alarms, 35%. It is a range, not a number, and this sample's is wide: 14 of the 26 calls are arguable, 13 counted for a reviewer (a check widened for a reason that the change or a comment in it gives) and one counted as a false alarm. With all 14 made the same way the share is between 31% (8 of 26) and 85% (22 of 26); the arguable calls of sample 10 moved its share between 25% and 48%. The 35% is inside the range of the ten samples before it (27% to 69%) and follows the rule they used for the largest kind here: `toEqual` turned into `toMatchObject` after a field was added to a result is a block for a reviewer unless the new field is asserted next to it (section 15 counted three that way).
+**The share.** 7 of the 26 are false alarms, 27%. It is a range, not a number, and this sample's is wide: 16 of the 26 calls are arguable, 15 counted for a reviewer (a check widened for a reason that the change or a comment in it gives, a trivial assertion in a new test that has real checks) and one counted as a false alarm. With all 16 made the same way the share is between 23% (6 of 26) and 85% (22 of 26); the arguable calls of sample 10 moved its share between 25% and 48%. The 27% is inside the range of the ten samples before it (27% to 69%), at its lower end, and follows the rule they used for the largest kind here: `toEqual` turned into `toMatchObject` after a field was added to a result is a block for a reviewer unless the new field is asserted next to it (section 15 counted three that way).
 
 | What was blocked on sample 11 (0.25.0 as shipped) | Commits |
 | --- | --- |
 | A test that was running is switched off or deleted with no reason: `it.skip` under a TODO that calls it flaky; a CI test file and its two workflow steps; eight tests (seven per-architecture backend-attribute checks and a numeric equivalence test) with nothing like them left in the commit | 3 |
 | A test that asserts its own mock: a setter that became `mockReturnValue` of the very function the test then asserts on | 1 |
 | `toEqual` into `toMatchObject` once a result gained a field, with nothing beside it that asserts the new field; arguable (one of the seven also turns `toBe(stdout)` into `toBeDefined()`) | 7 |
-| An exact value into a lower bound (`== 2` into `>= 2`, `toBe(1)` into `toBeGreaterThan(0)`), an exception check widened with its message dropped (two), an equality into a truthiness check, a rejection into an acceptance under an unchanged title; arguable | 6 |
-| **False alarm:** an exact check that is still there, or got stricter, paired with an unrelated line | 2 |
+| An exact value into a lower bound (`== 2` into `>= 2`, `toBe(1)` into `toBeGreaterThan(0)`, `row_bytes == planned` into `<= planned`), an exception check widened with its message dropped (two), an equality into a truthiness check, a rejection into an acceptance under an unchanged title; arguable | 7 |
+| A trivial `assertTrue(True)` closing a new test whose check is a `self.fail` in a loop; arguable | 1 |
+| **False alarm:** an exact check that got stricter (`set(projected) == {…}` into `projected == [CHUNK, CHUNK, 1]`) paired with an unrelated line | 1 |
 | **False alarm:** tests that went with the code they cover: a legacy mirror removed, a Python module moved to Rust (20 new `#[test]`s), four CI workflows made one | 3 |
 | **False alarm:** a rewrite for a behavior that changed on purpose, as a comment in the test says; arguable | 1 |
 | **False alarm:** titles edited in place read as removed tests, and a `vi.mock` that redirects to the real module read as a stub | 1 |
 | **False alarm:** a marker that was already there (an `xfail` mark that moved four lines in a merge) | 1 |
-| **False alarm:** a trivial `assertTrue(True)` that closes a test whose check is a `self.fail` in a loop | 1 |
 
 **What reading it showed, and what is not fixed.** The stop rule held: no source file was changed after the first block was read, so these are for a later version and would be reported as fitted.
 
-- Two false alarms are one defect: when an old and a new test have the same number of assertions, the ones that are left over are paired in order, so an exact check can be paired with an unrelated line (`ekzhang/resin` `d60e4b73f4`, where `set(projected) == {…}` became the stricter `projected == [CHUNK, CHUNK, 1]`, and `NVIDIA/hyperflare-inference` `7303efb102`, where the exact check is still there and a bound is added next to it).
+- One false alarm is a defect of the pairing: when an old and a new test have the same number of assertions, the ones that are left over are paired in order, so an exact check can be paired with an unrelated line (`ekzhang/resin` `d60e4b73f4`, where `set(projected) == {…}` became the stricter `projected == [CHUNK, CHUNK, 1]` and was paired with `assert result is not None`).
 - A test whose title is edited in place, or renamed with a near-identical body, is reported as removed: only an identical body or an identical title in the same file excuses it. Of the 243 "test removed" findings in the 26 blocks, 43 have a title that is still in the new tree or a close one (a token overlap of at least one half) among the tests the commit adds. None of them decides a block alone. A net count says nothing about what was dropped either: `bghira/SimpleTuner` adds 27 tests and 121 assertion lines and deletes eight tests with nothing like them.
 - The rule for a test that checks its own mock found one that the first reading called a misread: `setDocumentLayoutValidation` in `yukiyokotani/office-open-xml-viewer` is now `vi.mocked(fn).mockReturnValue(x)` and the test asserts `expect(fn()).toBe(x)`. The same rule reads `vi.mock("@claudexor/schema", () => import("../../schema/src/index.js"))`, which redirects to the real module, as a stub.
-- Seventeen of the 26 blocks are in four repositories (`razzant/claudexor` 7, `ekzhang/resin` 4, `chenxin-yan/crust` 3, `yukiyokotani/office-open-xml-viewer` 3), and 11 of the 13 arguable blocks for a reviewer are in them, six in `razzant/claudexor`.
+- Seventeen of the 26 blocks are in four repositories (`razzant/claudexor` 7, `ekzhang/resin` 4, `chenxin-yan/crust` 3, `yukiyokotani/office-open-xml-viewer` 3), and 11 of the 15 arguable blocks for a reviewer are in them, six in `razzant/claudexor`.
 - Why the review reported `gumyr/build123d` `aa05d578f0` is not found: the `xfail` mark is in both versions of the file (line 55, line 59 after the merge).
 
 Labeled cases, regressions and the price are unchanged by this section: it adds no rule and fixes no code. `benchmarks/section9-labels.tsv` has 541 rows.
 
 **Limits.**
 
-- One reader (an AI assistant) read all 26 blocks, twice, and the second reading changed more than half of the labels: the label of the 14 arguable blocks depends on a judgment that the commit's own message or a comment in it supports or does not.
+- One reader (an AI assistant) read all 26 blocks, twice, and the second reading changed more than half of the labels: the label of the 16 arguable blocks depends on a judgment that the commit's own message or a comment in it supports or does not.
 - One sample of 40 repositories is a range, and four repositories hold 17 of the 26 blocks.
 - Two of the 26 blocked commits carry an explicit AI co-author trailer and several more come from branches named for an agent; this was not counted systematically and says nothing about how common that is.
 - The same price as in sections 9 to 17 holds.
