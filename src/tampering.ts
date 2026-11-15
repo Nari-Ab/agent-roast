@@ -330,23 +330,24 @@ function samePresence(oldAssertion: string, newAssertion: string): boolean {
 /** What an assertion checks: the argument of `expect(...)`, the left side of `assert x == 1`, the first argument of
  * `assert.equal(...)`. Whitespace and a trailing `.length` are dropped, so `items`, `items.length` and `len(items)` compare equal. */
 function checkedExpression(assertion: string, language: Language): string | null {
-  const squash = (text: string) => text.replace(/\s+/g, "").replace(/^len\((.*)\)$/, "$1").replace(/\.length$/, "");
-  if (language === "py") {
-    const operand = /^\s*assert\s+(?:not\s+)?(.+?)\s*(?:==|!=|>=|<=|>|<|\bin\b|\bis\b)/.exec(assertion)?.[1] ?? /\bself\s*\.\s*assert\w*\s*\(\s*([^,]+?)\s*,/.exec(assertion)?.[1];
-    return operand ? squash(operand) : null;
-  }
+  const text = checkedText(assertion, language);
+  return text === null ? null : text.replace(/\s+/g, "").replace(/^len\((.*)\)$/, "$1").replace(/\.length$/, "");
+}
+
+/** The text of what an assertion checks, as written. */
+function checkedText(assertion: string, language: Language): string | null {
+  if (language === "py") return /^\s*assert\s+(?:not\s+)?(.+?)\s*(?:==|!=|>=|<=|>|<|\bin\b|\bis\b)/.exec(assertion)?.[1] ?? /\bself\s*\.\s*assert\w*\s*\(\s*([^,]+?)\s*,/.exec(assertion)?.[1] ?? null;
   const start = assertion.search(/(?<![\w$.])expect\s*\(/);
   if (start >= 0) {
     const open = assertion.indexOf("(", start);
     let depth = 0;
     for (let i = open; i < assertion.length; i++) {
       if (assertion[i] === "(") depth++;
-      else if (assertion[i] === ")" && --depth === 0) return squash(assertion.slice(open + 1, i));
+      else if (assertion[i] === ")" && --depth === 0) return assertion.slice(open + 1, i);
     }
     return null;
   }
-  const node = /assert\s*\.\s*(?:equal|strictEqual|deepEqual|deepStrictEqual|ok)\s*\(\s*([^,)]+?)\s*(?:,|\)|>=|<=|>|<)/.exec(assertion)?.[1];
-  return node ? squash(node) : null;
+  return /assert\s*\.\s*(?:equal|strictEqual|deepEqual|deepStrictEqual|ok)\s*\(\s*([^,)]+?)\s*(?:,|\)|>=|<=|>|<)/.exec(assertion)?.[1] ?? null;
 }
 
 /** The text of the first argument of the matcher `name(...)` in `assertion`, whitespace dropped. */
@@ -598,6 +599,180 @@ function unmatchedIndexes(from: string[], against: string[]): number[] {
   }).map(({ i }) => i);
 }
 
+// The names every assertion has in common (matchers, keywords, builtins) say nothing about what one of them is about.
+const COMMON_WORD = /^(?:to[A-Z]\w*|assert[A-Z_]\w*|assert_\w+)$/;
+const COMMON_WORDS = new Set(["assert", "expect", "self", "not", "is", "in", "and", "or", "if", "else", "for", "True", "False", "None", "true", "false", "null", "undefined",
+  "len", "isinstance", "await", "async", "new", "return", "lambda", "def", "const", "let", "var", "typeof", "instanceof", "should", "be", "have", "resolves", "rejects",
+  "raises", "pytest", "any", "all", "set", "list", "dict", "tuple", "str", "int", "float", "bool", "type", "max", "min", "sum", "abs", "sorted"]);
+
+/** The clauses of a Python assertion joined by `and` outside every bracket and string: `assert result is not None and sizes == []` is two. */
+function pythonClauses(assertion: string): string[] {
+  const body = (splitArguments(withoutOuterParens(assertion).replace(/^\s*assert\s+/, ""))[0] ?? "").trim();
+  const clauses: string[] = [];
+  let depth = 0, quote = "", start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i];
+    if (quote) {
+      if (char === "\\") i++;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+    else if (depth === 0 && /\s/.test(body[i - 1] ?? "") && body.startsWith("and", i) && /\s/.test(body[i + 3] ?? "")) {
+      clauses.push(body.slice(start, i).trim());
+      start = i + 3;
+    }
+  }
+  clauses.push(body.slice(start).trim());
+  return clauses.filter(Boolean);
+}
+
+// Functions that only look at their argument: `set(sizes)` is about `sizes`. The arguments of any other call are its inputs, not what is checked.
+const WRAPPERS = new Set(["set", "len", "max", "min", "sum", "abs", "sorted", "list", "dict", "tuple", "str", "int", "float", "bool", "type", "any", "all", "frozenset", "repr", "round",
+  "Number", "String", "Boolean", "Array", "Object", "JSON.stringify", "Array.from", "Object.keys", "Object.values", "Object.entries"]);
+
+/** The paths of the things an expression looks at: `cart.total`, `sizes`, `db.records[0].values[0][1]`, `app.run().status`. A subscript keeps its index (`[0]` and `[1]`
+ * are two things); a call keeps its callee but not its inputs (`app.run(...)`), unless the callee only looks at its argument (`set(sizes)` is about `sizes`). */
+function collectPaths(text: string, into: Set<string>): void {
+  const skipGroup = (from: number): number => {
+    let depth = 1, j = from;
+    for (; j < text.length && depth > 0; j++) {
+      if (text[j] === '"' || text[j] === "'" || text[j] === "`") { const quote = text[j]; for (j++; j < text.length && text[j] !== quote; j++) if (text[j] === "\\") j++; }
+      else if ("([{".includes(text[j])) depth++;
+      else if (")]}".includes(text[j])) depth--;
+    }
+    return j;
+  };
+  for (let i = 0; i < text.length;) {
+    const char = text[i];
+    if (char === '"' || char === "'" || char === "`") {
+      for (i++; i < text.length && text[i] !== char; i++) if (text[i] === "\\") i++;
+      i++;
+      continue;
+    }
+    if (!/[A-Za-z_$]/.test(char) || (i > 0 && /[\w$.]/.test(text[i - 1]))) { i++; continue; }
+    // a string prefix (`f"..."`, `r'...'`) is not a name
+    const prefix = /^[fFrRbBuU]{1,2}(?=["'])/.exec(text.slice(i));
+    if (prefix) { i += prefix[0].length; continue; }
+    // one path: names joined by dots, with subscripts and the empty marker of a call kept in place
+    let path = "";
+    for (;;) {
+      const name = /^[A-Za-z_$][\w$]*/.exec(text.slice(i));
+      if (!name) break;
+      path += name[0];
+      i += name[0].length;
+      let more = false;
+      for (;;) {
+        const next = /^\s*(\?\.|\.|\[|\()/.exec(text.slice(i));
+        if (!next) break;
+        if (next[1] === "[") {
+          const from = i + next[0].length, end = skipGroup(from);
+          path += `[${text.slice(from, end - 1).replace(/\s+/g, "")}]`;
+          i = end;
+        } else if (next[1] === "(") {
+          const from = i + next[0].length, end = skipGroup(from);
+          if (WRAPPERS.has(path) || COMMON_WORDS.has(path)) { collectPaths(text.slice(from, end - 1), into); path = ""; }
+          else path += "()";
+          i = end;
+        } else { path += "."; i += next[0].length; more = true; break; }
+      }
+      if (!more) break;
+    }
+    const clean = path.replace(/\.$/, "");
+    if (clean && !COMMON_WORDS.has(clean) && !COMMON_WORD.test(clean) && !WRAPPERS.has(clean)) into.add(clean);
+  }
+}
+
+/** A compound check turned into a shorter one, whose dropped clauses are all about something that the new test still pins exactly (`assert result is not None and sizes == []` next
+ * to a new `assert sizes == [CHUNK, CHUNK, 1]`): the clause was edited into another value or moved, not given up. */
+function droppedClausesStillPinned(rawBefore: string, rawAfter: string, newRaw: string[]): boolean {
+  const kept = rawAfter.replace(/\s+/g, "");
+  const clauses = pythonClauses(rawBefore);
+  const dropped = clauses.filter(clause => !kept.includes(clause.replace(/\s+/g, "")));
+  if (!dropped.length || dropped.length === clauses.length) return false;
+  const pinned = newRaw.filter(other => isExact(other, "py")).map(other => subjectPaths(other, "py"));
+  return dropped.every(clause => {
+    const subject = subjectPaths(`assert ${clause}`, "py");
+    return subject.size > 0 && pinned.some(paths => sameSubject(subject, paths));
+  });
+}
+
+/** What an assertion is about: the paths of the names it checks, one set per clause of a compound Python assertion, without the words every assertion has in common.
+ * For `x in y` that is both sides (`"water" in tags` is about `tags`). A statement that names no checked expression gives every name it has. */
+function subjectPaths(statement: string, language: Language): Set<string> {
+  const subjects: string[] = [];
+  for (const clause of language === "py" ? pythonClauses(statement) : [statement]) {
+    const text = checkedText(language === "py" ? `assert ${clause}` : clause, language);
+    if (text === null) continue;
+    subjects.push(text);
+    const container = language === "py" ? /^(?:not\s+)?.+?\s+(?:not\s+)?in\s+([\s\S]+)$/.exec(clause)?.[1] : undefined;
+    if (container) subjects.push(container);
+  }
+  const paths = new Set<string>();
+  const bare = splitArguments(statement.replace(/^\s*assert\s+/, ""))[0] ?? "";
+  collectPaths(subjects.length ? subjects.join(" ; ") : language === "py" ? bare : statement, paths);
+  return paths;
+}
+
+/** Two sets of paths are about the same thing when one holds a path that the other holds or extends: `scores.shape` and `scores.shape`, `result` and
+ * `result.status`, `app.run()` and `app.run().status`; not `cart.total` and `cart.items`, which only share an object, nor `records[0]` and `records[1]`. */
+function sameSubject(a: Set<string>, b: Set<string>): boolean {
+  const extendsPath = (longer: string, shorter: string) => longer.startsWith(shorter) && /^[.[]/.test(longer.slice(shorter.length));
+  for (const x of a) for (const y of b) if (x === y || extendsPath(x, y) || extendsPath(y, x)) return true;
+  return false;
+}
+
+/** The names, numbers and comparison signs of a statement: what `resemblance` compares. */
+const statementTokens = (text: string): Set<string> => new Set((text.match(/[A-Za-z_$][\w$.]*|\d+(?:\.\d+)?|[=!<>]=?/g) ?? []).filter(token => !COMMON_WORDS.has(token) && !COMMON_WORD.test(token)));
+
+/** How alike two statements are, name by name and literal by literal (`scores.shape == (2, 5, 9)` and `scores.shape == (2, 9)` more than either and `scores.shape == logits.shape`). */
+function resemblance(left: Set<string>, right: Set<string>): number {
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared++;
+  return shared / Math.max(1, left.size + right.size - shared);
+}
+
+interface Leftover { before: number; after: number }
+
+/** Pair the assertions that an edit left over in a test with as many assertions as before (old index → new index): each old one with the new one that is about
+ * the same thing (the same subject first, then the one that looks most like it). What nothing else explains, an old check and a new one that share their subject with
+ * no other, is paired by how alike the two are and then in the order they stand in, as before; an old check whose subject the new test still has is not paired with an
+ * unrelated line. Returns the pairs in the order of the old ones. */
+function pairLeftovers(oldRaw: string[], newRaw: string[], gone: number[], fresh: number[], language: Language): Leftover[] {
+  // A test with hundreds of leftovers is generated code: its pairs are taken in order, which is what a comparison of that many would come to.
+  if (gone.length * fresh.length > 90_000) return gone.flatMap((index, k) => fresh[k] === undefined ? [] : [{ before: index, after: fresh[k] }]);
+  const oldPaths = gone.map(index => subjectPaths(oldRaw[index], language)), newPaths = fresh.map(index => subjectPaths(newRaw[index], language));
+  const oldTokens = gone.map(index => statementTokens(oldRaw[index])), newTokens = fresh.map(index => statementTokens(newRaw[index]));
+  const oldSubject = gone.map(index => checkedExpression(oldRaw[index], language)), newSubject = fresh.map(index => checkedExpression(newRaw[index], language));
+  const candidates: { a: number; b: number; score: number }[] = [];
+  const explainedGone = new Set<number>(), explainedFresh = new Set<number>();
+  for (let a = 0; a < gone.length; a++) {
+    for (let b = 0; b < fresh.length; b++) {
+      if (!sameSubject(oldPaths[a], newPaths[b])) continue;
+      explainedGone.add(a); explainedFresh.add(b);
+      candidates.push({ a, b, score: (oldSubject[a] !== null && oldSubject[a] === newSubject[b] ? 10 : 0) + resemblance(oldTokens[a], newTokens[b]) });
+    }
+  }
+  candidates.sort((x, y) => y.score - x.score || Math.abs(x.a - x.b) - Math.abs(y.a - y.b) || x.a - y.a);
+  const pairedGone = new Set<number>(), pairedFresh = new Set<number>(), pairs: Leftover[] = [];
+  for (const { a, b } of candidates) {
+    if (pairedGone.has(a) || pairedFresh.has(b)) continue;
+    pairedGone.add(a); pairedFresh.add(b); pairs.push({ before: gone[a], after: fresh[b] });
+  }
+  let restGone = gone.map((_, a) => a).filter(a => !explainedGone.has(a)), restFresh = fresh.map((_, b) => b).filter(b => !explainedFresh.has(b));
+  // What nothing explains is paired by how alike the two are (`demo_set["set_name"] == "..."` and `demo_set["type"] == "..."`), then in the order it stands in.
+  const alike: { a: number; b: number; score: number }[] = [];
+  for (const a of restGone) for (const b of restFresh) { const score = resemblance(oldTokens[a], newTokens[b]); if (score > 0) alike.push({ a, b, score }); }
+  alike.sort((x, y) => y.score - x.score || Math.abs(x.a - x.b) - Math.abs(y.a - y.b) || x.a - y.a);
+  for (const { a, b } of alike) {
+    if (pairedGone.has(a) || pairedFresh.has(b)) continue;
+    pairedGone.add(a); pairedFresh.add(b); pairs.push({ before: gone[a], after: fresh[b] });
+  }
+  restGone = restGone.filter(a => !pairedGone.has(a)); restFresh = restFresh.filter(b => !pairedFresh.has(b));
+  restGone.forEach((a, k) => { if (restFresh[k] !== undefined) pairs.push({ before: gone[a], after: fresh[restFresh[k]] }); });
+  return pairs.sort((x, y) => x.before - y.before);
+}
+
 /** Compare a test file's behavior-checking surface before and after a change. */
 export function analyzeTestFile(oldPath: string, newPath: string, oldText: string | null, newText: string | null, commit: string): FileTampering {
   const language = languageOf(newText === null ? oldPath : newPath);
@@ -692,9 +867,11 @@ export function analyzeTestFile(oldPath: string, newPath: string, oldText: strin
     if (current.assertions.length === old.assertions.length && old.assertions.length > 0) {
       // An assertion that is still there, wherever it moved to inside the test, is not part of the change: pair what is left.
       const goneIndexes = unmatchedIndexes(old.assertions, current.assertions), freshIndexes = unmatchedIndexes(current.assertions, old.assertions);
-      const changed = goneIndexes.map((index, k) => ({ before: old.assertions[index], after: current.assertions[freshIndexes[k]], rawBefore: old.raw[index], rawAfter: current.raw[freshIndexes[k]] }))
-        .filter(pair => pair.after !== undefined);
-      const weaker = changed.find(pair => isWeaker(pair.rawBefore, pair.rawAfter, language));
+      const changed = pairLeftovers(old.raw, current.raw, goneIndexes, freshIndexes, language)
+        .map(pair => ({ before: old.assertions[pair.before], after: current.assertions[pair.after], rawBefore: old.raw[pair.before], rawAfter: current.raw[pair.after] }));
+      // A compound check turned into a weaker one is not weakened when every clause it lost is about something that the new test still pins exactly: the clause was
+      // edited into another value or moved, not given up.
+      const weaker = changed.find(pair => isWeaker(pair.rawBefore, pair.rawAfter, language) && !(language === "py" && droppedClausesStillPinned(pair.rawBefore, pair.rawAfter, current.raw)));
       if (weaker) {
         result.immediate.push(finding("assertion-weakened", newPath, current.line,
           `${old.name}: ${weaker.rawBefore.slice(0, 80)} → ${weaker.rawAfter.slice(0, 80)}`, "Assertion replaced by a weaker check", commit));
@@ -726,6 +903,21 @@ export function isTestMarker(finding: Infraction): boolean {
   return finding.type === "test-skip" && /\.(?:py|[cm]?[jt]sx?|rs|go)$/i.test(finding.file ?? "");
 }
 
+/** Whether line `index` is part of a decorator: it starts with `@`, or an earlier `@` line has a bracket that is still open there
+ * (`marks=` inside `@pytest.mark.parametrize(...)`). */
+function inDecorator(lines: string[], index: number): boolean {
+  if (/^\s*@/.test(lines[index] ?? "")) return true;
+  for (let i = index - 1; i >= 0 && i > index - 200; i--) {
+    if (/^\s*@/.test(lines[i])) {
+      let depth = 0;
+      for (let j = i; j < index; j++) depth += balance(lines[j]);
+      return depth > 0;
+    }
+    if (/^\s*(?:async\s+)?(?:def|class)\s/.test(lines[i])) return false;
+  }
+  return false;
+}
+
 /** The test a marker applies to: the `def` below a decorator or a `marks=` argument, the `def` around a `pytest.skip()`, the title of a
  * JavaScript registration, the `fn` below a Rust attribute, the `func Test...` around a Go `t.Skip()`. Null when it applies to more than
  * one test (`pytestmark`), to a test with no title on the line, or to a parametrized table. */
@@ -743,7 +935,10 @@ function markedTest(finding: Infraction, lines: string[]): { key: string; title:
       }
       return null;
     }
-    // A marker, its arguments and any further decorators come before the `def` they belong to.
+    // A marker, its arguments and any further decorators come before the `def` they belong to. A marker that is not part of a decorator
+    // (a `marks = [...]` in a helper that builds parameters, a list at module level) belongs to no `def` below it: how far the next one
+    // happens to be says nothing, and a reformatting that moves it across the window of 80 lines must not make the marker look new.
+    if (!inDecorator(lines, index)) return null;
     for (let i = index; i < lines.length && i < index + 80; i++) {
       const def = /^\s*(?:async\s+)?def\s+(\w+)\s*\(/.exec(lines[i]);
       if (def) return { key: `py:${def[1]}`, title: def[1] };
