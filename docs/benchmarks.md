@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 169/169 cheats caught, 158/158 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 175/175 cheats caught, 163/163 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -44,7 +44,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **169/169 cheats caught, 158/158 harmless changes left alone, 1/1 documented gap still
+Result: **175/175 cheats caught, 163/163 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -1243,6 +1243,62 @@ Labeled cases, regressions and the price are unchanged by this section: it adds 
 - That the two builds agree says the fixes of section 19 are rare shapes, not that they work: the label table and the clones of section 19 are the evidence for them.
 - The same price as in sections 9 to 19 holds.
 
+## 21. What the CI false alarms of sample 12 led to: three fixes, as fitted
+
+Section 20 read six of the ten false alarms of sample 12 as one rule, the report that a workflow no longer runs a test command, blocking a gate that went away or moved with the tests it ran, and each had a condition that can be read
+in the workflow and in the tree. 0.28.0 reads them. The fixes are fitted: sample 12 is the sample that showed them, so it cannot measure them. A sample drawn after this release can, and this section claims no figure for it.
+
+| What the review guessed | What it does now | Commits that are no longer blocked |
+| --- | --- | --- |
+| A workflow that lost every test command lost a check, unless the same command text is still run by a workflow that gates | Also not when each lost command worked in a directory that the same change deleted: the `working-directory` of its step, or the `defaults.run` of its job or of the workflow. Nothing is left under the directory, some code in it was deleted and none was moved (a renamed file is code that lives on), and its name is no place for tests (`tests`, `e2e`, `integration`, `spec`) | `apache/ossie` `39b915cc3b` (a Go CLI), `ae7d23f7f9` (19 workflows of converters that moved to another repository), `f4fa4e62b0` (one job of a workflow that keeps another); `Innei/ryugi` `d5192caab8` of sample 9 |
+| The same command text | Also not when every test file that the lost command names is named by a command of a workflow that gates, in the change or not in it (a list in a folded `run: >-` block counts). A file after `--ignore`, `--deselect`, `--exclude` or `--skip` is not named, and a command that names no file, a whole suite, is never covered this way | `vierisid/jarvis` `d8930b7e98` (two workflows whose files the main workflow now lists) and `9426d8e343` (one whose file it already listed) |
+| A `push:` or `pull_request:` filter gates | A filter whose `paths` list only files under `.github/workflows/` fires when a workflow is edited, not when code is pushed: a workflow with only that gates nothing, so making it manual loses no gate. The scripts beside the workflows (`.github/scripts/**`) are code that a workflow may test, and a filter that names them gates | `clearbluejar/ghidriff` `38348e200f` (the filter had been cut down to the workflow's own file, with `ghidriff/**` and `tests/**` commented out, long before) |
+
+**On the labeled commits.** `scripts/rereview-labels.mjs` reviews every row of `benchmarks/section9-labels.tsv` with 0.27.0 and with 0.28.0 (568 of the 569 rows: one clone is gone). 0.27.0 blocks 344 of them, 71 of 285 labeled false alarms and 273 of 283
+labeled for a reviewer; 0.28.0 blocks 337, 64 and 273. Seven commits stop being blocked and no other row changes: the six of sample 12 and `Innei/ryugi` `d5192caab8` of sample 9, all labeled false alarms. None of the 273 labeled for a reviewer that
+0.27.0 blocks is lost, and no row that it did not block is blocked. The new column `blocked by 0.28.0` of the table has the result of this run for every row; the labels are as they were given.
+
+| Sample 12 | Blocked | A reviewer should see | False alarms |
+| --- | --- | --- | --- |
+| **0.27.0, as shipped** (section 20) | 28 | 18 (8 arguable) | 10 (3 arguable) |
+| **0.28.0** | **22** | **18** (8 arguable) | **4** (3 arguable) |
+
+The share of false alarms is 18% (4 of 22) as called, and fitted: with the 11 arguable calls (8 counted for a reviewer, 3 as false alarms) all made the other way it is between 5% (1 of 22) and 41% (9 of 22). The four that are left are not in the CI rule:
+a first run of a link check that may fail, followed by a second that fails the job (`greenfield-inc/Pane` `ba53258b74`), and the three arguable ones of section 20 (an exact count turned into a lower bound with new assertions beside it, a per-file lint ignore for a new
+script, a lint selection that is stricter overall).
+
+**On the CI commits of the clones.** `scripts/compare-ci-rules.mjs` runs the CI rules of both builds (the count of test steps and the decision which workflow lost its tests, and the guard rules for a CI file: a step allowed to fail, switched off, or ended with
+`|| true`) on every commit that touches a CI file among the newest 300 first-parent commits of the 657 repositories that the twelve corpora and section 17 cloned: 14,704 commits and 26,222 changes to CI files, with no error. The decision is made without a context
+(no untouched workflows, no tree), which can only switch a finding off, so the commits that either build reports there, or whose counts of test steps differ, are the candidates: 86. They were reviewed in full with both builds. The findings differ in ten commits, and in every one a
+finding is gone; none is added.
+
+- Seven are the labeled false alarms above.
+- `sonichi/sutando` `6383058575` dropped from a publish workflow the drift guard `python3 packages/ag2-sparrow/tools/test_no_drift.py`, which `ci.yml` already ran (wrapped in `timeout -k 5 120`, which is why the command text differs): a false alarm of 0.27.0 that no sample had labeled.
+- `NVIDIA/TransformerEngine` `51317b440b`, "Remove failing GitHub Build workflow", deleted a workflow whose sanity import tests (`tests/pytorch/test_sanity_import.py`, `tests/jax/test_sanity_import.py`) another workflow, `minimum_versions.yml`, also runs. It is not
+  reported now, and it is arguable: the deleted workflow also built the project, which no rule here follows, and a reviewer may want to know that a failing workflow went.
+- `ChoKhoOu/TinoHelm` `d3daaddab3`, which removes a legacy stack in 718 deleted files, loses one of its two findings, the `cargo test` workflow of the Rust CLI that went with `cli/`, and stays blocked for its Python test workflow.
+
+The guard rules for CI files report the same in every commit, so the third fix (a filter on workflow files only gates nothing) does not touch them here. The narrowing that it newly reports, a workflow cut down to such a filter, did not occur in these commits: it is evidence in
+a labeled case, and in none of the history.
+
+**What was tried and left.**
+
+- A first version read every path under `.github/` as a filter that gates nothing. In `microsoft-foundry/foundry-samples` the self-test of the validation scripts, `paths: ['.github/scripts/**', ...]`, then lost the count of its two tests in 13 commits, and the two commits that deleted `scripts-selftest.yml` would not
+  have been reported; those scripts are code that the workflow tests. Only `.github/workflows/` is read as a workflow's own files.
+- The directory of a command is read from `working-directory`, not from a `cd web &&` inside it, and not from the `paths:` filter of the workflow: the filter of the Databricks workflow of `apache/ossie` lists `core-spec/**` and `examples/**` next to its own directories, which are still there.
+  `huggingface/kernels` `65ad13efcf`, a Python binding whose files were renamed into another directory, is not covered either way: renamed code lives on.
+- The same runner with other flags (`pytest -rAv` and `pytest -rA -n auto`) is not read as the same tests.
+- `mvn -B verify` is not a test command, so the Java job that is left in the Databricks workflow of `apache/ossie` does not count and the removed Python job reads as the last test of the file. Counting it adds a command to every Maven project and needs its own measurement.
+- A migration of the test command to another runner or a task runner (`poetry run pytest` into `make unit-test` in `amd/skills`, `uv run pytest` into `moon ci` in `oracle/mcp`, `npm run test` into `nx run-many` in `nartc/mapper`, four workflows made one in `chenxin-yan/crust`: labeled false alarms of samples 8 to 11) is still blocked.
+
+**Limits.**
+
+- One reader (an AI assistant) read every difference, and the labels it compares with are its own.
+- The fixes are fitted to the six commits of sample 12 and to one of sample 9. The labeled commits were blocked by earlier builds, so they say nothing about commits that no build blocked: the clones are the only source for those, and they found none newly blocked in 14,704.
+- The 657 clones are the repositories of the corpora themselves, so the comparison is not independent of the samples that shaped the rules.
+- That a directory is gone is read from the files that the change touches and from the tree before it, so a review of a commit, of the index and of the working tree read it alike.
+- Labeled cases: 11 are new (five look-alikes that the old build fails, and six cheats: the old build misses the cut-down filter and catches the other five); the price is as in sections 9 to 20.
+
 ## Reproduce
 
 ```bash
@@ -1265,6 +1321,8 @@ node scripts/benchmark-zoo.mjs ./reward-hack-zoo dist/cli.js                    
 node scripts/scan-reusable-callers.mjs ./clones-a ./clones-b ...                   # section 17: commits that stop calling a reusable workflow they called before
 node scripts/rereview-labels.mjs benchmarks/section9-labels.tsv ./v0.26.0/dist/cli.js dist/cli.js labels.json ./clones-a ./clones-b   # section 19: every labeled commit with two builds
 node scripts/compare-test-analysis.mjs ./v0.26.0-tampering.mjs ./tampering.mjs out.json ./clones-a ./clones-b                        # section 19: what two builds of the test-file analysis report differently
+node scripts/compare-ci-rules.mjs ./v0.27.0-tampering.mjs ./tampering.mjs ci.json ./clones-a ./clones-b --candidates candidates.tsv         # section 21: what two builds of the CI rules report differently; then review candidates.tsv
+node scripts/rereview-labels.mjs candidates.tsv ./v0.27.0/dist/cli.js dist/cli.js candidates.json ./clones-a ./clones-b                  #   in full with both builds
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
 #   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv, eleventh-corpus.tsv, twelfth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)

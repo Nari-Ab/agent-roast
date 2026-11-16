@@ -1,11 +1,11 @@
 import path from "path";
 import { applyExceptions } from "./exceptions.js";
 import { auditFileDiffs, isCodeFile, isTestFile } from "./metrics.js";
-import { analyzeGuardFile, analyzeTestFile, ciTestSteps, enforcedTestCommands, gatingCalls, lostCalls, resolveLostCallers, isGuardFile, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
+import { analyzeGuardFile, analyzeTestFile, ciTestSteps, enforcedTestCommands, enforcedTestFiles, gatingCalls, lostCalls, resolveLostCallers, isGuardFile, isTestDirectory, isTestMarker, newTestMarkers, resolveCiTestSteps, resolveTampering } from "./tampering.js";
 import type { CiTestCount, FileTampering } from "./tampering.js";
 import { findingFingerprint } from "./baseline.js";
 import { ConfigError, CONFIG_FILENAMES, configFromText } from "./config.js";
-import { assertNotAborted, changedTreeFiles, ciFilesAt, readBlob, reviewPolicy, reviewRefs, stagedSnapshot, worktreeSnapshot } from "./snapshot.js";
+import { assertNotAborted, changedTreeFiles, ciFilesAt, filesUnder, readBlob, reviewPolicy, reviewRefs, stagedSnapshot, worktreeSnapshot } from "./snapshot.js";
 import type { TreeChange, WorktreeSnapshot } from "./snapshot.js";
 import { formatReviewMarkdown, formatReviewTerminal, formatGithubAnnotations } from "./renderer.js";
 import { formatSarif } from "./sarif.js";
@@ -192,7 +192,7 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
   // A workflow that lost its test steps may only have been a duplicate, or one that another workflow calls: the test commands that the workflows this change did not touch still run,
   // and the workflows that they call (next to the ones that the workflows of this change call), are read only then; so is the content of a reusable workflow
   // this change stops calling, when that workflow is itself untouched.
-  const elsewhere = new Set<string>(), called = new Set<string>(calledInChange);
+  const elsewhere = new Set<string>(), filesElsewhere = new Set<string>(), called = new Set<string>(calledInChange);
   const untouchedLostCallerContent = new Map<string, string>();
   if (ciCounts.some(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0) || lostCalledWorkflows.size > 0) {
     const touched = new Set(changes.flatMap(change => [change.oldPath, change.newPath]));
@@ -204,6 +204,7 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
         try {
           const text = new TextDecoder().decode(await readBlob(cwd, file.oid, options.signal, 512 * 1024));
           for (const command of enforcedTestCommands(file.path, text)) elsewhere.add(command);
+          for (const name of enforcedTestFiles(file.path, text)) filesElsewhere.add(name);
           for (const workflow of gatingCalls(file.path, text)) called.add(workflow);
           if (lostCalledWorkflows.has(file.path)) untouchedLostCallerContent.set(file.path, text);
         }
@@ -211,7 +212,22 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
       }
     } catch (error) { assertNotAborted(options.signal); }
   }
-  const ciFindings = resolveCiTestSteps(ciCounts, refs.headSha, elsewhere, called);
+  // The directories that a lost test command worked in and that this change deleted: nothing is left in them, some of the code that was there was deleted, and none was moved (code that moved lives on, and
+  // its tests with it; a directory of tests holds no code to test). The tree is read only for a directory of a command that nothing else still runs.
+  const gone = new Set<string>();
+  const worked = new Set(ciCounts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0).flatMap(item => item.directoriesBefore ?? []).filter((dir): dir is string => dir !== null && !isTestDirectory(dir)));
+  if (worked.size > 0) {
+    const codeOf = (prefix: string) => changes.filter(change => change.status.startsWith(prefix) && isCodeFile(change.oldPath) && !isTestFile(change.oldPath)).map(change => change.oldPath);
+    const deletedCode = codeOf("D"), movedCode = codeOf("R");
+    const leaving = new Set(changes.filter(change => /^[DR]/.test(change.status)).map(change => change.oldPath));
+    for (const dir of worked) {
+      const inside = (file: string) => file.startsWith(`${dir}/`);
+      if (!deletedCode.some(inside) || movedCode.some(inside) || changes.some(change => !change.status.startsWith("D") && inside(change.newPath))) continue;
+      try { if ((await filesUnder(cwd, refs.mergeBaseSha, dir, options.signal)).every(file => leaving.has(file))) gone.add(dir); }
+      catch (error) { assertNotAborted(options.signal); }
+    }
+  }
+  const ciFindings = resolveCiTestSteps(ciCounts, refs.headSha, elsewhere, called, gone, filesElsewhere);
   // A reusable workflow already flagged above (its own trigger changed in this diff) is not flagged again here for the same loss.
   const alreadyFlagged = new Set(ciFindings.map(found => found.file));
   const lostCallers = new Map<string, { content: string; stillCalled: boolean }>();

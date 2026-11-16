@@ -157,6 +157,13 @@ export async function ciFilesAt(cwd: string, sha: string, signal?: AbortSignal):
   });
 }
 
+/** The files of a commit's tree under a directory, as repository paths; empty when there are none, or for a commit that does not exist yet. */
+export async function filesUnder(cwd: string, sha: string, directory: string, signal?: AbortSignal): Promise<string[]> {
+  if (!/^[a-f0-9]{40,64}$/.test(sha)) return [];
+  const raw = await readGit(cwd, ["ls-tree", "-r", "-z", "--name-only", "--full-tree", sha, "--", directory], signal, 4 * 1024 * 1024);
+  return raw.toString().split("\0").filter(Boolean).filter(file => file.startsWith(`${directory}/`));
+}
+
 /** Policy comes from the explicitly supplied base branch tip, not the candidate tree. */
 export async function reviewPolicy(cwd: string, baseSha: string, signal?: AbortSignal): Promise<{ config: AgentRoastConfig; filename: string | null }> {
   const raw = await readGit(cwd, ["ls-tree", "--full-tree", "-z", baseSha, "--", ...CONFIG_FILENAMES], signal, 8192);

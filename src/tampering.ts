@@ -1173,7 +1173,9 @@ const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
 
-export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number; commandsBefore?: string[]; commandsAfter?: string[] }
+/** `directoriesBefore` and `filesBefore` go with `commandsBefore`, one for each: the directory that the command worked in (see `entryDirectory`), null where it is the root or none is named, and the test files it names;
+ * `filesAfter` are the test files that the commands of the new text name. */
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number; commandsBefore?: string[]; commandsAfter?: string[]; directoriesBefore?: Array<string | null>; filesBefore?: string[][]; filesAfter?: string[] }
 
 // A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
 const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
@@ -1192,22 +1194,44 @@ function gatesChanges(file: string, text: string): boolean {
   return section !== null && triggers !== section ? false : !CI_NON_GATE.test(triggers);
 }
 
-/** The trigger section of a workflow without its `push:` blocks that fire on tags alone: `push: tags: ['v*']` runs when a version is released,
- * not when a change is pushed or reviewed. A `push:` with `branches` (or `branches-ignore`) stays, and so does one with no filter at all. */
+/** The trigger section of a workflow without the blocks that fire on no change to judge: a `push:` on tags alone (`push: tags: ['v*']` runs when a version is released, not when a change is pushed
+ * or reviewed), and a `push:` or `pull_request:` whose `paths` name only files under `.github/workflows/` (it runs when a workflow is edited, not when code is pushed: the usual leftover of a workflow
+ * whose `ghidriff/**` and `tests/**` were commented out). A `push:` with `branches` (or `branches-ignore`) stays, and so does one with no filter at all. */
 function gatingTriggers(text: string): string | null {
   const section = triggerSection(text);
   if (section === null) return null;
   const lines = section.split(/\r?\n/), kept: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    const head = /^(\s*)push\s*:\s*(?:#.*)?$/.exec(lines[i]);
+    const head = /^(\s*)(push|pull_request|pull_request_target)\s*:\s*(?:#.*)?$/.exec(lines[i]);
     if (!head) { kept.push(lines[i]); continue; }
     let end = i + 1;
     while (end < lines.length && (!lines[end].trim() || lines[end].search(/\S/) > head[1].length)) end++;
-    const block = lines.slice(i + 1, end).join("\n");
-    if (!(/^\s*tags\s*:/m.test(block) && !/^\s*branches(?:-ignore)?\s*:/m.test(block))) kept.push(...lines.slice(i, end));
+    const block = lines.slice(i + 1, end), body = block.join("\n");
+    const tagsOnly = head[2] === "push" && /^\s*tags\s*:/m.test(body) && !/^\s*branches(?:-ignore)?\s*:/m.test(body);
+    if (!tagsOnly && !onlyWorkflowPaths(block)) kept.push(...lines.slice(i, end));
     i = end - 1;
   }
   return kept.join("\n");
+}
+
+/** Whether the `paths` filter inside a trigger block lists files under `.github/workflows/` and nothing else (comments and `!` exclusions left out): a trigger that fires only when a workflow is edited.
+ * The scripts and the actions beside the workflows (`.github/scripts/**`) are code that the workflow may test: a filter with those gates. */
+function onlyWorkflowPaths(block: string[]): boolean {
+  const at = block.findIndex(line => /^\s*paths\s*:/.test(line));
+  if (at < 0) return false;
+  const inline = /^\s*paths\s*:\s*\[(.*)\]\s*(?:#.*)?$/.exec(block[at]);
+  const entries: string[] = inline ? inline[1].split(",") : [];
+  if (!inline) {
+    const indent = indentOf(block[at]);
+    for (const line of block.slice(at + 1)) {
+      if (!line.trim() || line.trim().startsWith("#")) continue;
+      const item = /^(\s*)-\s+(.*)$/.exec(line);
+      if (!item || item[1].length < indent) break;
+      entries.push(item[2]);
+    }
+  }
+  const paths = entries.map(entry => entry.replace(/\s#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2")).filter(entry => entry && !entry.startsWith("!"));
+  return paths.length > 0 && paths.every(entry => entry.startsWith(".github/workflows/"));
 }
 
 /** The trigger section of a workflow: the lines under a top-level `on:` up to the next top-level key, so that `push: true` in the `with:` of a
@@ -1225,18 +1249,133 @@ function triggerSection(text: string): string | null {
  * each followed by the directories the workflow says it works in (`working-directory: web`): the same command in two services of a monorepo is
  * two checks. Empty for a workflow that gates nothing. `skip` leaves out the commands that stand on the lines (counted from 0) it says yes to. */
 export function gatingTestCommands(file: string, text: string, skip?: (line: number) => boolean): string[] {
+  return gatingTestEntries(file, text, skip).map(entry => entry.command);
+}
+
+/** A test command as `gatingTestCommands` writes it, with the one directory it works in (`working-directory` of its step, else of its job's `defaults`, else of the workflow's; null for the root of the
+ * repository, for a directory that an expression fills in, and where none is named) and the test files it names (see `entryFiles`), as paths of the repository. */
+interface GatingEntry { command: string; directory: string | null; files: string[] }
+
+function gatingTestEntries(file: string, text: string, skip?: (line: number) => boolean): GatingEntry[] {
   if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
   const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
-  return ciTestEntries(text).filter(entry => !skip?.(entry.index))
-    .map(entry => `${entry.command.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`);
+  const lines = text.split(/\r?\n/), scopes = directoryScopes(lines);
+  return ciTestEntries(text).filter(entry => !skip?.(entry.index)).map(entry => {
+    const directory = entryDirectory(lines, entry.index, scopes);
+    return {
+      command: `${entry.command.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`,
+      directory,
+      // as paths of the repository: `tests/a.test.ts` run in `web` is not `tests/a.test.ts` run in `api`
+      files: entryFiles(lines, entry.index).map(file => directory === null ? file : `${directory}/${file}`),
+    };
+  });
+}
+
+/** The test files named by the command that starts on line `index`: that line and what continues it: the lines after one that ends with a backslash, and the rest of a folded block (`run: >-` is one command
+ * over all its lines, so `bun test --retry=2` and the lines of file names below it are one). */
+function entryFiles(lines: string[], index: number): string[] {
+  let text = lines[index];
+  for (let next = index; /\\\s*$/.test(lines[next]) && next + 1 < lines.length; next++) text += ` ${lines[next + 1]}`;
+  let holder = index - 1;
+  while (holder >= 0 && (skipped(lines[holder]) || indentOf(lines[holder]) >= indentOf(lines[index]))) holder--;
+  if (holder >= 0 && COMMAND_BLOCK.exec(lines[holder])?.[3] === ">") {
+    for (let next = index + 1; next < lines.length && (skipped(lines[next]) || indentOf(lines[next]) > indentOf(lines[holder])); next++) if (!skipped(lines[next])) text += ` ${lines[next].trim()}`;
+  }
+  return commandTargets(text);
 }
 
 /** The test commands of a workflow that check something: the ones that stand in a step or a job that is allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing,
  * so they are no check that is lost when they go, and no check that is still run when another workflow loses its tests. They are left out by the line they stand on, not by their text: the same command in
  * a step that gates (a stable job next to a nightly one that may fail) is still counted. */
 export function enforcedTestCommands(file: string, text: string): string[] {
+  return enforcedTestEntries(file, text).map(entry => entry.command);
+}
+
+function enforcedTestEntries(file: string, text: string): GatingEntry[] {
   const tolerated = [...lenientSteps(text).values()].filter(step => step.runsChecks).flatMap(step => step.ranges);
-  return gatingTestCommands(file, text, line => tolerated.some(([from, to]) => line >= from && line < to));
+  return gatingTestEntries(file, text, line => tolerated.some(([from, to]) => line >= from && line < to));
+}
+
+/** The test files that the commands of a workflow which check something name (see `enforcedTestCommands` and `commandTargets`). */
+export function enforcedTestFiles(file: string, text: string): string[] {
+  return enforcedTestEntries(file, text).flatMap(entry => entry.files);
+}
+
+const skipped = (line: string): boolean => !line.trim() || line.trim().startsWith("#");
+
+/** A `working-directory` value as a directory of the repository: without quotes, a leading `./` or a trailing `/`. Null for the root, a path outside the repository, one that an expression fills in
+ * (`${{ matrix.package }}`) and one that Git would read as a pathspec (`:(icase)cli`): the commands that run there say nothing about which code they test. */
+function repositoryDirectory(value: string): string | null {
+  const bare = value.replace(/\s#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2").replace(/^(?:\.\/)+/, "").replace(/\/+$/, "");
+  return bare && bare !== "." && !/[${}*~\\]|^[/:]|(?:^|\/)\.\.(?:\/|$)/.test(bare) ? bare : null;
+}
+
+/** Where the jobs of a workflow are: for each line the line of the key of the job that holds it (-1 outside the jobs), the `defaults.run` directory that the workflow names, and the ones of its jobs as they are
+ * asked for. One pass, so that a workflow with thousands of test commands is not read again for each. */
+interface DirectoryScopes { jobOf: Int32Array; workflow: string | null; jobs: Map<number, string | null | undefined> }
+
+function directoryScopes(lines: string[]): DirectoryScopes | null {
+  const at = lines.findIndex(line => /^jobs\s*:\s*(?:#.*)?$/.test(line));
+  const first = at < 0 ? undefined : lines.slice(at + 1).find(line => !skipped(line));
+  if (first === undefined) return null;
+  // The key of a job is a key at the indent of the first job; a line at a smaller indent ends the jobs.
+  const level = indentOf(first), jobOf = new Int32Array(lines.length).fill(-1);
+  let current = -1;
+  for (let i = at + 1; i < lines.length; i++) {
+    if (!skipped(lines[i])) {
+      if (indentOf(lines[i]) < level) current = -1;
+      else if (indentOf(lines[i]) === level && /^\s*[\w.-]+\s*:/.test(lines[i])) current = i;
+    }
+    jobOf[i] = current;
+  }
+  return { jobOf, workflow: defaultDirectory(lines, 0, at) ?? null, jobs: new Map() };
+}
+
+/** The `working-directory` that a test command runs in. A step's own comes first (a key of the step, not an input of an action under `with:`), then the `defaults.run` of its job, then the one of the workflow.
+ * The directory is null when none is named or the one that is named cannot be read: the nearest key decides, a step with `working-directory: ${{ matrix.dir }}` does not run in the default of its job. */
+function entryDirectory(lines: string[], index: number, scopes: DirectoryScopes | null): string | null {
+  const own = stepDirectory(lines, index);
+  if (own !== undefined) return own;
+  const job = scopes?.jobOf[index] ?? -1;
+  if (scopes === null || job < 0) return null;
+  if (!scopes.jobs.has(job)) {
+    // `defaults.run.working-directory` of the job: outside its `steps`, where a matrix may name the same key for other reasons.
+    let end = job + 1;
+    while (end < lines.length && scopes.jobOf[end] === job) end++;
+    const steps = lines.slice(job, end).findIndex(line => /^\s*steps\s*:\s*(?:#.*)?$/.test(line));
+    scopes.jobs.set(job, defaultDirectory(lines, job, steps < 0 ? end : job + steps));
+  }
+  const named = scopes.jobs.get(job);
+  return named !== undefined ? named : scopes.workflow;
+}
+
+/** The `working-directory` of the step that line `index` belongs to (a command of a `run: |` block stands a level below the key of the step); undefined when the step names none. */
+function stepDirectory(lines: string[], index: number): string | null | undefined {
+  // The step is the list item that encloses the line: the nearest one above it, among the lines that stand at a smaller indent than the line or than the key that holds it.
+  let start = /^\s*-\s/.test(lines[index]) ? index : -1, limit = indentOf(lines[index]);
+  for (let i = index - 1; start < 0 && i >= 0 && limit > 0; i--) {
+    if (skipped(lines[i]) || indentOf(lines[i]) >= limit) continue;
+    if (/^\s*-\s/.test(lines[i])) start = i; else limit = indentOf(lines[i]);
+  }
+  if (start < 0) return undefined;
+  const keys = /^(\s*-\s+)/.exec(lines[start])![1].length;
+  for (let i = start; i < lines.length && (i === start || skipped(lines[i]) || indentOf(lines[i]) > indentOf(lines[start])); i++) {
+    const key = /^working-directory\s*:\s*(.*)$/.exec(i === start ? lines[i].slice(keys) : indentOf(lines[i]) === keys ? lines[i].trim() : "");
+    if (key) return repositoryDirectory(key[1]);
+  }
+  return undefined;
+}
+
+/** The `defaults: run: working-directory:` between lines `from` and `to`; undefined when there is none. */
+function defaultDirectory(lines: string[], from: number, to: number): string | null | undefined {
+  for (let i = from; i < to; i++) {
+    const key = /^\s*working-directory\s*:\s*(.*)$/.exec(lines[i]);
+    if (!key || skipped(lines[i])) continue;
+    const parents = [];
+    for (let j = i - 1; j >= from && parents.length < 2; j--) if (!skipped(lines[j]) && indentOf(lines[j]) < indentOf(lines[i]) && (!parents.length || indentOf(lines[j]) < indentOf(parents.at(-1)!))) parents.push(lines[j]);
+    if (/^\s*run\s*:\s*(?:#.*)?$/.test(parents[0] ?? "") && /^\s*defaults\s*:\s*(?:#.*)?$/.test(parents[1] ?? "")) return repositoryDirectory(key[1]);
+  }
+  return undefined;
 }
 
 function matchingLines(text: string, pattern: RegExp | ((line: string) => boolean)): number {
@@ -1249,9 +1388,13 @@ export function ciTestSteps(file: string, oldText: string | null, newText: strin
   if (!CI_FILE.test(file) || (oldText === null && newText === null)) return null;
   const was = oldText ?? "", now = newText ?? ""; // a deleted workflow runs no tests; a new one may take over another's
   // A test step that was already allowed to fail or switched off checked nothing, so it is no check that is lost when it goes. One that is made so by this change is the other rule's finding, not this one's.
-  const commandsBefore = enforcedTestCommands(file, was), commandsAfter = gatingTestCommands(file, now);
+  const entriesBefore = enforcedTestEntries(file, was), entriesAfter = gatingTestEntries(file, now);
+  const commandsBefore = entriesBefore.map(entry => entry.command), commandsAfter = entriesAfter.map(entry => entry.command);
   const after = commandsAfter.length;
-  return { file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter };
+  return {
+    file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter,
+    directoriesBefore: entriesBefore.map(entry => entry.directory), filesBefore: entriesBefore.map(entry => entry.files), filesAfter: entriesAfter.flatMap(entry => entry.files),
+  };
 }
 
 /** The workflows that a workflow which gates calls (`uses: ./.github/workflows/sdk.yml`), as repository paths: their jobs run on every change that the caller runs on, whatever their own triggers are. */
@@ -1290,18 +1433,40 @@ export function resolveLostCallers(lost: ReadonlyMap<string, { content: string; 
   return out;
 }
 
+/** The test files that a test command names: `src/a.test.ts` in `bun test --retry=2 src/a.test.ts`, `tests/test_a.py` in `pytest tests/test_a.py::test_x -v`.
+ * A file that a flag leaves out (`--ignore tests/test_b.py`, `--deselect`, `--exclude`) is not named, and neither is one that a flag spells with `=` (`--ignore=tests/test_b.py`). */
+export function commandTargets(command: string): string[] {
+  const words = command.split(/\s+/), found: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    if (/^--?(?:ignore|ignore-glob|deselect|exclude|skip|testPathIgnorePatterns)$/i.test(words[i])) { i++; continue; }
+    const file = words[i].replace(/^["'`(]+|["'`),;]+$/g, "").replace(/^\.\//, "").replace(/::.*$/, "").replace(/:\d+(?::\d+)?$/, "");
+    if (/^[\w@.+-]+(?:\/[\w@.+-]+)*\.[A-Za-z0-9]+$/.test(file) && !file.startsWith("-") && isTestFile(file)) found.push(file);
+  }
+  return found;
+}
+
+/** Whether a directory is a place for tests by its name: `tests`, `e2e`, `integration`, `packages/api/spec`, `cube-tests`. A test command that worked in one is no test of code that was in the same place. */
+export function isTestDirectory(directory: string): boolean {
+  return directory.split("/").some(segment => segment.toLowerCase().split(/[-_.]+/).some(word => /^(?:tests?|testing|specs?|e2e|integration|cypress|playwright|acceptance|functional|qa)$/.test(word)));
+}
+
 /** A workflow that stopped running any tests is reported only when the review as a whole lost test steps:
  * moving them to another workflow, or to a shared one, is not removal, and neither is dropping a duplicate: every test command it ran is still run
- * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch. A workflow that lost its own triggers
+ * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch, or the files it named are named by a command that still runs
+ * (the tests of two small workflows listed in the main one: `filesElsewhere` are the files that the commands of the untouched workflows name), or the code it tested is gone: it worked in a
+ * directory that this change deleted (`gone`, which the caller reads from the tree: nothing is left in it and some of its code was deleted, not moved). A workflow that lost its own triggers
  * because another workflow that this change did not touch calls it (`called`) still runs on every change. */
-export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set(), called: ReadonlySet<string> = new Set()): Infraction[] {
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set(), called: ReadonlySet<string> = new Set(), gone: ReadonlySet<string> = new Set(), filesElsewhere: ReadonlySet<string> = new Set()): Infraction[] {
   const before = counts.reduce((sum, item) => sum + item.before, 0);
   const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
   if (after >= before) return [];
   const running = new Set([...counts.flatMap(item => item.commandsAfter ?? []), ...elsewhere]);
+  const named = new Set([...counts.flatMap(item => item.filesAfter ?? []), ...filesElsewhere]);
+  const stillRuns = (command: string, directory: string | null, files: string[]): boolean =>
+    running.has(command) || (directory !== null && gone.has(directory)) || (files.length > 0 && files.every(file => named.has(file)));
   return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
     .filter(item => !(item.ungatedAfter > 0 && called.has(item.file)))
-    .filter(item => item.commandsBefore === undefined || item.commandsBefore.some(command => !running.has(command)))
+    .filter(item => item.commandsBefore === undefined || item.commandsBefore.some((command, at) => !stillRuns(command, item.directoriesBefore?.[at] ?? null, item.filesBefore?.[at] ?? [])))
     .map(item => item.ungatedAfter > 0
       ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)
       : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
