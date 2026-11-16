@@ -274,7 +274,8 @@ describe("the Stop hook", () => {
     git("checkout", "--", "calc.test.ts");
     expect(run(stop(), "--agent", "claude")).toMatchObject({ status: 0, stdout: "" });
     expect(run(kiroStop(), "--agent", "kiro")).toMatchObject({ status: 0, stdout: "", stderr: "" });
-  });
+    // Eleven node processes one after the other: on a loaded or slow runner that takes longer than the default five seconds (it did on macOS CI).
+  }, 30_000);
 
   it("works as a command in advisory mode: a warning for the person and exit 0", () => {
     weaken();
