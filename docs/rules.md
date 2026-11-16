@@ -140,6 +140,15 @@ list (`NON_CHECK_ACTION` in `src/tampering.ts`) and runs nothing, `continue-on-e
 not on the list, and every `run:` step, still is, because it may be the check. A tolerance that only moved is not new either: a step is not reported when the same commands were
 already inside a job or step allowed to fail (a report job merged into another job, where the step is allowed to fail) and the places allowed to fail did not grow.
 
+A workflow that stopped running a test command is not reported either when the code it tested went with it, when the test files it named are named elsewhere, or when it never gated code; with several lost commands it is
+reported unless each of them is covered, by its directory or by its files. The code went with it when the command worked in a `working-directory` (its step's, or the `defaults.run` of its job or of the workflow; a value that an expression fills in is not read) that the same change deleted: nothing is left under the directory,
+some of the code that was in it was deleted, and none of it was moved (a renamed file is code that lives on, and its tests with it, so a workflow dropped while the component moved is reported). A directory that is a place for tests by its name
+(`tests`, `e2e`, `integration`, `spec`, `cube-tests`) holds no code to test: the suite deleted together with its workflow is reported. The files are named elsewhere when every test file that a lost command names (`bun test src/a.test.ts`,
+`pytest tests/test_a.py::test_x`) is named by a command of a workflow that gates, in the change or not in it, and a list in a folded `run: >-` block counts; a file that follows `--ignore`, `--deselect`, `--exclude` or `--skip` is not named, and a
+command that names no file (a whole suite) is never covered this way. A workflow never gated code when its `push:` or `pull_request:` filter lists only files under `.github/workflows/`, the leftover of one whose `src/**` and `tests/**` were
+commented out: it runs when a workflow is edited and tests nothing of the project, so that going manual loses no gate, and a change that narrows a workflow down to such a filter is reported as a gate lost. The scripts beside the workflows
+(`.github/scripts/**`) are code that a workflow may test, and a filter that names them gates.
+
 More shortcuts of the same kind:
 
 - **A test command that cannot fail in CI.** `npm test || true`, `pytest; exit 0` and `pytest || echo "tests failed"` end the

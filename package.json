@@ -1,6 +1,6 @@
 {
   "name": "agent-roast",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "Stops AI agents (and rushed humans) weakening tests, coverage gates or CI to get a green build. Hook for 8 coding agents, pre-commit, GitHub Action. Offline.",
   "mcpName": "io.github.Nari-Ab/agent-roast",
   "type": "module",
