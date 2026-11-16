@@ -1190,6 +1190,59 @@ findings disappeared. The pairs of what nothing explains are taken in order, as 
 - The 617 clones are the repositories of the corpora themselves, so the comparison is not independent of the samples that shaped the rules.
 - The same price as in sections 9 to 18 holds.
 
+## 20. A twelfth sample, and what 0.27.0 did on it
+
+Section 19 left the fixes of 0.27.0 without a measurement of their own. This is the twelfth sample, drawn after that release the same way as the others (section 9's method, skipping the 665 repositories any earlier corpus used) and
+read with 0.27.0 as shipped, a build frozen from the tag and unchanged while it was read.
+
+**Method.** Sample 12 holds 40 repositories (24 JavaScript or TypeScript, 16 Python), `benchmarks/twelfth-corpus.tsv` with the revision measured, from the search of section 9 (pushed after 2026-10-26, drawn on 2026-11-16, seeds 52 and 53,
+a pool of 502 JavaScript or TypeScript and 243 Python repositories after the names were filtered); 11,061 of the newest commits of their first-parent histories were reviewed against their parents (17 could not be compared in full and
+7 failed to review, and are in no count). 0.26.0 was run on the same commits, so that what the fixes of section 19 do on unseen history can be read as a difference.
+
+| Build | Blocked commits | A reviewer should see | False alarms |
+| --- | --- | --- | --- |
+| **0.26.0, as published** | **28** | 18 (8 arguable) | 10 (3 arguable) |
+| **0.27.0, as shipped** | **28** | **18** (8 arguable) | **10** (3 arguable) |
+
+**The two builds do the same thing here.** They block the same 28 commits in 16 repositories, warn on the same 670, and not one finding differs in either direction: the three fixes of section 19 did not fire on these 11,061 commits. Nothing was lost and no
+false alarm was added, and the sample cannot say whether the fixes help, because none of the three shapes turned up.
+
+**The share.** 10 of the 28 are false alarms: 36% as called, and between 25% (7 of 28) and 54% (15 of 28) when the 11 arguable calls (8 counted for a reviewer, 3 as false alarms) are all made the same way. That is inside the range of the earlier samples
+(27% to 69%). Thirteen of the 28 blocks are in four repositories (`tonaljs/tonal` 4, `vierisid/jarvis` 3, `cassandra/home-information` 3, `apache/ossie` 3).
+
+| What was blocked on sample 12 (0.27.0 as shipped) | Commits |
+| --- | --- |
+| A CI test workflow deleted with nothing in its place (`Zafer-Liu/Data-Analysis-Agent`), or replaced by a pre-push hook that only runs on a machine (`Glass-HQ/liquid-glass`) | 2 |
+| A coverage threshold lowered (`functions` 95 to 90; `branches` 90 to 85 in a commit that also makes publishing run the tests) | 2 |
+| A test switched off: an `it.skip` with a comment that says why, and 14 of them in a commit titled "Skip flaky tests" | 2 |
+| A `test.only` in a new test, which switches off the other tests of the file | 1 |
+| An assertion that cannot fail or says nothing: `or True` (two), and `assert True` in a dummy test that took the place of the deleted legacy tests | 3 |
+| `toEqual` into `toMatchObject` after a result gained a field that another test asserts, not this one; arguable | 4 |
+| `assertTrue(True)` in a new test, or inside tests that already have real checks; arguable | 2 |
+| An exact count of items from a live source into a lower bound, the items still asserted; arguable | 1 |
+| The integration suite and its workflow moved to a private repository while the code stays; arguable | 1 |
+| **False alarm:** a workflow folded into one that still runs its test file, or made manual while three others still run pytest on push and pull request | 3 |
+| **False alarm:** a workflow deleted with the code it tested, or code and tests moved to another repository | 3 |
+| **False alarm:** a first run that may fail, followed by a second run that fails the job | 1 |
+| **False alarm, arguable:** an exact count into a lower bound with new assertions on the order beside it; a per-file lint ignore for a new script; a lint selection that is stricter overall with one rule dropped | 3 |
+
+**What reading it showed, and what is not fixed.** The stop rule held: no source file was changed after the first block was read, so these are for a later version and would be reported as fitted.
+
+- Nine of the ten false alarms are the rules for CI and lint configuration reading a gate that went away or moved with the tests it ran, the same kind as in sections 14 and 15. Five of them have a condition that can be read: the `paths:` filters (or the
+  `working-directory`) of the three `apache/ossie` workflows or jobs name the directories that the same commit deletes, and the test files of the two `vierisid/jarvis` workflows are named by the main test workflow (added by the same commit in one, already there in the other).
+- Four of the 28 are `toEqual` into `toMatchObject` after a result gained a field (7 of 26 in sample 11), the largest kind of arguable block in both samples; the field is asserted in other tests, which the rule cannot see.
+- The rest is what the rules were written for: a lowered threshold, a skip, an `only` left in, a gate deleted, an assertion that cannot fail.
+- Four of the 28 blocked commits carry an explicit AI co-author trailer; this was not counted for the commits that were not blocked and says nothing about how common it is.
+
+Labeled cases, regressions and the price are unchanged by this section: it adds no rule and fixes no code. `benchmarks/section9-labels.tsv` has 569 rows, and the 28 new ones have `yes` in the column `blocked by 0.27.0`.
+
+**Limits.**
+
+- One reader (an AI assistant) read all 28 blocks and made the 11 arguable calls; the labels follow the written precedents of sections 9 to 18, and a different reader could move the share inside the range above.
+- One sample of 40 repositories is a range, not a number, and four repositories hold 13 of the 28 blocks.
+- That the two builds agree says the fixes of section 19 are rare shapes, not that they work: the label table and the clones of section 19 are the evidence for them.
+- The same price as in sections 9 to 19 holds.
+
 ## Reproduce
 
 ```bash
@@ -1213,7 +1266,7 @@ node scripts/scan-reusable-callers.mjs ./clones-a ./clones-b ...                
 node scripts/rereview-labels.mjs benchmarks/section9-labels.tsv ./v0.26.0/dist/cli.js dist/cli.js labels.json ./clones-a ./clones-b   # section 19: every labeled commit with two builds
 node scripts/compare-test-analysis.mjs ./v0.26.0-tampering.mjs ./tampering.mjs out.json ./clones-a ./clones-b                        # section 19: what two builds of the test-file analysis report differently
 node scripts/benchmark-compare.mjs ./work-unseen ./v0.17.0/dist/cli.js dist/cli.js benchmarks/unseen-corpus.tsv   # sections 9 and 10, once per corpus:
-#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv, eleventh-corpus.tsv; summary.json has the blocked commits per repository for both
+#   unseen-corpus.tsv, heldout-corpus.tsv, third-corpus.tsv, fourth-corpus.tsv, fifth-corpus.tsv, sixth-corpus.tsv, seventh-corpus.tsv, eighth-corpus.tsv, ninth-corpus.tsv, tenth-corpus.tsv, eleventh-corpus.tsv, twelfth-corpus.tsv; summary.json has the blocked commits per repository for both
 #   builds and dropped.json the findings that disappeared (`npm install agent-roast@0.17.0` gives the old build)
 ```
 
