@@ -212,22 +212,29 @@ async function compareSnapshot(options: SourceReview, cwd: string, snapshot?: Sn
       }
     } catch (error) { assertNotAborted(options.signal); }
   }
-  // The directories that a lost test command worked in and that this change deleted: nothing is left in them, some of the code that was there was deleted, and none was moved (code that moved lives on, and
-  // its tests with it; a directory of tests holds no code to test). The tree is read only for a directory of a command that nothing else still runs.
-  const gone = new Set<string>();
-  const worked = new Set(ciCounts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0).flatMap(item => item.directoriesBefore ?? []).filter((dir): dir is string => dir !== null && !isTestDirectory(dir)));
-  if (worked.size > 0) {
+  // Prove that each relevant directory lost its code. Explicit unittest discovery can leave documentation and JSON data behind.
+  const gone = new Set<string>(), retiredDiscovery = new Set<string>();
+  const lost = ciCounts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0);
+  const worked = lost.flatMap(item => item.directoriesBefore ?? []);
+  const discovered = new Set(lost.flatMap(item => (item.pathsBefore ?? []).flat()));
+  const scopes = new Set([...worked, ...discovered].filter((dir): dir is string => dir !== null && !isTestDirectory(dir)));
+  if (scopes.size > 0) {
     const codeOf = (prefix: string) => changes.filter(change => change.status.startsWith(prefix) && isCodeFile(change.oldPath) && !isTestFile(change.oldPath)).map(change => change.oldPath);
     const deletedCode = codeOf("D"), movedCode = codeOf("R");
     const leaving = new Set(changes.filter(change => /^[DR]/.test(change.status)).map(change => change.oldPath));
-    for (const dir of worked) {
+    for (const dir of [...scopes].slice(0, 60)) {
       const inside = (file: string) => file.startsWith(`${dir}/`);
-      if (!deletedCode.some(inside) || movedCode.some(inside) || changes.some(change => !change.status.startsWith("D") && inside(change.newPath))) continue;
-      try { if ((await filesUnder(cwd, refs.mergeBaseSha, dir, options.signal)).every(file => leaving.has(file))) gone.add(dir); }
-      catch (error) { assertNotAborted(options.signal); }
+      if (!deletedCode.some(inside) || movedCode.some(inside)) continue;
+      try {
+        const listing = await filesUnder(cwd, refs.mergeBaseSha, dir, options.signal);
+        const remaining = listing.filter(file => !leaving.has(file));
+        const incoming = changes.filter(change => !change.status.startsWith("D") && inside(change.newPath)).map(change => change.newPath);
+        if (!remaining.length && !incoming.length) gone.add(dir);
+        if (discovered.has(dir) && remaining.concat(incoming).every(file => /\.(?:json|md|rst)$/i.test(file))) retiredDiscovery.add(dir);
+      } catch (error) { assertNotAborted(options.signal); }
     }
   }
-  const ciFindings = resolveCiTestSteps(ciCounts, refs.headSha, elsewhere, called, gone, filesElsewhere);
+  const ciFindings = resolveCiTestSteps(ciCounts, refs.headSha, elsewhere, called, gone, filesElsewhere, retiredDiscovery);
   // A reusable workflow already flagged above (its own trigger changed in this diff) is not flagged again here for the same loss.
   const alreadyFlagged = new Set(ciFindings.map(found => found.file));
   const lostCallers = new Map<string, { content: string; stillCalled: boolean }>();

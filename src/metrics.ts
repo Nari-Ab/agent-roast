@@ -2,6 +2,7 @@ import { ParsedCommit, ParsedFileDiff } from "./git.js";
 import { Infraction, MetricSummary } from "./types.js";
 import { SourceMasker } from "./source.js";
 import { RULE_GUIDES } from "./rules.js";
+import { CI_TOKEN_NARROW, mentionsCi } from "./ci-condition.js";
 
 const PYTHON_TEST_SKIP_PATTERNS = [
   { regex: /@pytest\s*\.\s*mark\s*\.\s*skip\b/, name: "skipped pytest (@pytest.mark.skip)" },
@@ -29,7 +30,7 @@ function isConditionalXfail(args: string[] | null): boolean {
   const keyword = (arg: string) => /^(\w+)\s*=(?!=)/.exec(arg)?.[1];
   const condition = keyword(args[0]) ? args.find(arg => keyword(arg) === "condition")?.replace(/^condition\s*=\s*/, "") : args[0];
   if (condition === undefined || /^(?:True|1)$/.test(condition.trim())) return false;
-  return !/\bCI\b|\bisCI\b|GITHUB_ACTIONS/.test(condition);
+  return !mentionsCi(condition);
 }
 
 /** `if not has_gpu(): pytest.skip("no GPU")` gates a test on its environment, and so does a skip in a fixture or
@@ -38,9 +39,12 @@ function isConditionalXfail(args: string[] | null): boolean {
  * leaves the context unknown and the skip is reported. */
 function isGuardedSkip(lines: { code: string; raw: string; number: number }[]): boolean {
   const indentOf = (text: string) => text.length - text.trimStart().length;
-  const mentionsCi = (raw: string) => /\bCI\b|\bGITHUB_ACTIONS\b/.test(raw);
+  const namesCi = (line: string) => {
+    const condition = /^\s*(?:if|elif)\s+(.+?):/.exec(line)?.[1] ?? "";
+    return CI_TOKEN_NARROW.test(line) && (!CI_TOKEN_NARROW.test(condition) || mentionsCi(condition, CI_TOKEN_NARROW));
+  };
   const own = lines[lines.length - 1];
-  if (/^\s*(?:if|elif|else)\b.*:\s*\S/.test(own.code)) return !mentionsCi(own.raw);
+  if (/^\s*(?:if|elif|else)\b.*:\s*\S/.test(own.code)) return !namesCi(own.raw);
   let limit = indentOf(own.code);
   for (let i = lines.length - 2; i >= 0 && lines.length - 1 - i <= 200; i--) {
     if (lines[i].number !== lines[i + 1].number - 1) return false;
@@ -49,7 +53,7 @@ function isGuardedSkip(lines: { code: string; raw: string; number: number }[]): 
     const keyword = /^\s*(async\s+def|def|class|if|elif|else|try|except|finally|with|for|while)\b/.exec(code)?.[1];
     if (keyword === "def" || keyword === "async def") return !/^\s*(?:async\s+)?def\s+test/.test(code);
     if (keyword === "class") return false;
-    if (keyword === "if" || keyword === "elif" || keyword === "else" || keyword === "try" || keyword === "except" || keyword === "finally") return !mentionsCi(raw);
+    if (keyword === "if" || keyword === "elif" || keyword === "else" || keyword === "try" || keyword === "except" || keyword === "finally") return !namesCi(raw);
     limit = indentOf(code) + (keyword ? 0 : 1);
   }
   return false;
@@ -178,9 +182,8 @@ function inTestAttributeList(lines: { code: string; number: number }[], index: n
 /** The same question as isGuardedSkip for brace and `end` languages: is the skip under a condition or in a helper? */
 function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }[], profile: GuardProfile): boolean {
   const indentOf = (text: string) => text.length - text.trimStart().length;
-  const mentionsCi = (raw: string) => /\bCI\b|\bGITHUB_ACTIONS\b/.test(raw);
   const own = lines[lines.length - 1];
-  if (profile.modifier?.test(own.code) || profile.conditional.test(own.code)) return !mentionsCi(own.raw);
+  if (profile.modifier?.test(own.code) || profile.conditional.test(own.code)) return !mentionsCi(own.raw, CI_TOKEN_NARROW);
   // `#if os(Windows)` then `throw XCTSkip(...)` at the same indentation: still inside an unclosed `#if` opened since `from`.
   // Counting starts at the enclosing function, so a test file wrapped in `#if canImport(XCTest)` still reports its skips.
   const compiledConditionally = (from: number) => {
@@ -201,7 +204,7 @@ function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }
     if (!code.trim() || indentOf(code) >= limit) continue;
     // A directive at column 0 inside a function must not look like the end of that function.
     if (profile.preprocessor && (profile.preprocessor.open.test(code) || profile.preprocessor.close.test(code) || profile.preprocessor.other.test(code))) continue;
-    if (profile.conditional.test(code)) return !mentionsCi(raw);
+    if (profile.conditional.test(code)) return !mentionsCi(raw, CI_TOKEN_NARROW);
     if (profile.test.test(code)) return compiledConditionally(i + 1);
     if (profile.helper.test(code)) return true;
     limit = indentOf(code);
@@ -215,8 +218,6 @@ function isGuardedBlockSkip(lines: { code: string; raw: string; number: number }
 // `fixme` and `fail` are Playwright's; `fails` is Vitest's and `failing` Jest's and AVA's: tests expected to fail, which cannot fail the run.
 const JS_TEST_API = /(?<![\w$.])(?:(?:it|test|describe|suite)(?:\s*\.\s*(?:concurrent|serial|parallel|describe|failing|sequential))*\s*\.\s*(skip|todo|only|fixme|failing|fails|fail)|((?:xit|xtest|xdescribe|fit|fdescribe)))\b((?:\s*\.\s*(?:each|failing|concurrent|serial|parallel|sequential))*)\s*(?=\(|\u0001)/g;
 
-const MENTIONS_CI = /\bCI\b|\bisCI\b|GITHUB_ACTIONS/;
-
 /** `test.skip(browserName === 'webkit', 'reason')` gates a test on its environment, so it is not a disabled test.
  * A title, a bare `skip()` and `skip(true)` switch a test off, unless an `if` decides at run time whether the call is reached
  * (see isUnderRuntimeCondition); so does a condition that mentions CI, which is how a failing test gets hidden from the
@@ -229,7 +230,7 @@ function isConditionalSkip(source: string, raw: string, open: number, start: num
   if (!args.length || args[0] === "true") return isUnderRuntimeCondition(source, raw, start);
   if (isString(args[0])) return false;
   if (args.length > 1 && !isString(args.at(-1)!)) return false;
-  return !MENTIONS_CI.test(args[0]);
+  return !mentionsCi(args[0]);
 }
 
 const TEST_REGISTRATION = /^(?:await\s+)?(?:test|it|describe|suite|beforeAll|beforeEach|afterAll|afterEach)\b/;
@@ -244,7 +245,7 @@ function isUnderRuntimeCondition(source: string, raw: string, start: number): bo
   const alwaysTrue = (text: string) => /^\s*(?:true|1|!\s*0|!\s*false)\s*$/.test(text);
   const indentOf = (text: string) => text.length - text.trimStart().length;
   const lineStartOf = (offset: number) => Math.max(source.lastIndexOf("\n", offset - 1), source.lastIndexOf("\0", offset - 1)) + 1;
-  const mentionsCi = (from: number, to: number) => MENTIONS_CI.test(raw.slice(from, to));
+  const mentionsCiIn = (from: number, to: number) => mentionsCi(raw.slice(from, to));
   const lineStart = lineStartOf(start);
   const head = source.slice(lineStart, start).trimEnd();
   if (head.endsWith(")")) {
@@ -255,10 +256,10 @@ function isUnderRuntimeCondition(source: string, raw: string, start: number): bo
       else if (head[i] === "(" && --depth === 0) { opening = i; break; }
     }
     if (opening >= 0 && /(?:^|[\s}])if\s*$/.test(head.slice(0, opening))) {
-      return !mentionsCi(lineStart + opening + 1, lineStart + head.length - 1) && !alwaysTrue(head.slice(opening + 1, -1));
+      return !mentionsCiIn(lineStart + opening + 1, lineStart + head.length - 1) && !alwaysTrue(head.slice(opening + 1, -1));
     }
   } else if (/(?:^|[\s}])else$/.test(head)) return true;
-  else if (head.endsWith("&&")) return !mentionsCi(lineStart, start) && !alwaysTrue(head.slice(0, -2).replace(/^[\s{}]+/, ""));
+  else if (head.endsWith("&&")) return !mentionsCiIn(lineStart, start) && !alwaysTrue(head.slice(0, -2).replace(/^[\s{}]+/, ""));
   const lineEnd = source.slice(start).search(/[\n\0]/);
   let limit = indentOf(source.slice(lineStart, lineEnd < 0 ? undefined : start + lineEnd)), at = lineStart;
   for (let steps = 0; steps < 200 && at > 0; steps++) {
@@ -269,7 +270,7 @@ function isUnderRuntimeCondition(source: string, raw: string, start: number): bo
     if (!line.trim() || indentOf(line) >= limit) continue;
     const header = line.trim();
     if (/^(?:\}\s*)?(?:else\s+)?if\s*\(/.test(header)) {
-      return !MENTIONS_CI.test(lineRaw) && !alwaysTrue(/\bif\s*\((.*)\)\s*\{?\s*$/.exec(header)?.[1] ?? "");
+      return !mentionsCi(lineRaw) && !alwaysTrue(/\bif\s*\((.*)\)\s*\{?\s*$/.exec(header)?.[1] ?? "");
     }
     // `else`, `catch`, `case x:` and the `) {` that ends a condition written over several lines are guards whose condition is out of sight.
     if (/^(?:\}\s*)?(?:else|catch)\b|^(?:case\b|default\s*:)|^\)\s*\{?\s*$/.test(header)) return true;

@@ -52,7 +52,9 @@ expectation, not a looser one), and neither is a Python expectation of nothing (
 (`is not None`, a bare name). Reformatting, renaming, moving an assertion into a helper, parametrizing a test and folding
 several checks into one snapshot are not reported. Nor is a check that the element is there, written another way:
 `expect(wrapper.find(".menu").exists()).toBe(true)` turned into `expect(document.querySelector(".menu")).not.toBeNull()`,
-`toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it).
+`toBeTruthy()` or `toBeInTheDocument()` says the same thing (a boolean that says so, and a query that finds it). So does a property that is there as its own:
+`expect(hasOwn(schema, "key")).toBe(true)` turned into `expect(Object.getOwnPropertyDescriptor(schema, "key")).toBeDefined()` (also `toBeTruthy()` or `.not.toBeUndefined()`; the descriptor is `undefined`
+when the key is absent. The receiver and the literal property key must match).
 
 **An exact check relaxed on the same expression.** When the checked expression stays the same and only the matcher changes, four more
 forms are reported: a number or count turned into a bound (`toBe(2)` to `toBeGreaterThanOrEqual(2)`, `toHaveLength(3)` to
@@ -115,7 +117,7 @@ Raising a threshold, restructuring CI and moving the test step are not reported,
 running a test command is not reported while a workflow that gates changes still runs that very command, whether the same change touches that
 workflow or not (a deleted `production.yml` next to a `test.yml` that runs `npm test` too). The same command in another `working-directory`,
 another runner, or a workflow that runs only on a schedule does not count as the same tests. A workflow that lost its own `push` and `pull_request` triggers by becoming reusable (`workflow_call`) is not reported while a workflow that gates
-calls it (`uses: ./.github/workflows/sdk.yml`), in the change or not in it; nor is a reusable workflow whose only caller is deleted, or edited to call something else, while it keeps another caller or gates on a trigger of its own
+calls it (`uses: ./.github/workflows/sdk.yml`, or `uses: $/.github/workflows/sdk.yml`, GitHub's name for a workflow of the same repository at the same commit), in the change or not in it; nor is a reusable workflow whose only caller is deleted, or edited to call something else, while it keeps another caller or gates on a trigger of its own
 regardless — but when neither holds, that caller going is reported on the called workflow's own file, as a test step lost. A test step is a known runner (`pytest`, `vitest`, `jest`,
 `npm test`, `go test`, `cargo test`, `make test`, ...) or a monorepo runner (`nx affected --target=test`, `turbo run test`, `lerna run test`,
 `bazel test`), a target of `make`, `just`, `task` or a package manager that has the word among its own words (`make unit-test`, `just test-asyncio`, `pnpm run docs:test`; not one that sets up, installs, builds or type-checks, `make setup-tests`, `pnpm run typecheck:tests`),
@@ -141,8 +143,9 @@ not on the list, and every `run:` step, still is, because it may be the check. A
 already inside a job or step allowed to fail (a report job merged into another job, where the step is allowed to fail) and the places allowed to fail did not grow.
 
 A workflow that stopped running a test command is not reported either when the code it tested went with it, when the test files it named are named elsewhere, or when it never gated code; with several lost commands it is
-reported unless each of them is covered, by its directory or by its files. The code went with it when the command worked in a `working-directory` (its step's, or the `defaults.run` of its job or of the workflow; a value that an expression fills in is not read) that the same change deleted: nothing is left under the directory,
-some of the code that was in it was deleted, and none of it was moved (a renamed file is code that lives on, and its tests with it, so a workflow dropped while the component moved is reported). A directory that is a place for tests by its name
+reported unless each is covered. A test command's `working-directory` can identify code deleted with the workflow when the directory is gone and its code was deleted rather than moved.
+A standalone `python -m unittest discover -s <directory>` can also identify retired code when JSON data or Markdown or reStructuredText documentation remains. Every named discovery directory must qualify, including a literal `-t` or `PYTHONPATH` if present.
+A directory that is a place for tests by its name
 (`tests`, `e2e`, `integration`, `spec`, `cube-tests`) holds no code to test: the suite deleted together with its workflow is reported. The files are named elsewhere when every test file that a lost command names (`bun test src/a.test.ts`,
 `pytest tests/test_a.py::test_x`) is named by a command of a workflow that gates, in the change or not in it, and a list in a folded `run: >-` block counts; a file that follows `--ignore`, `--deselect`, `--exclude` or `--skip` is not named, and a
 command that names no file (a whole suite) is never covered this way. A workflow never gated code when its `push:` or `pull_request:` filter lists only files under `.github/workflows/`, the leftover of one whose `src/**` and `tests/**` were
@@ -201,7 +204,7 @@ A test expected to fail is reported because a failure that is expected cannot fa
 `xfail` and the suite is green. The conditional forms are exempt exactly like conditional skips:
 `@pytest.mark.xfail(sys.platform == "win32", reason="paths")` (also with the condition on its own line or as `condition=`) and
 `test.fixme(browserName === "webkit", "...")` expect the failure only where the condition holds. A bare marker, `reason=`,
-`strict=` or `raises=` alone, a literal `True` and a condition that mentions CI are reported. A marker that is only built
+`strict=` or `raises=` alone, a literal `True` and a condition that names CI outside a standalone negated environment lookup are reported. A marker that is only built
 (`skip_slow = pytest.mark.skip(...)`, the pytest documentation's `--runslow` pattern) or attached through `add_marker` is not.
 In the review (the hook, `review`, the Action) a skip, an ignore or an expected-failure marker only counts on a test that **was already
 there**. A test the same change adds is not a check that got weaker: it documents a bug its author knows about (in 24 repositories, 15
@@ -227,7 +230,8 @@ A skip that depends on the environment is **not** reported, because those are ov
 `#if os(Windows)` around a `throw XCTSkip(...)` and `@Test(.disabled(if: condition))`, a Ruby `it "...", :skip => !feature?`, and
 xUnit `Skip = "..."` together with `SkipUnless`, `SkipWhen` or `SkipType`. A C# `[Ignore]` that is not next to a test attribute
 (AutoMapper and Json.NET use it on properties) is not a skip. A skip whose condition mentions
-`CI`, or one that names a test or stands alone in a test body, is reported. The price of that trade-off: a conditional skip
+`CI`, or one that names a test or stands alone in a test body, is reported. A condition that names CI only to be false on it (`not os.environ.get("GITHUB_ACTIONS")`, `!process.env.CI`) skips the test off CI, where the
+pipeline still runs it. Compound conditions and comparisons retain the existing CI heuristic. The price of that trade-off: a conditional skip
 that hides a real failure is missed unless its condition mentions `CI`.
 **Fix:** re-enable the test and fix its failure. If the skip is intentional, say why and when it ends.
 
@@ -281,7 +285,7 @@ under whatever name: `vi.mock("./client", async (original) => ({ ...(await origi
 module, `vi.mock("@scope/schema", () => import("../../schema/src/index.js"))`, which points a package name at its source; a path that names a fake,
 `__mocks__`, `mock`, `stub`, is still read as one), an automock nobody gave a return value (a manual mock decides; for `import * as fs` it is the member that has to be configured: `vi.mocked(fs.open).mockImplementation(...)` says nothing about `fs.stat()`),
 `doMock` and mocks made inside a hook or a `describe` (they come after the import was loaded), an assertion about how a mock was
-called, a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
+called (also when the spy comes out of the mocked function: `expect(useToast().showMessage).toHaveBeenCalledWith(...)` asks what the code under test did, not what the mock returns), a bare imported name in Python (a patch of the module attribute does not change it), and test files whose path mentions
 `mock` or `monkeypatch` (the tests of the mocking tools themselves). In JavaScript an assertion on a mock's output in a test (or hook) that
 also asserts on something that is not a mock's own output is a redundant check, not a test that cannot fail, and is not reported. On 21,686 test files of 24 public repositories the only
 matches were the tests of jest, vitest and pytest's `monkeypatch`, plus one sanity precondition in scikit-learn.

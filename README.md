@@ -112,7 +112,7 @@ Measured, with the denominators and the caveats in [docs/benchmarks.md](docs/ben
 deliberate, and not specific to AI. agent-roast is a tripwire that asks about them. On repositories it had not seen, between a quarter and
 two thirds of its blocks were questions with a harmless answer, depending on the sample.**
 
-- **175 of 175** hand-labeled cheating edits are caught and **163 of 163** harmless look-alikes (reformats, moves, raised
+- **181 of 181** hand-labeled cheating edits are caught and **168 of 168** harmless look-alikes (reformats, moves, raised
   thresholds, environment-gated skips) stay silent. The cases were written with the detector, so they guard against regressions;
   they do not prove accuracy. One gap is documented and still open.
 - **A catalog of cheats that someone else wrote.** Of the nine hacks in [reward-hack-zoo](https://github.com/MatthewWaller/reward-hack-zoo) (hand-written specimens; none from a model) four are reported (a skip, a patched target, a `conftest.py` that rewrites reports,
@@ -138,6 +138,10 @@ two thirds of its blocks were questions with a harmless answer, depending on the
   0.17.0's rule for an exact check turned into a bound reported 18 in 14 commits, all of them loosened checks, after two false alarms were
   fixed. One reader, and a convenience sample ([section 7](docs/benchmarks.md#7-ai-signed-commits-and-a-test-that-checks-its-own-mock),
   [section 8](docs/benchmarks.md#8-an-exact-check-turned-into-a-bound)).
+- **8,584 pull requests** of the last 90 days of 58 popular repositories (1,077 of them written by coding agents) were reviewed against their own
+  base commits with 0.28.0. Of the 18 blocked (0.21%), 7 were worth a reviewer's attention (0.08%) and 11 were false alarms. All reported blocks
+  were read. None of the 1,077 agent-written pull requests was judged a real hit (upper bound 0.36%). The sample was selected by hand
+  ([section 22](docs/benchmarks.md#22-pull-requests-a-sample-of-a-new-kind-and-what-its-eleven-false-alarms-led-to)).
 - `replay` ran on 179 public repositories that use coding agents: no commit would have been blocked in 149 of them.
 - The rules for **eight more languages** (Go, Rust, Java, Kotlin, C#, Ruby, PHP, Swift) ran on the newest 300 commits of 39
   repositories and every finding was read: 26 of 99 were skips that depend on the environment, now fixed; of the 73 left, 56 are
