@@ -13,7 +13,7 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 
 | Measurement | Result |
 | --- | --- |
-| Labeled regression cases | 175/175 cheats caught, 163/163 harmless changes left alone, 1 documented gap open |
+| Labeled regression cases | 181/181 cheats caught, 168/168 harmless changes left alone, 1 documented gap open |
 | Five mature projects, 606 test/CI commits | blocking rules on 3 commits (0.5%), all deliberate |
 | 166 public repositories, 12,645 commits | blocking rules on 0.3% of AI-signed and 0.3% of other commits |
 | Same-repository comparison | odds ratio 0.81 (95% CI 0.40-1.67) for AI-signed versus other |
@@ -30,7 +30,8 @@ for 0.17.0 on two samples, 51% and 27% for 0.18.0 on two samples nobody had read
 | A ninth sample nobody had read (section 14): 39 repositories, 11,286 commits | 0.20.0 as published and 0.21.0 as frozen blocked the same 46: 28 for a reviewer and 18 false alarms (39%); the shipped build, after the fixes from reading the sample, blocks 41 of those commits (28 and 13) |
 | A tenth sample nobody had read (section 15): 40 repositories, 11,191 commits | the published 0.20.0 blocked 39: 26 for a reviewer and 13 false alarms (33%); 0.21.0 as shipped, with the fixes of samples 8 and 9, blocked the same 39 and one more, a real one (27 and 13); not fitted to this sample, so the 33% is out of sample |
 | What reading sample 10 led to (section 16): three fixes, fitted, and a guard that was measured | 3 of the 13 false alarms fixed (`make unit-test`, a reusable workflow that a workflow calls, a skip marker on a library function); the 300 blocks of the shipped build: 297 still blocked, the 3 that are not are the false alarms, none of the 238 for a reviewer lost; 2 new real findings in 15,295 commits (a test step moved to a weekly run, a canary test step allowed to fail); "the subject of the assertion changed" would unblock 22 false alarms and 12 real ones: not built |
-| A gap closed (section 17): the only caller of a reusable test workflow | 11,106 CI-touching commits of 516 repositories: 33 stop calling a workflow they called before; one is reported (an automated commit broke the caller's `uses:` path), one was already reported by an earlier rule, the rest keep a caller or gate on their own; two ideas from sections 13 and 16 tried again, still refused |
+| A gap closed (section 17): the only caller of a reusable test workflow | 11,106 CI-touching commits of 516 repositories: 33 stop calling a workflow they called before; one was reported, and was a false alarm (an automated commit rewrote the caller's `uses:` path into GitHub's `$/` form: corrected in section 22), one was already reported by an earlier rule, the rest keep a caller or gate on their own; two ideas from sections 13 and 16 tried again, still refused |
+| Pull requests, a sample of a new kind (section 22): 8,584 pull requests of the last 90 days of 58 popular repositories, 1,077 of them agent-written | 0.28.0 blocked 18 (0.21%): 7 for a reviewer (0.08%) and 11 false alarms; none of the 1,077 agent-written ones is a real hit (upper bound 0.36%) |
 | Eight added languages: newest 300 commits, 39 repositories | 0.12.1 reported 99 findings, 26 of them skips that depend on the environment (fixed); of the 73 left, 56 are tests that are switched off and 17 are deliberate test data (section 5) |
 
 ## 1. Labeled changes (regression cases)
@@ -44,7 +45,7 @@ that must stay silent, and `miss` for gaps that are documented rather than hidde
 npm run build && npm run bench
 ```
 
-Result: **175/175 cheats caught, 163/163 harmless changes left alone, 1/1 documented gap still
+Result: **181/181 cheats caught, 168/168 harmless changes left alone, 1/1 documented gap still
 open.** The cases were written together with the detector, and many were added after a real
 false alarm. They protect against regressions and show what is covered; they say nothing about
 cheats nobody thought to write down. The open gap: hardcoding the tested value in production code.
@@ -1074,7 +1075,7 @@ Section 16 left a gap in `docs/rules.md`: deleting (or editing) the workflow tha
 **What was fixed.** A reusable workflow (`workflow_call`) that a diff stops calling — the caller is deleted, or edited to call something else — is read from the tree it still sits in, and a finding is reported only when both hold: the workflow does not gate on a trigger of its own (`push`, `pull_request`, `pull_request_target`, `merge_group`), and nothing else, in the diff or not in it, still calls it.
 A workflow that already gates on its own trigger, or that keeps another caller, loses nothing when one caller goes.
 
-**Measured, on real history.** 516 repositories and 11,106 commits of the ten samples, the agent corpus and the 24 repositories of section 6 touch a CI file; 33 commits, across 26 repositories, stop calling a workflow they called before (`scripts/scan-reusable-callers.mjs`). Of those, this version reports one: `python-poetry/poetry`'s own pre-commit automation rewrote `uses: ./.github/workflows/.tests-matrix.yaml` to `uses: $/.github/workflows/.tests-matrix.yaml` in a dependency-bump commit, a reference GitHub Actions cannot resolve, so the test matrix this workflow ran stopped running on every pull request from that commit on, unnoticed in this clone's history. A second commit, `TheRealSavi/iOpenPod`'s, was already reported before this version: the called workflow itself dropped its own `push` and `pull_request` triggers in the same diff, which sections 12-16's rule already catches; this version does not report it twice. The other 31 commits are not reported: the workflow they stop calling either keeps another caller (`boxlite-ai/boxlite`'s shared `config.yml`, called from eight other workflows) or gates on a trigger of its own regardless of callers (`dbos-inc/dbos-transact-ts`'s `test.yml` runs on `push` directly).
+**Measured on real history.** Of 11,106 CI-touching commits in 516 repositories, 33 commits across 26 repositories stop calling a workflow they called before (`scripts/scan-reusable-callers.mjs`). One reported case was `python-poetry/poetry`'s pre-commit rewrite from `./.github/workflows/.tests-matrix.yaml` to `$/.github/workflows/.tests-matrix.yaml`. Both spellings reference a workflow in the same repository, so this was a false alarm. Section 22 records the correction. A second commit, `TheRealSavi/iOpenPod`'s, was already reported before this version: the called workflow itself dropped its own `push` and `pull_request` triggers in the same diff, which sections 12-16's rule already catches; this version does not report it twice. The other 31 commits are not reported: the workflow they stop calling either keeps another caller (`boxlite-ai/boxlite`'s shared `config.yml`, called from eight other workflows) or gates on a trigger of its own regardless of callers (`dbos-inc/dbos-transact-ts`'s `test.yml` runs on `push` directly).
 Labeled cases: 165 of 165 cheats caught and 154 of 154 harmless changes left alone (one more of each than before this section, for a deleted caller and for one deleted together with the workflow it called); 52 files, 1,555 tests. The regressions of sections 9 to 16 were repeated and are unchanged by this fix (it adds a finding only where none of the existing rules already produced one for the same file).
 
 **Two ideas tried again, by a different method, and still refused.**
@@ -1298,6 +1299,54 @@ a labeled case, and in none of the history.
 - The 657 clones are the repositories of the corpora themselves, so the comparison is not independent of the samples that shaped the rules.
 - That a directory is gone is read from the files that the change touches and from the tree before it, so a review of a commit, of the index and of the working tree read it alike.
 - Labeled cases: 11 are new (five look-alikes that the old build fails, and six cheats: the old build misses the cut-down filter and catches the other five); the price is as in sections 9 to 20.
+
+## 22. Pull requests: a sample of a new kind, and what its eleven false alarms led to
+
+Sections 9 to 21 drew commits of repositories that a search found and read what the rules blocked. This section asks the same of the unit that a maintainer receives, the pull request: 8,584 of them, from 58 popular repositories, each reviewed against its own base commit as the hook, the Action or `agent-roast review` would review it. Every block was read.
+
+**The sample.** 64 repositories were named by hand: the ecosystem of LLM and agent software (LangChain and LangGraph, LlamaIndex, CrewAI, AutoGen, the Model Context Protocol servers and SDKs, the OpenAI and Anthropic SDKs, vLLM, Ollama, aider, Continue, Cline, OpenHands, Gemini CLI, the Vercel AI SDK, n8n) and popular libraries of Python, TypeScript, JavaScript and Go (Django, FastAPI, pydantic, scikit-learn, numpy, pandas, matplotlib, Vite, Vue, Svelte, Astro, Playwright, Puppeteer, ESLint, Prettier, Express, NestJS, Gin, Cobra and others). The list is not random and leans towards the languages that the rules read; C and Zig projects were left out for that reason. Two were left out for their size (more than 1.7 GB) and four for having fewer than 50 pull requests to take, which leaves 58. Of each, the newest pull requests of the last 90 days (created from 2026-08-18 to 2026-11-16) that target the default branch and touch at most 300 files: 120 external (a person with no write access), 100 agent-written (an account of Copilot, Devin, Claude, Jules, Codex or Cursor, or a branch that one of them names) and 30 member. Automation such as Dependabot and Renovate was left out. Each repository was cloned in full, the head of each pull request fetched from `refs/pull/N/head`, and `agent-roast review --base <the base commit of the pull request> --head <its head>` run, with 0.28.0. Nothing from the projects was executed, and no author name was kept in any result. The pull requests are the newest of their repositories, so most are not decided yet: 3,070 of the external ones are open.
+
+| Kind | Reviewed | Blocked | Real | Warned (test removed, assertion removed, expectation rewritten) |
+| --- | --- | --- | --- | --- |
+| External | 6,336 | 12 (0.19%) | 5 | 374 (5.9%) |
+| Agent-written | 1,077 | 2 (0.19%) | 0 | 78 (7.2%) |
+| Member | 1,171 | 4 (0.34%) | 2 | 122 (10.4%) |
+| **All** | **8,584** | **18 (0.21%; between 0.13% and 0.33%)** | **7 (0.08%)** | **574 (6.7%)** |
+
+Of the 8,591 that were chosen, 8,584 were reviewed in full: 3 were incomplete (the review could not read some of their files), 2 had a head or base commit that no clone could give, and 2 went over a limit of the review (1,000 changed files, 8 MB of Git output). The median review took 424 ms. The block rules fired as `guard-weakened` 9 times, `test-skip` 6, `assertion-weakened` 2 and `trivial-assert` 1; 12 of the 58 repositories had at least one block in the 90 days.
+
+**The 18 blocks, read.** Seven are for a reviewer to see and eleven are false alarms (61% as called by one reader). None of the 1,077 agent-written pull requests is a real hit (the upper bound of its 95% interval is 0.36%): the two that were blocked are false alarms.
+
+| For a reviewer | Rule | What the change does |
+| --- | --- | --- |
+| `modelcontextprotocol/servers` #5123 | `test-skip` | 25 documented `it.skip` in one pull request |
+| `continuedev/continue` #13337 | `test-skip` | a pull request that adds an LLM provider also marks an unrelated test of the IntelliJ plugin `@Disabled` |
+| `matplotlib/matplotlib` #32527 | `test-skip` | an `xfail` that cites an issue |
+| `microsoft/playwright` #44044 | `test-skip` | `test.skip` under a condition that names CI |
+| `Aider-AI/aider` #5694 | `test-skip` | two skips for a known problem of an external tool |
+| `gin-gonic/gin` #4845 | `guard-weakened` | titled as a grammar fix; deletes the main test workflow and other CI files, with about 120 more files |
+| `n8n-io/n8n` #43707 (arguable) | `assertion-weakened` | `toEqual` turned into `toMatchObject` |
+
+| False alarm | What happened | Covered by 0.28.1 regression fixtures |
+| --- | --- | --- |
+| `openai/openai-python` #4193 and #4194, `openai/openai-node` #3061 and #3062 | `castiron-custom-code.yml` deleted with the budget tooling that it tested (17 of 18 files went, a JSON file stayed); its command names the directory in its arguments, `-s scripts/castiron`; each repository once merged and once closed as a duplicate | yes |
+| `google-gemini/gemini-cli` #30208 | `tools-python-ci.yml` deleted with the unused `tools/` that it tested; the directory is in the arguments, `PYTHONPATH=tools/…/triage-worker python -m unittest discover -s …/tests -t …` | yes |
+| `modelcontextprotocol/python-sdk` #3755 | `uses: ./.github/workflows/shared.yml` written as `uses: $/.github/workflows/shared.yml`, GitHub's name for the same workflow; the checks still ran, green on the main branch for weeks | yes |
+| `n8n-io/n8n` #43948 | a new test asserts `useToast().showMessage` `toHaveBeenCalledWith(...)` on a spy that a mocked module hands out: read as "a test that checks its own mock" | yes |
+| `matplotlib/matplotlib` #32395 | a CI migration changed the condition of an `xfail` that runs only off CI, from `not (os.environ.get('APPVEYOR') or os.environ.get('TF_BUILD'))` to `not os.environ.get('GITHUB_ACTIONS')`; the new condition names CI, so the marker was counted as new (the report is on the `xfail` that follows it) | yes |
+| `openai/openai-node` #2753 (agent-written) | `expect(hasOwn(schema, 'additionalProperties')).toBe(true)` written as `expect(Object.getOwnPropertyDescriptor(schema, 'additionalProperties')).toBeDefined()`: the same fact | yes |
+| `vercel/ai` #24875 (agent-written) | A release step was made tolerant of failure and followed by a retry | The rule still flags the tolerance |
+| `matplotlib/matplotlib` #32538 | an experiment titled "Do Not Merge" that switches CI off | no: arguable, and a reviewer should see it |
+
+**What changed in 0.28.1.** Five rule changes were informed by the sample. The regression fixtures cover the patterns marked above, including four PRs that share the same Cast Iron example and one that uses a standalone Python discovery step with both `-s` and `-t`. An outcome reference can merely log a failure. The rule continues to flag newly tolerated failures. The figures in this section describe 0.28.0.
+
+**Limits.**
+
+- One reader (an AI assistant) read every block and made the calls above; the sample of 18 is small, and a call can go the other way: with the arguable ones (`n8n` #43707, `matplotlib` #32538, `vercel/ai` #24875) all made the other way, the false alarms are 50% to 67% of the blocks.
+- The same pull requests inspired the fixes. The regression fixtures check rule behavior and cannot estimate accuracy on new pull requests.
+- The sample is a convenience sample: popular repositories of the languages that the rules read, chosen by hand, newest pull requests first. Most are not decided yet, so "merged" and "rejected" say little, and no claim about which pull requests a maintainer would reject follows from it.
+- The 18 blocked pull requests are named above. The full pull-request list is unavailable for an exact rerun.
+- Public data only; nothing was run, no pull request was commented on, and no author was contacted.
 
 ## Reproduce
 

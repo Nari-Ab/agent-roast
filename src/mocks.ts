@@ -150,6 +150,8 @@ function javascript(text: string): MockedSubject[] {
     // The checked value starts with a call to something imported (`price(...)`, `await price(...)`, `lib.price(...)`), or is a
     // name the same test assigned from one.
     const checked = code.slice(open + 1, end);
+    // `expect(useToast().showMessage).toHaveBeenCalledWith(...)` asks how a spy that the mock hands out was called, which the mock does not decide.
+    if (/^\s*\.\s*(?:not\s*\.\s*)?(?:toHaveBeen(?:Last|Nth)?Called\w*|toBeCalled\w*|lastCalledWith|nthCalledWith)\b/.test(code.slice(end + 1))) continue;
     let call = /^\s*(?:await\s+)?([A-Za-z_$][\w$]*)\s*(?:\.\s*([A-Za-z_$][\w$]*)\s*)?\(/.exec(checked);
     const variable = /^\s*([A-Za-z_$][\w$]*)\s*$/.exec(checked)?.[1];
     if (!call && variable) {

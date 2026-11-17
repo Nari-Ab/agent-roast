@@ -318,13 +318,29 @@ const JS_SPECIFIC = /\.(?:toBe|toEqual|toStrictEqual|toHaveLength|toContain|toCo
 const THROWING_QUERY = /\b(?:get|find)(?:All)?By\w*\s*\(/;
 
 const PRESENCE_PREDICATE = /\.(?:exists|isVisible|isExisting|isDisplayed)\(\)$/;
+// A property of an object that is there as its own: a boolean that says so, and the descriptor that exists exactly when it does.
+const PROPERTY_RECEIVER = String.raw`[\w$]+(?:\.[\w$]+)*`;
+const PROPERTY_KEY = String.raw`(['"])([\w$-]+)\2`;
+const OWN_PREDICATE = new RegExp(String.raw`^(?:Object\.)?hasOwn\(\s*(${PROPERTY_RECEIVER})(?:\s+as\s+Record<string,\s*unknown>)?\s*,\s*${PROPERTY_KEY}\s*\)$`);
+const OWN_METHOD = new RegExp(String.raw`^(${PROPERTY_RECEIVER})\.hasOwnProperty\(\s*${PROPERTY_KEY}\s*\)$`);
+const OWN_DESCRIPTOR = new RegExp(String.raw`^Object\.getOwnPropertyDescriptor\(\s*(${PROPERTY_RECEIVER})\s*,\s*${PROPERTY_KEY}\s*\)$`);
 /** `expect(wrapper.find(".menu").exists()).toBe(true)` and `expect(document.querySelector(".menu")).not.toBeNull()` both say the element is
- * there: a boolean that says so, and a query that finds it (or a predicate that says so again, with `toBeTruthy()`). Written in the other
- * direction, or with anything else as the new subject, it is a different check. */
+ * there: a boolean that says so, and a query that finds it (or a predicate that says so again, with `toBeTruthy()`). So do
+ * `expect(hasOwn(schema, "key")).toBe(true)` and `expect(Object.getOwnPropertyDescriptor(schema, "key")).toBeDefined()`, when the new
+ * receiver and key are the same (`undefined` is what it returns for a key that is not there, so `not.toBeNull()` says nothing).
+ * Written in the other direction, or with anything else as the new subject, it is a different check. */
 function samePresence(oldAssertion: string, newAssertion: string): boolean {
-  if (!/\.toBe\s*\(\s*true\s*\)\s*;?\s*$/.test(oldAssertion) || !/\.(?:not\s*\.\s*toBeNull|toBeTruthy|toBeDefined|toBeInTheDocument)\s*\(\s*\)\s*;?\s*$/.test(newAssertion)) return false;
+  if (!/\.toBe\s*\(\s*true\s*\)\s*;?\s*$/.test(oldAssertion)) return false;
   const was = checkedExpression(oldAssertion, "js"), now = checkedExpression(newAssertion, "js");
-  return !!was && !!now && PRESENCE_PREDICATE.test(was) && (PRESENCE_PREDICATE.test(now) || /(?:querySelector|queryBy\w*|getBy\w*|findBy\w*|\.find|\.get|\$)\(/.test(now));
+  if (!was || !now) return false;
+  if (/\.(?:not\s*\.\s*toBeNull|toBeTruthy|toBeDefined|toBeInTheDocument)\s*\(\s*\)\s*;?\s*$/.test(newAssertion) && PRESENCE_PREDICATE.test(was)
+    && (PRESENCE_PREDICATE.test(now) || /(?:querySelector|queryBy\w*|getBy\w*|findBy\w*|\.find|\.get|\$)\(/.test(now))) return true;
+  if (!/\)\s*\.toBe\s*\(\s*true\s*\)\s*;?\s*$/.test(oldAssertion)
+    || !/\)\s*\.(?:toBeDefined|toBeTruthy|not\s*\.\s*toBeUndefined)\s*\(\s*\)\s*;?\s*$/.test(newAssertion)) return false;
+  const predicateText = checkedText(oldAssertion, "js")?.trim() ?? "";
+  const predicate = OWN_PREDICATE.exec(predicateText) ?? OWN_METHOD.exec(predicateText);
+  const descriptor = OWN_DESCRIPTOR.exec(checkedText(newAssertion, "js")?.trim() ?? "");
+  return !!predicate && !!descriptor && predicate[1] === descriptor[1] && predicate[3] === descriptor[3];
 }
 
 /** What an assertion checks: the argument of `expect(...)`, the left side of `assert x == 1`, the first argument of
@@ -1173,9 +1189,9 @@ const CI_FILE = /(?:\.github\/workflows\/|\.gitlab-ci)/;
 // A call to a shared workflow may run the tests there. It offsets a removed step but is never itself "a test step".
 const CI_REUSABLE = /^\s*-?\s*uses:\s*\S*\.github\/workflows\/\S+/;
 
-/** `directoriesBefore` and `filesBefore` go with `commandsBefore`, one for each: the directory that the command worked in (see `entryDirectory`), null where it is the root or none is named, and the test files it names;
+/** `directoriesBefore`, `filesBefore` and `pathsBefore` go with `commandsBefore`, one for each: the directory that the command worked in (see `entryDirectory`), null where it is the root or none is named, the test files it names and the directories that its arguments name;
  * `filesAfter` are the test files that the commands of the new text name. */
-export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number; commandsBefore?: string[]; commandsAfter?: string[]; directoriesBefore?: Array<string | null>; filesBefore?: string[][]; filesAfter?: string[] }
+export interface CiTestCount { file: string; before: number; after: number; reusableAfter: number; ungatedAfter: number; commandsBefore?: string[]; commandsAfter?: string[]; directoriesBefore?: Array<string | null>; filesBefore?: string[][]; filesAfter?: string[]; pathsBefore?: string[][] }
 
 // A workflow only gates a change when it runs on push or pull requests; a scheduled or manually dispatched one does not.
 const CI_GATE = /^\s*(?:pull_request|pull_request_target|push|merge_group)\s*:|^\s*on\s*:\s*(?:\[[^\]]*\b(?:push|pull_request|pull_request_target|merge_group)\b[^\]]*\]|(?:push|pull_request|pull_request_target|merge_group)\s*$)|^\s*-\s*(?:push|pull_request|pull_request_target|merge_group)\s*$/m;
@@ -1253,27 +1269,32 @@ export function gatingTestCommands(file: string, text: string, skip?: (line: num
 }
 
 /** A test command as `gatingTestCommands` writes it, with the one directory it works in (`working-directory` of its step, else of its job's `defaults`, else of the workflow's; null for the root of the
- * repository, for a directory that an expression fills in, and where none is named) and the test files it names (see `entryFiles`), as paths of the repository. */
-interface GatingEntry { command: string; directory: string | null; files: string[] }
+ * repository, for a directory that an expression fills in, and where none is named) and the test files it names (see `entryText`), as paths of the repository, and the directories that its arguments name (see `commandPaths`). */
+interface GatingEntry { command: string; directory: string | null; files: string[]; paths: string[] }
 
 function gatingTestEntries(file: string, text: string, skip?: (line: number) => boolean): GatingEntry[] {
   if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
   const directories = [...new Set([...text.matchAll(/^\s*(?:-\s+)?working-directory\s*:\s*["']?([^\s"'#]+)/gm)].map(match => match[1]))].sort().join(",");
+  const hasDirectorySetting = /^\s*(?:-\s+)?working-directory\s*:/m.test(text);
   const lines = text.split(/\r?\n/), scopes = directoryScopes(lines);
   return ciTestEntries(text).filter(entry => !skip?.(entry.index)).map(entry => {
-    const directory = entryDirectory(lines, entry.index, scopes);
+    const directory = entryDirectory(lines, entry.index, scopes), command = entryText(lines, entry.index);
+    // as paths of the repository: `tests/a.test.ts` run in `web` is not `tests/a.test.ts` run in `api`
+    const inDirectory = (path: string) => directory === null ? path : `${directory}/${path}`;
     return {
       command: `${entry.command.replace(/\s#.*$/, "").replace(/^\s*-?\s*(?:run\s*:\s*)?/, "").replace(/\s+/g, " ").trim()} @${directories}`,
       directory,
-      // as paths of the repository: `tests/a.test.ts` run in `web` is not `tests/a.test.ts` run in `api`
-      files: entryFiles(lines, entry.index).map(file => directory === null ? file : `${directory}/${file}`),
+      files: commandTargets(command).map(inDirectory),
+      paths: (directory !== null || !hasDirectorySetting) && standaloneRun(lines, entry.index, command)
+        ? commandPaths(command).map(inDirectory)
+        : [],
     };
   });
 }
 
-/** The test files named by the command that starts on line `index`: that line and what continues it: the lines after one that ends with a backslash, and the rest of a folded block (`run: >-` is one command
+/** The text of the command that starts on line `index`: that line and what continues it: the lines after one that ends with a backslash, and the rest of a folded block (`run: >-` is one command
  * over all its lines, so `bun test --retry=2` and the lines of file names below it are one). */
-function entryFiles(lines: string[], index: number): string[] {
+function entryText(lines: string[], index: number): string {
   let text = lines[index];
   for (let next = index; /\\\s*$/.test(lines[next]) && next + 1 < lines.length; next++) text += ` ${lines[next + 1]}`;
   let holder = index - 1;
@@ -1281,7 +1302,21 @@ function entryFiles(lines: string[], index: number): string[] {
   if (holder >= 0 && COMMAND_BLOCK.exec(lines[holder])?.[3] === ">") {
     for (let next = index + 1; next < lines.length && (skipped(lines[next]) || indentOf(lines[next]) > indentOf(lines[holder])); next++) if (!skipped(lines[next])) text += ` ${lines[next].trim()}`;
   }
-  return commandTargets(text);
+  return text;
+}
+
+/** Require an inline run or a block containing one shell line before inferring a target from an argument. */
+function standaloneRun(lines: string[], index: number, command: string): boolean {
+  if (/^\s*(?:-\s+)?run\s*:\s*\S/.test(lines[index])) return !COMMAND_BLOCK.test(lines[index]);
+  if (command !== lines[index]) return false;
+  let holder = index - 1;
+  while (holder >= 0 && skipped(lines[holder])) holder--;
+  if (holder < 0) return false;
+  const block = COMMAND_BLOCK.exec(lines[holder]);
+  if (block?.[2] !== "run" || block[3] !== "|") return false;
+  let next = index + 1;
+  while (next < lines.length && skipped(lines[next])) next++;
+  return next === lines.length || indentOf(lines[next]) <= block[1].length;
 }
 
 /** The test commands of a workflow that check something: the ones that stand in a step or a job that is allowed to fail (`continue-on-error`, `allow_failure`) or switched off (`if: false`) checked nothing,
@@ -1315,7 +1350,7 @@ function repositoryDirectory(value: string): string | null {
 interface DirectoryScopes { jobOf: Int32Array; workflow: string | null; jobs: Map<number, string | null | undefined> }
 
 function directoryScopes(lines: string[]): DirectoryScopes | null {
-  const at = lines.findIndex(line => /^jobs\s*:\s*(?:#.*)?$/.test(line));
+  const at = lines.findIndex(line => /^(["']?)jobs\1\s*:\s*(?:#.*)?$/.test(line));
   const first = at < 0 ? undefined : lines.slice(at + 1).find(line => !skipped(line));
   if (first === undefined) return null;
   // The key of a job is a key at the indent of the first job; a line at a smaller indent ends the jobs.
@@ -1324,7 +1359,7 @@ function directoryScopes(lines: string[]): DirectoryScopes | null {
   for (let i = at + 1; i < lines.length; i++) {
     if (!skipped(lines[i])) {
       if (indentOf(lines[i]) < level) current = -1;
-      else if (indentOf(lines[i]) === level && /^\s*[\w.-]+\s*:/.test(lines[i])) current = i;
+      else if (indentOf(lines[i]) === level && /^\s*(["']?)[\w.-]+\1\s*:/.test(lines[i])) current = i;
     }
     jobOf[i] = current;
   }
@@ -1393,14 +1428,28 @@ export function ciTestSteps(file: string, oldText: string | null, newText: strin
   const after = commandsAfter.length;
   return {
     file, before: commandsBefore.length, after, reusableAfter: matchingLines(now, CI_REUSABLE), ungatedAfter: after === 0 ? ciTestLines(now).length : 0, commandsBefore, commandsAfter,
-    directoriesBefore: entriesBefore.map(entry => entry.directory), filesBefore: entriesBefore.map(entry => entry.files), filesAfter: entriesAfter.flatMap(entry => entry.files),
+    directoriesBefore: entriesBefore.map(entry => entry.directory), filesBefore: entriesBefore.map(entry => entry.files), filesAfter: entriesAfter.flatMap(entry => entry.files), pathsBefore: entriesBefore.map(entry => entry.paths),
   };
 }
 
-/** The workflows that a workflow which gates calls (`uses: ./.github/workflows/sdk.yml`), as repository paths: their jobs run on every change that the caller runs on, whatever their own triggers are. */
+/** The workflows that a workflow which gates calls (`uses: ./.github/workflows/sdk.yml`, or `uses: $/.github/workflows/sdk.yml`, GitHub's self-repository reference to the same commit), as repository paths:
+ * their jobs run on every change that the caller runs on, whatever their own triggers are. */
 export function gatingCalls(file: string, text: string): string[] {
-  if (!(/\.gitlab-ci/.test(file) || CI_GATE.test(gatingTriggers(text) ?? text))) return [];
-  return [...text.matchAll(/^\s*-?\s*uses:\s*["']?\.\/(\.github\/workflows\/[^\s"'#@]+\.ya?ml)/gm)].map(match => match[1]);
+  if (!file.startsWith(".github/workflows/") || !CI_GATE.test(gatingTriggers(text) ?? text)) return [];
+  const lines = text.split(/\r?\n/), scopes = directoryScopes(lines);
+  if (!scopes) return [];
+  const properties = new Map<number, number>(), calls: string[] = [];
+  lines.forEach((line, index) => {
+    const job = scopes.jobOf[index];
+    if (job < 0 || index === job || skipped(line)) return;
+    const indent = indentOf(line);
+    if (indent <= indentOf(lines[job])) return;
+    if (!properties.has(job)) properties.set(job, indent);
+    if (indent !== properties.get(job)) return;
+    const match = /^[ \t]*uses:[ \t]*(["']?)[.$]\/(\.github\/workflows\/[\w.-]+\.ya?ml)\1[ \t]*(?:#.*)?$/.exec(line);
+    if (match) calls.push(match[2]);
+  });
+  return calls;
 }
 
 /** The reusable workflows (local paths) that this one change stops calling: present in `gatingCalls` of the old text and not of the new (empty when the file
@@ -1445,6 +1494,27 @@ export function commandTargets(command: string): string[] {
   return found;
 }
 
+/** Recognize a single unittest discovery invocation with an explicit start directory. */
+export function commandPaths(command: string): string[] {
+  const shell = command.trim().replace(/^(?:-\s+)?run\s*:\s*/, "");
+  const invocation = /^(?:PYTHONPATH=([\w./-]+)\s+)?python3?\s+-m\s+unittest\s+discover(?:\s+(.*))?$/.exec(shell);
+  if (!invocation?.[2]) return [];
+  const options = new Map<string, string>();
+  const args = invocation[2].matchAll(/\s*(-[stp])\s+(?:'([\w./*-]+)'|"([\w./*-]+)"|([\w./-]+))(?=\s|$)/gy);
+  let consumed = 0;
+  for (const match of args) {
+    if (options.has(match[1])) return [];
+    options.set(match[1], match[2] ?? match[3] ?? match[4]);
+    consumed += match[0].length;
+  }
+  const start = options.get("-s");
+  if (consumed !== invocation[2].length || !start) return [];
+  const scope = (value: string) => value.replace(/^\.\//, "").replace(/\/+$/, "");
+  const paths = [start, options.get("-t"), invocation[1]].filter((value): value is string => value !== undefined).map(scope);
+  if (paths.some(value => !/^[\w-]+(?:\/[\w-]+)*$/.test(value) || value.startsWith("-"))) return [];
+  return [...new Set(paths.map(value => value.replace(/\/(?:tests?|__tests__|specs?|e2e|testing)$/i, "")))];
+}
+
 /** Whether a directory is a place for tests by its name: `tests`, `e2e`, `integration`, `packages/api/spec`, `cube-tests`. A test command that worked in one is no test of code that was in the same place. */
 export function isTestDirectory(directory: string): boolean {
   return directory.split("/").some(segment => segment.toLowerCase().split(/[-_.]+/).some(word => /^(?:tests?|testing|specs?|e2e|integration|cypress|playwright|acceptance|functional|qa)$/.test(word)));
@@ -1454,19 +1524,22 @@ export function isTestDirectory(directory: string): boolean {
  * moving them to another workflow, or to a shared one, is not removal, and neither is dropping a duplicate: every test command it ran is still run
  * by a workflow that gates changes, one of the others in this review or (`elsewhere`) one this change did not touch, or the files it named are named by a command that still runs
  * (the tests of two small workflows listed in the main one: `filesElsewhere` are the files that the commands of the untouched workflows name), or the code it tested is gone: it worked in a
- * directory that this change deleted (`gone`, which the caller reads from the tree: nothing is left in it and some of its code was deleted, not moved). A workflow that lost its own triggers
+ * directory that this change deleted, or that an explicit unittest discovery invocation scopes to. A workflow that lost its own triggers
  * because another workflow that this change did not touch calls it (`called`) still runs on every change. */
-export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set(), called: ReadonlySet<string> = new Set(), gone: ReadonlySet<string> = new Set(), filesElsewhere: ReadonlySet<string> = new Set()): Infraction[] {
+export function resolveCiTestSteps(counts: CiTestCount[], commit: string, elsewhere: ReadonlySet<string> = new Set(), called: ReadonlySet<string> = new Set(), gone: ReadonlySet<string> = new Set(), filesElsewhere: ReadonlySet<string> = new Set(), retiredDiscovery: ReadonlySet<string> = new Set()): Infraction[] {
   const before = counts.reduce((sum, item) => sum + item.before, 0);
   const after = counts.reduce((sum, item) => sum + item.after + item.reusableAfter, 0);
   if (after >= before) return [];
   const running = new Set([...counts.flatMap(item => item.commandsAfter ?? []), ...elsewhere]);
   const named = new Set([...counts.flatMap(item => item.filesAfter ?? []), ...filesElsewhere]);
-  const stillRuns = (command: string, directory: string | null, files: string[]): boolean =>
-    running.has(command) || (directory !== null && gone.has(directory)) || (files.length > 0 && files.every(file => named.has(file)));
+  const stillRuns = (command: string, directory: string | null, files: string[], paths: string[]): boolean => {
+    if (running.has(command)) return true;
+    if (paths.length ? paths.every(scope => retiredDiscovery.has(scope)) : directory !== null && gone.has(directory)) return true;
+    return files.length > 0 && files.every(file => named.has(file));
+  };
   return counts.filter(item => item.before > 0 && item.after === 0 && item.reusableAfter === 0)
     .filter(item => !(item.ungatedAfter > 0 && called.has(item.file)))
-    .filter(item => item.commandsBefore === undefined || item.commandsBefore.some((command, at) => !stillRuns(command, item.directoriesBefore?.[at] ?? null, item.filesBefore?.[at] ?? [])))
+    .filter(item => item.commandsBefore === undefined || item.commandsBefore.some((command, at) => !stillRuns(command, item.directoriesBefore?.[at] ?? null, item.filesBefore?.[at] ?? [], item.pathsBefore?.[at] ?? [])))
     .map(item => item.ungatedAfter > 0
       ? finding("guard-weakened", item.file, 1, "tests no longer run on push or pull_request", "Workflow keeps its tests but no longer runs on pushes or pull requests", commit)
       : finding("guard-weakened", item.file, 1, "test command no longer runs in CI", "Test step removed from CI", commit));
